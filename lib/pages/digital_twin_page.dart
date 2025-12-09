@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:async';
 import '../widgets/tech_line_widgets.dart';
+import 'realtime_dashboard_page.dart';
+import 'data_display_page.dart';
+import 'settings_page.dart';
 
 /// 智能生产线数字孪生系统页面
 /// 参考工业 SCADA/数字孪生可视化设计
@@ -13,36 +15,36 @@ class DigitalTwinPage extends StatefulWidget {
 }
 
 class _DigitalTwinPageState extends State<DigitalTwinPage> {
-  Timer? _dataRefreshTimer;
   int _selectedNavIndex = 0;
 
-  // 模拟数据
+  // UI固定数据 - 产线概览（待接入PLC数据）
   final List<_ProductionLine> _productionLines = [
-    _ProductionLine(
-        name: '产品一', progress: 0.12, orderQty: 1000, completedQty: 120),
-    _ProductionLine(
-        name: '产品二', progress: 0.12, orderQty: 1000, completedQty: 120),
+    _ProductionLine(name: '产品一', progress: 0.0, orderQty: 0, completedQty: 0),
+    _ProductionLine(name: '产品二', progress: 0.0, orderQty: 0, completedQty: 0),
   ];
 
+  // UI固定数据 - 设备状态（待接入PLC数据）
   final List<_EquipmentData> _equipments = [
     _EquipmentData(
-        code: 'VTC-16A-11', name: '立式加工中心', status: EquipmentStatus.running),
+        code: 'VTC-16A-11', name: '立式加工中心', status: EquipmentStatus.offline),
     _EquipmentData(
-        code: 'VTC-16A-12', name: '立式加工中心', status: EquipmentStatus.running),
+        code: 'VTC-16A-12', name: '立式加工中心', status: EquipmentStatus.offline),
     _EquipmentData(
-        code: 'XH-718A', name: '卧式加工中心', status: EquipmentStatus.running),
+        code: 'XH-718A', name: '卧式加工中心', status: EquipmentStatus.offline),
     _EquipmentData(
-        code: 'XH2420C', name: '龙门加工中心', status: EquipmentStatus.running),
+        code: 'XH2420C', name: '龙门加工中心', status: EquipmentStatus.offline),
   ];
 
+  // UI固定数据 - 环境指标（待接入PLC数据）
   final _EnvironmentData _envData = _EnvironmentData(
-    temperature: 7,
-    humidity: 1,
-    power: 1,
-    ratedPower: 1,
-    actualPower: 1,
+    temperature: 0.0,
+    humidity: 0.0,
+    power: 0.0,
+    ratedPower: 0.0,
+    actualPower: 0.0,
   );
 
+  // UI固定数据 - 警报信息（待接入PLC数据）
   final List<_AlarmData> _alarms = [
     _AlarmData(
       type: '紧急设备',
@@ -67,19 +69,12 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
   @override
   void initState() {
     super.initState();
-    // 模拟数据刷新
-    _dataRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted) {
-        setState(() {
-          // 更新模拟数据
-        });
-      }
-    });
+    // TODO: 接入PLC数据后，在此处初始化数据连接
   }
 
   @override
   void dispose() {
-    _dataRefreshTimer?.cancel();
+    // TODO: 接入PLC数据后，在此处释放数据连接
     super.dispose();
   }
 
@@ -94,33 +89,62 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
           children: [
             // 顶部导航栏
             _buildTopNavBar(),
-            // 主内容区
+            // 主内容区 - 根据选择的Tab显示不同页面
             Expanded(
-              child: Row(
-                children: [
-                  // 左侧面板
-                  _buildLeftPanel(),
-                  // 中间3D视图区
-                  Expanded(
-                    flex: 3,
-                    child: _buildCenterView(),
-                  ),
-                  // 右侧面板
-                  _buildRightPanel(),
-                ],
-              ),
+              child: _buildSelectedView(),
             ),
-            // 底部面板
-            _buildBottomPanel(),
           ],
         ),
       ),
     );
   }
 
+  /// 根据选中的导航项构建对应视图
+  Widget _buildSelectedView() {
+    switch (_selectedNavIndex) {
+      case 0:
+        // 实时大屏
+        return const RealtimeDashboardPage();
+      case 1:
+        // 数据展示
+        return const DataDisplayPage();
+      case 2:
+        // 系统配置
+        return const SettingsPage();
+      default:
+        // 实时大屏（默认）
+        return const RealtimeDashboardPage();
+    }
+  }
+
+  /// 数字孪生视图（原页面内容）
+  Widget _buildDigitalTwinView() {
+    return Column(
+      children: [
+        Expanded(
+          child: Row(
+            children: [
+              // 左侧面板
+              _buildLeftPanel(),
+              // 中间3D视图区
+              Expanded(
+                flex: 3,
+                child: _buildCenterView(),
+              ),
+              // 右侧面板
+              _buildRightPanel(),
+            ],
+          ),
+        ),
+        // 底部面板
+        _buildBottomPanel(),
+      ],
+    );
+  }
+
   /// 顶部导航栏
   Widget _buildTopNavBar() {
-    final navItems = ['数据统计', '产线编辑', '模型库'];
+    final navItems = ['实时大屏', '数据展示', '系统配置'];
 
     return Container(
       height: 50,
@@ -158,7 +182,7 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
                   colors: [TechColors.glowCyan, TechColors.glowCyanLight],
                 ).createShader(bounds),
                 child: const Text(
-                  '智能生产线数字孪生系统',
+                  'Ceramic Workshop Digital Twin',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -393,9 +417,9 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
             spacing: 6,
             runSpacing: 6,
             children: [
-              _buildMiniMetric('计划', '100'),
-              _buildMiniMetric('完成', '80'),
-              _buildMiniMetric('进度', '80%'),
+              _buildMiniMetric('计划', '0'),
+              _buildMiniMetric('完成', '0'),
+              _buildMiniMetric('进度', '0%'),
             ],
           ),
         ],
@@ -681,11 +705,11 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _buildOrderPrediction('订单产品一', '预测:', '1h1min'),
+                    _buildOrderPrediction('订单产品一', '预测:', '0h0min'),
                     const SizedBox(height: 6),
-                    _buildOrderPrediction('订单产品二', '预测:', '3h3min'),
+                    _buildOrderPrediction('订单产品二', '预测:', '0h0min'),
                     const SizedBox(height: 6),
-                    _buildOrderPrediction('订单产品三', '预测:', '5h5min'),
+                    _buildOrderPrediction('订单产品三', '预测:', '0h0min'),
                   ],
                 ),
               ),

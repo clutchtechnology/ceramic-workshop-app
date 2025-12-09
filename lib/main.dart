@@ -41,7 +41,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '智能生产线数字孪生系统',
+      title: 'Ceramic Workshop Digital Twin',
       theme: ThemeData.dark(),
       themeMode: ThemeMode.dark,
       home: const DigitalTwinPage(),

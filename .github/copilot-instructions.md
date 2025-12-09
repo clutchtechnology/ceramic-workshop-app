@@ -256,15 +256,62 @@ BOOL, BYTE, WORD, DWORD, INT, DINT, REAL
 [CRITICAL] All data uses Big Endian byte order
 ```
 
-### 8.3 Mock Data (Development Mode)
+### 8.3 UI Fixed Values (Before PLC Integration)
 
-```dart
-// Development mode characteristics:
-// - Temperature: base value ± small random fluctuation (800-1200°C)
-// - Voltage: 380V ± 10V
-// - Data continuity: changes based on previous value, no jumps
-// - Trend simulation: heating/cooling/stable phases
+**说明：** 在 PLC 数据接入前，所有数据显示使用固定值，仅用于 UI 调试和界面开发。
+
+```yaml
+产线概览 (Production Line Overview):
+  产品一:
+    progress: 0.0        # 完成率（待PLC数据）
+    orderQty: 0          # 订单量（待PLC数据）
+    completedQty: 0      # 成品量（待PLC数据）
+  产品二:
+    progress: 0.0
+    orderQty: 0
+    completedQty: 0
+  总体生产情况:
+    计划: 0              # 计划产量（待PLC数据）
+    完成: 0              # 完成产量（待PLC数据）
+    进度: "0%"           # 进度百分比（待PLC数据）
+
+设备情况 (Equipment Status):
+  - 所有设备默认状态: offline (灰色离线状态，待PLC数据)
+  - 设备列表:
+    - VTC-16A-11 (立式加工中心)
+    - VTC-16A-12 (立式加工中心)
+    - XH-718A (卧式加工中心)
+    - XH2420C (龙门加工中心)
+
+环境指标 (Environment Data):
+  temperature: 0.0     # 环境温度 °C（待PLC数据）
+  humidity: 0.0        # 环境湿度 %（待PLC数据）
+  power: 0.0           # 实时电量 kW·h（待PLC数据）
+  ratedPower: 0.0      # 额定功率 kW（待PLC数据）
+  actualPower: 0.0     # 实际功率 kW（待PLC数据）
+
+警报信息 (Alarm Data):
+  - 固定显示3条示例警报（仅用于UI展示）
+  - 警报类型: "紧急设备", "故障设备"
+  - 内容: "危险情况及原因", "故障情况及原因", "解决建议"
+  - 严重级别: alarm (红色闪烁), warning (黄色)
+
+订单预测 (Order Prediction):
+  订单产品一: "0h0min"  # 预测完成时间（待PLC数据）
+  订单产品二: "0h0min"
+  订单产品三: "0h0min"
+
+产量预测图表 (Production Chart):
+  - 显示8个柱状条
+  - 仅用于UI样式展示，暂无实际数据
 ```
+
+**[IMPORTANT] 数据接入说明：**
+
+- 所有固定值字段均标注"待 PLC 数据"
+- UI 开发完成后，需在 `lib/services/` 创建 PLC 数据服务
+- 数据更新逻辑需符合 5.1 节刷新率要求（≤5 秒）
+- 状态变化需实时反映：离线 → 运行 → 警告 → 故障
 
 ---
 
