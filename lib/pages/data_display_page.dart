@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../widgets/tech_line_widgets.dart';
+import '../widgets/time_range_selector.dart';
+import '../widgets/tech_line_chart.dart';
+import '../widgets/tech_bar_chart.dart';
 
 /// 数据展示页面
 /// 包含三个设备容器：回转窑、辊道窑、SCR设备
@@ -11,33 +14,40 @@ class DataDisplayPage extends StatefulWidget {
   State<DataDisplayPage> createState() => _DataDisplayPageState();
 }
 
-class _DataDisplayPageState extends State<DataDisplayPage> {
+class _DataDisplayPageState extends State<DataDisplayPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   // 时间范围选择
   DateTime _startTime = DateTime.now().subtract(const Duration(hours: 24));
   DateTime _endTime = DateTime.now();
 
-  // 7个回转窑的选择状态
-  final List<bool> _selectedKilns = List.generate(7, (_) => true);
+  // 7个有料仓的回转窑的选择状态（窑1,2,4,5,6,7,9，排除窑3,8）
+  int _selectedFeedKiln = 0; // 单选，默认选择第一个（窑1）
+  int _selectedHopperKiln = 0; // 单选，默认选择第一个（窑1）
 
-  // 模拟温度数据（待接入PLC）- 7个回转窑
+  // 12个温度区域的选择状态（窑1-3,6-8各1个，窑4,5,9各2个）
+  int _selectedTemperatureZone = 0; // 单选，默认选择第一个
+
+  // 模拟温度数据（待接入PLC）- 12个温度区域
   final Map<int, List<FlSpot>> _temperatureData = {};
 
-  // 模拟下料速度数据（待接入PLC）- 7个回转窑
+  // 模拟下料速度数据（待接入PLC）- 9个回转窑
   final Map<int, List<FlSpot>> _feedSpeedData = {};
 
-  // 模拟料仓重量数据（待接入PLC）- 7个回转窑
+  // 模拟料仓重量数据（待接入PLC）- 9个回转窑
   final Map<int, List<FlSpot>> _hopperWeightData = {};
 
-  // 辊道窑的选择状态（3个辊道窑）
-  final List<bool> _selectedRollerKilns = List.generate(3, (_) => true);
+  // 辊道窑的选择状态（6个辊道窑区域）
+  final List<bool> _selectedRollerKilns = List.generate(6, (_) => true);
 
-  // 模拟辊道窑温度数据（待接入PLC）- 3个辊道窑
+  // 模拟辊道窑温度数据（待接入PLC）- 6个辊道窑区域
   final Map<int, List<FlSpot>> _rollerTemperatureData = {};
 
-  // 模拟辊道窑能耗数据（待接入PLC）- 3个辊道窑
+  // 模拟辊道窑能耗数据（待接入PLC）- 6个辊道窑区域
   final Map<int, List<FlSpot>> _rollerEnergyData = {};
 
-  // 模拟辊道窑功率数据（待接入PLC）- 3个辊道窑
+  // 模拟辊道窑功率数据（待接入PLC）- 6个辊道窑区域
   final Map<int, List<FlSpot>> _rollerPowerData = {};
 
   // SCR设备的选择状态（2个水泵，2个风机）
@@ -50,7 +60,23 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
   // 模拟SCR风机能耗数据（待接入PLC）- 2个风机
   final Map<int, List<FlSpot>> _fanEnergyData = {};
 
-  // 7种不同的颜色用于区分不同回转窑
+  // 12种颜色用于区分不同温度区域（允许重复）
+  final List<Color> _temperatureColors = [
+    TechColors.glowOrange, // 窑1
+    TechColors.glowCyan, // 窑2
+    TechColors.glowGreen, // 窑3
+    const Color(0xFFff3b30), // 窑4(1)
+    const Color(0xFFff6b60), // 窑4(2) - 稍亮的红色
+    const Color(0xFFffcc00), // 窑5(1)
+    const Color(0xFFffe44d), // 窑5(2) - 稍亮的黄色
+    const Color(0xFFaf52de), // 窑6
+    const Color(0xFF00d4ff), // 窑7
+    TechColors.glowOrange, // 窑8
+    TechColors.glowCyan, // 窑9(1)
+    const Color(0xFF00ffaa), // 窑9(2) - 亮绿色
+  ];
+
+  // 9种颜色用于区分不同回转窑（下料速度、料仓重量）
   final List<Color> _kilnColors = [
     TechColors.glowOrange,
     TechColors.glowCyan,
@@ -59,13 +85,18 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
     const Color(0xFFffcc00), // Yellow
     const Color(0xFFaf52de), // Purple
     const Color(0xFF00d4ff), // Light Blue
+    TechColors.glowOrange, // 重复颜色
+    TechColors.glowCyan, // 重复颜色
   ];
 
-  // 3种不同的颜色用于区分不同辊道窑
+  // 6种颜色用于区分不同辊道窑区域（允许重复）
   final List<Color> _rollerKilnColors = [
     TechColors.glowCyan,
     TechColors.glowGreen,
     const Color(0xFFaf52de), // Purple
+    TechColors.glowOrange,
+    const Color(0xFFffcc00), // Yellow
+    const Color(0xFF00d4ff), // Light Blue
   ];
 
   // 2种不同的颜色用于区分SCR设备
@@ -80,16 +111,20 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
     _generateMockData();
   }
 
-  // 生成模拟数据 - 为7个回转窑生成数据
+  // 生成模拟数据
   void _generateMockData() {
-    for (int kiln = 0; kiln < 7; kiln++) {
-      _temperatureData[kiln] = List.generate(24, (index) {
+    // 为12个温度区域生成数据
+    for (int zone = 0; zone < 12; zone++) {
+      _temperatureData[zone] = List.generate(24, (index) {
         return FlSpot(
           index.toDouble(),
-          800 + (index * 10) + (index % 5 * 20) + (kiln * 30),
+          800 + (index * 10) + (index % 5 * 20) + (zone * 25),
         );
       });
+    }
 
+    // 为7个有料仓的回转窑生成下料速度和料仓重量数据（窑1,2,4,5,6,7,9）
+    for (int kiln = 0; kiln < 7; kiln++) {
       _feedSpeedData[kiln] = List.generate(24, (index) {
         return FlSpot(
           index.toDouble(),
@@ -105,8 +140,8 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
       });
     }
 
-    // 为3个辊道窑生成模拟数据
-    for (int kiln = 0; kiln < 3; kiln++) {
+    // 为6个辊道窑区域生成模拟数据
+    for (int kiln = 0; kiln < 6; kiln++) {
       _rollerTemperatureData[kiln] = List.generate(24, (index) {
         return FlSpot(
           index.toDouble(),
@@ -152,6 +187,7 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // 必须调用以支持 AutomaticKeepAliveClientMixin
     return Container(
       color: TechColors.bgDeep,
       child: Row(
@@ -164,11 +200,14 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
               child: TechPanel(
                 title: '回转窑',
                 accentColor: TechColors.glowOrange,
+                headerActions: [
+                  SizedBox(
+                    width: 280,
+                    child: _buildTimeRangeSelector(),
+                  ),
+                ],
                 child: Column(
                   children: [
-                    // 时间选择器
-                    _buildTimeRangeSelector(),
-                    const SizedBox(height: 12),
                     // 历史温度曲线
                     Expanded(
                       child: _buildTemperatureChart(),
@@ -201,31 +240,27 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
                     child: TechPanel(
                       title: '辊道窑',
                       accentColor: TechColors.glowCyan,
-                      child: Column(
+                      headerActions: [
+                        SizedBox(
+                          width: 280,
+                          child: _buildRollerTimeRangeSelector(),
+                        ),
+                      ],
+                      child: Row(
                         children: [
-                          // 时间选择器
-                          _buildRollerTimeRangeSelector(),
-                          const SizedBox(height: 12),
-                          // 三个图表横向排列
+                          // 历史温度曲线
                           Expanded(
-                            child: Row(
-                              children: [
-                                // 历史温度曲线
-                                Expanded(
-                                  child: _buildRollerTemperatureChart(),
-                                ),
-                                const SizedBox(width: 12),
-                                // 历史能耗曲线
-                                Expanded(
-                                  child: _buildRollerEnergyChart(),
-                                ),
-                                const SizedBox(width: 12),
-                                // 历史功率曲线
-                                Expanded(
-                                  child: _buildRollerPowerChart(),
-                                ),
-                              ],
-                            ),
+                            child: _buildRollerTemperatureChart(),
+                          ),
+                          const SizedBox(width: 12),
+                          // 历史能耗曲线
+                          Expanded(
+                            child: _buildRollerEnergyChart(),
+                          ),
+                          const SizedBox(width: 12),
+                          // 历史功率曲线
+                          Expanded(
+                            child: _buildRollerPowerChart(),
                           ),
                         ],
                       ),
@@ -238,28 +273,24 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
                   child: Container(
                     margin: const EdgeInsets.fromLTRB(0, 6, 12, 12),
                     child: TechPanel(
-                      title: 'SCR设备',
+                      title: 'SCR设备和风机',
                       accentColor: TechColors.glowGreen,
-                      child: Column(
+                      headerActions: [
+                        SizedBox(
+                          width: 280,
+                          child: _buildScrTimeRangeSelector(),
+                        ),
+                      ],
+                      child: Row(
                         children: [
-                          // 时间选择器
-                          _buildScrTimeRangeSelector(),
-                          const SizedBox(height: 12),
-                          // 两个图表横向排列
+                          // 水泵能耗曲线
                           Expanded(
-                            child: Row(
-                              children: [
-                                // 水泵能耗曲线
-                                Expanded(
-                                  child: _buildPumpEnergyChart(),
-                                ),
-                                const SizedBox(width: 12),
-                                // 风机能耗曲线
-                                Expanded(
-                                  child: _buildFanEnergyChart(),
-                                ),
-                              ],
-                            ),
+                            child: _buildPumpEnergyChart(),
+                          ),
+                          const SizedBox(width: 12),
+                          // 风机能耗曲线
+                          Expanded(
+                            child: _buildFanEnergyChart(),
                           ),
                         ],
                       ),
@@ -276,595 +307,124 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
 
   /// 时间范围选择器
   Widget _buildTimeRangeSelector() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: TechColors.bgMedium.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: TechColors.glowOrange.withOpacity(0.3),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.date_range,
-            size: 16,
-            color: TechColors.glowOrange,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => _selectStartTime(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: TechColors.bgDark,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: Text(
-                  _formatDateTime(_startTime),
-                  style: const TextStyle(
-                    color: TechColors.textPrimary,
-                    fontSize: 11,
-                    fontFamily: 'Roboto Mono',
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Text(
-            '~',
-            style: TextStyle(
-              color: TechColors.textSecondary,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => _selectEndTime(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: TechColors.bgDark,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: Text(
-                  _formatDateTime(_endTime),
-                  style: const TextStyle(
-                    color: TechColors.textPrimary,
-                    fontSize: 11,
-                    fontFamily: 'Roboto Mono',
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return TimeRangeSelector(
+      startTime: _startTime,
+      endTime: _endTime,
+      onStartTimeTap: _selectStartTime,
+      onEndTimeTap: _selectEndTime,
+      accentColor: TechColors.glowOrange,
     );
   }
 
   /// 历史温度曲线图
   Widget _buildTemperatureChart() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: TechColors.bgMedium.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: TechColors.borderDark),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 3,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: TechColors.glowOrange,
-                  borderRadius: BorderRadius.circular(1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                '历史温度曲线',
-                style: TextStyle(
-                  color: TechColors.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              // 回转窑多选下拉框
-              _buildKilnSelector(),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: true,
-                  horizontalInterval: 50,
-                  verticalInterval: 4,
-                  getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                  getDrawingVerticalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                ),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '温度(°C)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 40,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '时间(h)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 24,
-                      interval: 4,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(
-                  show: true,
-                  border: Border.all(
-                    color: TechColors.borderDark.withOpacity(0.5),
-                  ),
-                ),
-                lineBarsData: _getSelectedKilnData(_temperatureData),
-                minY: 700,
-                maxY: 1200,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 下料速度曲线图
-  Widget _buildFeedSpeedChart() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: TechColors.bgMedium.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: TechColors.borderDark),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 3,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: TechColors.glowCyan,
-                  borderRadius: BorderRadius.circular(1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                '下料速度曲线',
-                style: TextStyle(
-                  color: TechColors.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              // 回转窑多选下拉框
-              _buildKilnSelector(),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: true,
-                  horizontalInterval: 50,
-                  verticalInterval: 4,
-                  getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                  getDrawingVerticalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                ),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '速度(kg/h)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 40,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '时间(h)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 24,
-                      interval: 4,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(
-                  show: true,
-                  border: Border.all(
-                    color: TechColors.borderDark.withOpacity(0.5),
-                  ),
-                ),
-                lineBarsData: _getSelectedKilnData(_feedSpeedData),
-                minY: 0,
-                maxY: 300,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 料仓重量曲线图
-  Widget _buildHopperWeightChart() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: TechColors.bgMedium.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: TechColors.borderDark),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 3,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: TechColors.glowGreen,
-                  borderRadius: BorderRadius.circular(1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                '料仓重量曲线',
-                style: TextStyle(
-                  color: TechColors.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              // 回转窑多选下拉框
-              _buildKilnSelector(),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: true,
-                  horizontalInterval: 100,
-                  verticalInterval: 4,
-                  getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                  getDrawingVerticalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                ),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '重量(kg)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 40,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '时间(h)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 24,
-                      interval: 4,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(
-                  show: true,
-                  border: Border.all(
-                    color: TechColors.borderDark.withOpacity(0.5),
-                  ),
-                ),
-                lineBarsData: _getSelectedKilnData(_hopperWeightData),
-                minY: 0,
-                maxY: 800,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 回转窑多选下拉框
-  Widget _buildKilnSelector() {
-    return PopupMenuButton<int>(
-      color: TechColors.bgMedium,
-      icon: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: TechColors.bgDark,
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(
-            color: TechColors.glowOrange.withOpacity(0.3),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '选择回转窑',
-              style: const TextStyle(
-                color: TechColors.textPrimary,
-                fontSize: 10,
-              ),
-            ),
-            const SizedBox(width: 4),
-            const Icon(
-              Icons.arrow_drop_down,
-              size: 16,
-              color: TechColors.textSecondary,
-            ),
-          ],
-        ),
-      ),
-      itemBuilder: (context) {
-        return List.generate(7, (index) {
-          return PopupMenuItem<int>(
-            value: index,
-            enabled: false,
-            child: StatefulBuilder(
-              builder: (context, setState) {
-                return InkWell(
-                  onTap: () {
-                    setState(() {
-                      _selectedKilns[index] = !_selectedKilns[index];
-                    });
-                    this.setState(() {});
-                  },
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: _selectedKilns[index]
-                              ? _kilnColors[index]
-                              : Colors.transparent,
-                          border: Border.all(
-                            color: _kilnColors[index],
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: _selectedKilns[index]
-                            ? const Icon(
-                                Icons.check,
-                                size: 12,
-                                color: TechColors.bgDeep,
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: _kilnColors[index],
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '回转窑 ${index + 1}',
-                        style: const TextStyle(
-                          color: TechColors.textPrimary,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          );
+    return TechLineChart(
+      title: '历史温度曲线',
+      accentColor: TechColors.glowOrange,
+      yAxisLabel: '温度(°C)',
+      xAxisLabel: '时间(h)',
+      minY: 700,
+      maxY: 1200,
+      yInterval: 50,
+      xInterval: 4,
+      dataMap: _temperatureData,
+      isSingleSelect: true,
+      selectedIndex: _selectedTemperatureZone,
+      itemColors: _temperatureColors,
+      itemCount: 12,
+      getItemLabel: _getTemperatureZoneLabel,
+      selectorLabel: '选择温度区域',
+      onItemSelect: (index) {
+        setState(() {
+          _selectedTemperatureZone = index;
         });
       },
     );
   }
 
-  /// 获取选中的回转窑数据
-  List<LineChartBarData> _getSelectedKilnData(Map<int, List<FlSpot>> dataMap) {
-    List<LineChartBarData> result = [];
-    for (int i = 0; i < 7; i++) {
-      if (_selectedKilns[i] && dataMap.containsKey(i)) {
-        result.add(
-          LineChartBarData(
-            spots: dataMap[i]!,
-            isCurved: true,
-            color: _kilnColors[i],
-            barWidth: 2,
-            dotData: const FlDotData(show: false),
-          ),
-        );
-      }
+  /// 获取温度区域标签
+  String _getTemperatureZoneLabel(int index) {
+    // 窑1-3: 索引0-2
+    // 窑4(1), 窑4(2): 索引3-4
+    // 窑5(1), 窑5(2): 索引5-6
+    // 窑6-8: 索引7-9
+    // 窑9(1), 窑9(2): 索引10-11
+
+    if (index <= 2) {
+      return '窑${index + 1}';
+    } else if (index == 3) {
+      return '窑4(1)';
+    } else if (index == 4) {
+      return '窑4(2)';
+    } else if (index == 5) {
+      return '窑5(1)';
+    } else if (index == 6) {
+      return '窑5(2)';
+    } else if (index <= 9) {
+      return '窑${index + 1}';
+    } else if (index == 10) {
+      return '窑9(1)';
+    } else {
+      return '窑9(2)';
     }
-    return result;
   }
 
-  /// 能耗折线图（已移除）
-  Widget _buildEnergyChart() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: TechColors.bgMedium.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: TechColors.borderDark),
-      ),
-      child: const Center(
-        child: Text(
-          '此图表已移除',
-          style: TextStyle(
-            color: TechColors.textSecondary,
-            fontSize: 12,
-          ),
-        ),
-      ),
+  /// 获取下料/料仓窑标签（窑1,2,4,5,6,7,9，排除窑3,8）
+  String _getFeedKilnLabel(int index) {
+    // 索引 0-6 对应窑 1,2,4,5,6,7,9
+    const kilnNumbers = [1, 2, 4, 5, 6, 7, 9];
+    return '窑${kilnNumbers[index]}';
+  }
+
+  /// 下料速度曲线图
+  Widget _buildFeedSpeedChart() {
+    return TechLineChart(
+      title: '下料速度曲线',
+      accentColor: TechColors.glowCyan,
+      yAxisLabel: '速度(kg/h)',
+      xAxisLabel: '时间(h)',
+      minY: 0,
+      maxY: 300,
+      yInterval: 50,
+      xInterval: 4,
+      dataMap: _feedSpeedData,
+      isSingleSelect: true,
+      selectedIndex: _selectedFeedKiln,
+      itemColors: _kilnColors,
+      itemCount: 7,
+      getItemLabel: _getFeedKilnLabel,
+      selectorLabel: '选择回转窑',
+      onItemSelect: (index) {
+        setState(() {
+          _selectedFeedKiln = index;
+        });
+      },
+    );
+  }
+
+  /// 料仓重量曲线图
+  Widget _buildHopperWeightChart() {
+    return TechLineChart(
+      title: '料仓重量曲线',
+      accentColor: TechColors.glowGreen,
+      yAxisLabel: '重量(kg)',
+      xAxisLabel: '时间(h)',
+      minY: 0,
+      maxY: 800,
+      yInterval: 100,
+      xInterval: 4,
+      dataMap: _hopperWeightData,
+      isSingleSelect: true,
+      selectedIndex: _selectedHopperKiln,
+      itemColors: _kilnColors,
+      itemCount: 7,
+      getItemLabel: _getFeedKilnLabel,
+      selectorLabel: '选择回转窑',
+      onItemSelect: (index) {
+        setState(() {
+          _selectedHopperKiln = index;
+        });
+      },
     );
   }
 
@@ -974,1140 +534,150 @@ class _DataDisplayPageState extends State<DataDisplayPage> {
     }
   }
 
-  /// 格式化时间显示
-  String _formatDateTime(DateTime dateTime) {
-    return '${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-  }
-
   /// 辊道窑时间范围选择器
   Widget _buildRollerTimeRangeSelector() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: TechColors.bgMedium.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: TechColors.glowCyan.withOpacity(0.3),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.date_range,
-            size: 16,
-            color: TechColors.glowCyan,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => _selectStartTime(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: TechColors.bgDark,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: Text(
-                  _formatDateTime(_startTime),
-                  style: const TextStyle(
-                    color: TechColors.textPrimary,
-                    fontSize: 11,
-                    fontFamily: 'Roboto Mono',
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Text(
-            '~',
-            style: TextStyle(
-              color: TechColors.textSecondary,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => _selectEndTime(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: TechColors.bgDark,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: Text(
-                  _formatDateTime(_endTime),
-                  style: const TextStyle(
-                    color: TechColors.textPrimary,
-                    fontSize: 11,
-                    fontFamily: 'Roboto Mono',
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return TimeRangeSelector(
+      startTime: _startTime,
+      endTime: _endTime,
+      onStartTimeTap: _selectStartTime,
+      onEndTimeTap: _selectEndTime,
+      accentColor: TechColors.glowCyan,
     );
   }
 
   /// 辊道窑历史温度曲线图
   Widget _buildRollerTemperatureChart() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: TechColors.bgMedium.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: TechColors.borderDark),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 3,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: TechColors.glowCyan,
-                  borderRadius: BorderRadius.circular(1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                '历史温度曲线',
-                style: TextStyle(
-                  color: TechColors.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              _buildRollerKilnSelector(),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: true,
-                  horizontalInterval: 50,
-                  verticalInterval: 4,
-                  getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                  getDrawingVerticalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                ),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '温度(°C)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 40,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '时间(h)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 24,
-                      interval: 4,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(
-                  show: true,
-                  border: Border.all(
-                    color: TechColors.borderDark.withOpacity(0.5),
-                  ),
-                ),
-                lineBarsData:
-                    _getSelectedRollerKilnData(_rollerTemperatureData),
-                minY: 800,
-                maxY: 1200,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 辊道窑历史能耗曲线图
-  Widget _buildRollerEnergyChart() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: TechColors.bgMedium.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: TechColors.borderDark),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 3,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: TechColors.glowGreen,
-                  borderRadius: BorderRadius.circular(1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                '历史能耗曲线',
-                style: TextStyle(
-                  color: TechColors.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              _buildRollerKilnSelector(),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: true,
-                  horizontalInterval: 50,
-                  verticalInterval: 4,
-                  getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                  getDrawingVerticalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                ),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '能耗(kW·h)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 40,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '时间(h)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 24,
-                      interval: 4,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(
-                  show: true,
-                  border: Border.all(
-                    color: TechColors.borderDark.withOpacity(0.5),
-                  ),
-                ),
-                lineBarsData: _getSelectedRollerKilnData(_rollerEnergyData),
-                minY: 0,
-                maxY: 400,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 辊道窑历史功率曲线图
-  Widget _buildRollerPowerChart() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: TechColors.bgMedium.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: TechColors.borderDark),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 3,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: TechColors.glowOrange,
-                  borderRadius: BorderRadius.circular(1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                '历史功率曲线',
-                style: TextStyle(
-                  color: TechColors.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              _buildRollerKilnSelector(),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: true,
-                  horizontalInterval: 50,
-                  verticalInterval: 4,
-                  getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                  getDrawingVerticalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                ),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '功率(kW)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 40,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '时间(h)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 24,
-                      interval: 4,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(
-                  show: true,
-                  border: Border.all(
-                    color: TechColors.borderDark.withOpacity(0.5),
-                  ),
-                ),
-                lineBarsData: _getSelectedRollerKilnData(_rollerPowerData),
-                minY: 0,
-                maxY: 300,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 辊道窑多选下拉框
-  Widget _buildRollerKilnSelector() {
-    return PopupMenuButton<int>(
-      color: TechColors.bgMedium,
-      icon: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: TechColors.bgDark,
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(
-            color: TechColors.glowCyan.withOpacity(0.3),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '选择辊道窑',
-              style: const TextStyle(
-                color: TechColors.textPrimary,
-                fontSize: 10,
-              ),
-            ),
-            const SizedBox(width: 4),
-            const Icon(
-              Icons.arrow_drop_down,
-              size: 16,
-              color: TechColors.textSecondary,
-            ),
-          ],
-        ),
-      ),
-      itemBuilder: (context) {
-        return List.generate(3, (index) {
-          return PopupMenuItem<int>(
-            value: index,
-            enabled: false,
-            child: StatefulBuilder(
-              builder: (context, setState) {
-                return InkWell(
-                  onTap: () {
-                    setState(() {
-                      _selectedRollerKilns[index] =
-                          !_selectedRollerKilns[index];
-                    });
-                    this.setState(() {});
-                  },
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: _selectedRollerKilns[index]
-                              ? _rollerKilnColors[index]
-                              : Colors.transparent,
-                          border: Border.all(
-                            color: _rollerKilnColors[index],
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: _selectedRollerKilns[index]
-                            ? const Icon(
-                                Icons.check,
-                                size: 12,
-                                color: TechColors.bgDeep,
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: _rollerKilnColors[index],
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '辊道窑 ${index + 1}',
-                        style: const TextStyle(
-                          color: TechColors.textPrimary,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          );
+    return TechLineChart(
+      title: '历史温度曲线',
+      accentColor: TechColors.glowCyan,
+      yAxisLabel: '温度(°C)',
+      xAxisLabel: '时间(h)',
+      minY: 800,
+      maxY: 1200,
+      yInterval: 50,
+      xInterval: 4,
+      dataMap: _rollerTemperatureData,
+      selectedItems: _selectedRollerKilns,
+      itemColors: _rollerKilnColors,
+      itemCount: 6,
+      getItemLabel: (index) => '辊道窑区域 ${index + 1}',
+      selectorLabel: '选择辊道窑区域',
+      onItemToggle: (index) {
+        setState(() {
+          _selectedRollerKilns[index] = !_selectedRollerKilns[index];
         });
       },
     );
   }
 
-  /// 获取选中的辊道窑数据
-  List<LineChartBarData> _getSelectedRollerKilnData(
-      Map<int, List<FlSpot>> dataMap) {
-    List<LineChartBarData> result = [];
-    for (int i = 0; i < 3; i++) {
-      if (_selectedRollerKilns[i] && dataMap.containsKey(i)) {
-        result.add(
-          LineChartBarData(
-            spots: dataMap[i]!,
-            isCurved: true,
-            color: _rollerKilnColors[i],
-            barWidth: 2,
-            dotData: const FlDotData(show: false),
-          ),
-        );
-      }
-    }
-    return result;
+  /// 辊道窑历史能耗折线图
+  Widget _buildRollerEnergyChart() {
+    return TechBarChart(
+      title: '历史能耗折线',
+      accentColor: TechColors.glowGreen,
+      yAxisLabel: '能耗(kW·h)',
+      xAxisLabel: '时间(h)',
+      minY: 0,
+      maxY: 400,
+      yInterval: 50,
+      xInterval: 4,
+      dataMap: _rollerEnergyData,
+      selectedItems: _selectedRollerKilns,
+      itemColors: _rollerKilnColors,
+      itemCount: 6,
+      getItemLabel: (index) => '辊道窑区域 ${index + 1}',
+      selectorLabel: '选择辊道窑区域',
+      onItemToggle: (index) {
+        setState(() {
+          _selectedRollerKilns[index] = !_selectedRollerKilns[index];
+        });
+      },
+    );
+  }
+
+  /// 辊道窑历史功率折线图
+  Widget _buildRollerPowerChart() {
+    return TechBarChart(
+      title: '历史功率折线',
+      accentColor: TechColors.glowOrange,
+      yAxisLabel: '功率(kW)',
+      xAxisLabel: '时间(h)',
+      minY: 0,
+      maxY: 300,
+      yInterval: 50,
+      xInterval: 4,
+      dataMap: _rollerPowerData,
+      selectedItems: _selectedRollerKilns,
+      itemColors: _rollerKilnColors,
+      itemCount: 6,
+      getItemLabel: (index) => '辊道窑区域 ${index + 1}',
+      selectorLabel: '选择辊道窑区域',
+      onItemToggle: (index) {
+        setState(() {
+          _selectedRollerKilns[index] = !_selectedRollerKilns[index];
+        });
+      },
+    );
   }
 
   /// SCR设备时间范围选择器
   Widget _buildScrTimeRangeSelector() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: TechColors.bgMedium.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: TechColors.glowGreen.withOpacity(0.3),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.date_range,
-            size: 16,
-            color: TechColors.glowGreen,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => _selectStartTime(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: TechColors.bgDark,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: Text(
-                  _formatDateTime(_startTime),
-                  style: const TextStyle(
-                    color: TechColors.textPrimary,
-                    fontSize: 11,
-                    fontFamily: 'Roboto Mono',
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Text(
-            '~',
-            style: TextStyle(
-              color: TechColors.textSecondary,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => _selectEndTime(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: TechColors.bgDark,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: Text(
-                  _formatDateTime(_endTime),
-                  style: const TextStyle(
-                    color: TechColors.textPrimary,
-                    fontSize: 11,
-                    fontFamily: 'Roboto Mono',
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return TimeRangeSelector(
+      startTime: _startTime,
+      endTime: _endTime,
+      onStartTimeTap: _selectStartTime,
+      onEndTimeTap: _selectEndTime,
+      accentColor: TechColors.glowGreen,
     );
   }
 
-  /// 水泵能耗曲线图
+  /// 水泵能耗折线图
   Widget _buildPumpEnergyChart() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: TechColors.bgMedium.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: TechColors.borderDark),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 3,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: TechColors.glowGreen,
-                  borderRadius: BorderRadius.circular(1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                '水泵',
-                style: TextStyle(
-                  color: TechColors.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              _buildPumpSelector(),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: true,
-                  horizontalInterval: 20,
-                  verticalInterval: 4,
-                  getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                  getDrawingVerticalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                ),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '能耗(kW·h)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 40,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '时间(h)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 24,
-                      interval: 4,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(
-                  show: true,
-                  border: Border.all(
-                    color: TechColors.borderDark.withOpacity(0.5),
-                  ),
-                ),
-                lineBarsData: _getSelectedPumpData(),
-                minY: 0,
-                maxY: 150,
-              ),
-            ),
-          ),
-        ],
-      ),
+    return TechBarChart(
+      title: '水泵能耗折线',
+      accentColor: TechColors.glowGreen,
+      yAxisLabel: '能耗(kW·h)',
+      xAxisLabel: '时间(h)',
+      minY: 0,
+      maxY: 150,
+      yInterval: 20,
+      xInterval: 4,
+      dataMap: _pumpEnergyData,
+      selectedItems: _selectedPumps,
+      itemColors: _scrColors,
+      itemCount: 2,
+      getItemLabel: (index) => '水泵 ${index + 1}',
+      selectorLabel: '选择水泵',
+      onItemToggle: (index) {
+        setState(() {
+          _selectedPumps[index] = !_selectedPumps[index];
+        });
+      },
     );
   }
 
-  /// 风机能耗曲线图
+  /// 风机能耗折线图
   Widget _buildFanEnergyChart() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: TechColors.bgMedium.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: TechColors.borderDark),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 3,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: TechColors.glowOrange,
-                  borderRadius: BorderRadius.circular(1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                '风机',
-                style: TextStyle(
-                  color: TechColors.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              _buildFanSelector(),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: true,
-                  horizontalInterval: 30,
-                  verticalInterval: 4,
-                  getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                  getDrawingVerticalLine: (value) {
-                    return FlLine(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      strokeWidth: 1,
-                    );
-                  },
-                ),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '能耗(kW·h)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 40,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    axisNameWidget: const Text(
-                      '时间(h)',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 24,
-                      interval: 4,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 9,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(
-                  show: true,
-                  border: Border.all(
-                    color: TechColors.borderDark.withOpacity(0.5),
-                  ),
-                ),
-                lineBarsData: _getSelectedFanData(),
-                minY: 0,
-                maxY: 200,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 水泵多选下拉框
-  Widget _buildPumpSelector() {
-    return PopupMenuButton<int>(
-      color: TechColors.bgMedium,
-      icon: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: TechColors.bgDark,
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(
-            color: TechColors.glowGreen.withOpacity(0.3),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '选择水泵',
-              style: const TextStyle(
-                color: TechColors.textPrimary,
-                fontSize: 10,
-              ),
-            ),
-            const SizedBox(width: 4),
-            const Icon(
-              Icons.arrow_drop_down,
-              size: 16,
-              color: TechColors.textSecondary,
-            ),
-          ],
-        ),
-      ),
-      itemBuilder: (context) {
-        return List.generate(2, (index) {
-          return PopupMenuItem<int>(
-            value: index,
-            enabled: false,
-            child: StatefulBuilder(
-              builder: (context, setState) {
-                return InkWell(
-                  onTap: () {
-                    setState(() {
-                      _selectedPumps[index] = !_selectedPumps[index];
-                    });
-                    this.setState(() {});
-                  },
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: _selectedPumps[index]
-                              ? _scrColors[index]
-                              : Colors.transparent,
-                          border: Border.all(
-                            color: _scrColors[index],
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: _selectedPumps[index]
-                            ? const Icon(
-                                Icons.check,
-                                size: 12,
-                                color: TechColors.bgDeep,
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: _scrColors[index],
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '水泵 ${index + 1}',
-                        style: const TextStyle(
-                          color: TechColors.textPrimary,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          );
+    return TechBarChart(
+      title: '风机能耗折线',
+      accentColor: TechColors.glowOrange,
+      yAxisLabel: '能耗(kW·h)',
+      xAxisLabel: '时间(h)',
+      minY: 0,
+      maxY: 200,
+      yInterval: 30,
+      xInterval: 4,
+      dataMap: _fanEnergyData,
+      selectedItems: _selectedFans,
+      itemColors: _scrColors,
+      itemCount: 2,
+      getItemLabel: (index) => '风机 ${index + 1}',
+      selectorLabel: '选择风机',
+      onItemToggle: (index) {
+        setState(() {
+          _selectedFans[index] = !_selectedFans[index];
         });
       },
     );
-  }
-
-  /// 风机多选下拉框
-  Widget _buildFanSelector() {
-    return PopupMenuButton<int>(
-      color: TechColors.bgMedium,
-      icon: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: TechColors.bgDark,
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(
-            color: TechColors.glowOrange.withOpacity(0.3),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '选择风机',
-              style: const TextStyle(
-                color: TechColors.textPrimary,
-                fontSize: 10,
-              ),
-            ),
-            const SizedBox(width: 4),
-            const Icon(
-              Icons.arrow_drop_down,
-              size: 16,
-              color: TechColors.textSecondary,
-            ),
-          ],
-        ),
-      ),
-      itemBuilder: (context) {
-        return List.generate(2, (index) {
-          return PopupMenuItem<int>(
-            value: index,
-            enabled: false,
-            child: StatefulBuilder(
-              builder: (context, setState) {
-                return InkWell(
-                  onTap: () {
-                    setState(() {
-                      _selectedFans[index] = !_selectedFans[index];
-                    });
-                    this.setState(() {});
-                  },
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: _selectedFans[index]
-                              ? _scrColors[index]
-                              : Colors.transparent,
-                          border: Border.all(
-                            color: _scrColors[index],
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: _selectedFans[index]
-                            ? const Icon(
-                                Icons.check,
-                                size: 12,
-                                color: TechColors.bgDeep,
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: _scrColors[index],
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '风机 ${index + 1}',
-                        style: const TextStyle(
-                          color: TechColors.textPrimary,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          );
-        });
-      },
-    );
-  }
-
-  /// 获取选中的水泵数据
-  List<LineChartBarData> _getSelectedPumpData() {
-    List<LineChartBarData> result = [];
-    for (int i = 0; i < 2; i++) {
-      if (_selectedPumps[i] && _pumpEnergyData.containsKey(i)) {
-        result.add(
-          LineChartBarData(
-            spots: _pumpEnergyData[i]!,
-            isCurved: true,
-            color: _scrColors[i],
-            barWidth: 2,
-            dotData: const FlDotData(show: false),
-          ),
-        );
-      }
-    }
-    return result;
-  }
-
-  /// 获取选中的风机数据
-  List<LineChartBarData> _getSelectedFanData() {
-    List<LineChartBarData> result = [];
-    for (int i = 0; i < 2; i++) {
-      if (_selectedFans[i] && _fanEnergyData.containsKey(i)) {
-        result.add(
-          LineChartBarData(
-            spots: _fanEnergyData[i]!,
-            isCurved: true,
-            color: _scrColors[i],
-            barWidth: 2,
-            dotData: const FlDotData(show: false),
-          ),
-        );
-      }
-    }
-    return result;
   }
 }

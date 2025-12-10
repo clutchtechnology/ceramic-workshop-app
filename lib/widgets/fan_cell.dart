@@ -74,7 +74,7 @@ class FanCell extends StatelessWidget {
                           '功率: 15kW',
                           style: const TextStyle(
                             color: TechColors.glowCyan,
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -84,7 +84,7 @@ class FanCell extends StatelessWidget {
                           '累计电量: 1250kW·h',
                           style: const TextStyle(
                             color: TechColors.glowGreen,
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -94,7 +94,7 @@ class FanCell extends StatelessWidget {
                           '能耗: 12kW',
                           style: const TextStyle(
                             color: TechColors.glowOrange,
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),

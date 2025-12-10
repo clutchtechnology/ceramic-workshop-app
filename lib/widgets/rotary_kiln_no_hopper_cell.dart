@@ -63,7 +63,7 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                 top: 0,
                 bottom: 0,
                 child: Align(
-                  alignment: const Alignment(0.1, -0.9), // 左侧30%位置，垂直居中
+                  alignment: const Alignment(0.1, -1), // 左侧30%位置，垂直居中
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -85,7 +85,7 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                           '重量: 300kg',
                           style: const TextStyle(
                             color: TechColors.glowCyan,
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -95,7 +95,7 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                           '下料速度: 10kg/h',
                           style: const TextStyle(
                             color: TechColors.glowGreen,
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -105,7 +105,7 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                           '能耗: 45kW',
                           style: const TextStyle(
                             color: TechColors.glowOrange,
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -131,7 +131,7 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                       '温度: 850°C',
                       style: const TextStyle(
                         color: TechColors.glowRed,
-                        fontSize: 10,
+                        fontSize: 11,
                         fontWeight: FontWeight.w700,
                         fontFamily: 'Roboto Mono',
                       ),

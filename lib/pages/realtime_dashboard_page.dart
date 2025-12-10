@@ -293,6 +293,51 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                   ),
                 ),
               ),
+              // 左下角功率总和标签
+              Positioned(
+                left: 0,
+                bottom: 0,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: TechColors.bgDeep.withOpacity(0.92),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: TechColors.glowOrange.withOpacity(0.5),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '总功率: ',
+                        style: const TextStyle(
+                          color: TechColors.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        '240kW',
+                        style: TextStyle(
+                          color: TechColors.glowOrange,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'Roboto Mono',
+                          shadows: [
+                            Shadow(
+                              color: TechColors.glowOrange.withOpacity(0.5),
+                              blurRadius: 6,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),

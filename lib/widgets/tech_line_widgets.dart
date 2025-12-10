@@ -426,7 +426,7 @@ class TechPanel extends StatelessWidget {
 
   Widget _buildHeader() {
     return Container(
-      height: 36,
+      height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: TechColors.bgMedium.withOpacity(0.5),
@@ -441,7 +441,7 @@ class TechPanel extends StatelessWidget {
           // 标题前装饰
           Container(
             width: 3,
-            height: 14,
+            height: 18,
             decoration: BoxDecoration(
               color: accentColor,
               borderRadius: BorderRadius.circular(1),
@@ -452,7 +452,7 @@ class TechPanel extends StatelessWidget {
             title!,
             style: TextStyle(
               color: TechColors.textPrimary,
-              fontSize: 13,
+              fontSize: 16,
               fontWeight: FontWeight.w500,
               letterSpacing: 0.5,
               shadows: [

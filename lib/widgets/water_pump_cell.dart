@@ -43,12 +43,12 @@ class WaterPumpCell extends StatelessWidget {
         children: [
           // 水泵图片作为背景
           Positioned(
-            top: 8,
-            left: 0,
-            right: 0,
-            bottom: 60,
+            top: 0,
+            left: 20,
+            right: 20,
+            bottom: 70,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
               child: Image.asset(
                 'assets/images/water_pump.png',
                 fit: BoxFit.contain,
@@ -85,7 +85,7 @@ class WaterPumpCell extends StatelessWidget {
                     '功率: ${power.toStringAsFixed(1)}kW',
                     style: const TextStyle(
                       color: TechColors.glowCyan,
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.w500,
                       fontFamily: 'Roboto Mono',
                     ),
@@ -95,7 +95,7 @@ class WaterPumpCell extends StatelessWidget {
                     '累计电量: ${cumulativeEnergy.toStringAsFixed(1)}kW·h',
                     style: const TextStyle(
                       color: TechColors.glowGreen,
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.w500,
                       fontFamily: 'Roboto Mono',
                     ),
@@ -105,7 +105,7 @@ class WaterPumpCell extends StatelessWidget {
                     '能耗: ${energyConsumption.toStringAsFixed(1)}kW',
                     style: const TextStyle(
                       color: TechColors.glowOrange,
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.w500,
                       fontFamily: 'Roboto Mono',
                     ),

@@ -38,7 +38,7 @@ class GasPipeCell extends StatelessWidget {
             top: 0,
             left: 0,
             bottom: 50,
-            width: 80,
+            width: 60,
             child: Image.asset(
               'assets/images/gas.png',
               fit: BoxFit.contain,
@@ -47,7 +47,7 @@ class GasPipeCell extends StatelessWidget {
                 return Icon(
                   Icons.image_not_supported,
                   color: TechColors.textSecondary.withOpacity(0.5),
-                  size: 32,
+                  size: 25,
                 );
               },
             ),
@@ -75,7 +75,7 @@ class GasPipeCell extends StatelessWidget {
                     '流速: ${flowRate.toStringAsFixed(1)}m³/h',
                     style: const TextStyle(
                       color: TechColors.glowCyan,
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.w500,
                       fontFamily: 'Roboto Mono',
                     ),
@@ -85,7 +85,7 @@ class GasPipeCell extends StatelessWidget {
                     '能耗: ${energyConsumption.toStringAsFixed(1)}kW',
                     style: const TextStyle(
                       color: TechColors.glowOrange,
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.w500,
                       fontFamily: 'Roboto Mono',
                     ),

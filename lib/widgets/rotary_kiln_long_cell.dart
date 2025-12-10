@@ -121,14 +121,14 @@ class RotaryKilnLongCell extends StatelessWidget {
                   ),
                 ),
               ),
-              // 数据标签（左侧30%位置，垂直居中）
+              // 数据标签
               Positioned(
                 left: 0,
                 right: 0,
                 top: 0,
                 bottom: 0,
                 child: Align(
-                  alignment: const Alignment(0.1, -0.9), // 左侧30%位置，垂直居中
+                  alignment: const Alignment(0.1, -1.1),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -150,7 +150,7 @@ class RotaryKilnLongCell extends StatelessWidget {
                           '重量: 300kg',
                           style: const TextStyle(
                             color: TechColors.glowCyan,
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -160,7 +160,7 @@ class RotaryKilnLongCell extends StatelessWidget {
                           '下料速度: 10kg/h',
                           style: const TextStyle(
                             color: TechColors.glowGreen,
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -170,7 +170,7 @@ class RotaryKilnLongCell extends StatelessWidget {
                           '能耗: 45kW',
                           style: const TextStyle(
                             color: TechColors.glowOrange,
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -180,11 +180,11 @@ class RotaryKilnLongCell extends StatelessWidget {
                   ),
                 ),
               ),
-              // 中间温度显示
+              // 中间温度显示（两组）
               Positioned(
                 left: 10,
                 right: 0,
-                top: 20,
+                top: 25,
                 bottom: 0,
                 child: Center(
                   child: Container(
@@ -192,14 +192,59 @@ class RotaryKilnLongCell extends StatelessWidget {
                       horizontal: 12,
                       vertical: 6,
                     ),
-                    child: Text(
-                      '温度: 850°C   温度: 850°C',
-                      style: const TextStyle(
-                        color: TechColors.glowRed,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        fontFamily: 'Roboto Mono',
-                      ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // 第一组温度
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '温度1',
+                              style: TextStyle(
+                                color: TechColors.glowRed,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '850°C',
+                              style: const TextStyle(
+                                color: TechColors.glowRed,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 10),
+                        // 第二组温度
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '温度2',
+                              style: TextStyle(
+                                color: TechColors.glowRed,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '850°C',
+                              style: const TextStyle(
+                                color: TechColors.glowRed,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
