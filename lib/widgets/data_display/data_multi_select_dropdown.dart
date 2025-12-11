@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'tech_line_widgets.dart';
+import 'data_tech_line_widgets.dart';
 
 /// 多选下拉框组件
 /// 用于选择多个设备/项目，支持复选框和颜色指示器
@@ -12,6 +12,9 @@ class MultiSelectDropdown extends StatelessWidget {
   final Color accentColor;
   final ValueChanged<int> onItemToggle;
 
+  /// 是否使用紧凑模式（更小的字体和间距）
+  final bool compact;
+
   const MultiSelectDropdown({
     super.key,
     required this.label,
@@ -21,6 +24,7 @@ class MultiSelectDropdown extends StatelessWidget {
     required this.getItemLabel,
     required this.accentColor,
     required this.onItemToggle,
+    this.compact = false,
   });
 
   @override
@@ -28,7 +32,10 @@ class MultiSelectDropdown extends StatelessWidget {
     return PopupMenuButton<int>(
       color: TechColors.bgMedium,
       icon: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 4 : 8,
+          vertical: compact ? 2 : 4,
+        ),
         decoration: BoxDecoration(
           color: TechColors.bgDark,
           borderRadius: BorderRadius.circular(3),
@@ -40,16 +47,16 @@ class MultiSelectDropdown extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              label,
-              style: const TextStyle(
+              compact ? _getCompactLabel() : label,
+              style: TextStyle(
                 color: TechColors.textPrimary,
-                fontSize: 10,
+                fontSize: compact ? 9 : 10,
               ),
             ),
-            const SizedBox(width: 4),
-            const Icon(
+            SizedBox(width: compact ? 2 : 4),
+            Icon(
               Icons.arrow_drop_down,
-              size: 16,
+              size: compact ? 12 : 16,
               color: TechColors.textSecondary,
             ),
           ],
@@ -120,5 +127,14 @@ class MultiSelectDropdown extends StatelessWidget {
         });
       },
     );
+  }
+
+  /// 获取紧凑模式的标签（缩短显示）
+  String _getCompactLabel() {
+    // 将 "选择温区" -> "温区"
+    if (label.startsWith('选择')) {
+      return label.substring(2);
+    }
+    return label;
   }
 }

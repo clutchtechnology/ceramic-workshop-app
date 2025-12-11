@@ -389,6 +389,7 @@ class TechPanel extends StatelessWidget {
   final Color accentColor;
   final EdgeInsets padding;
   final List<Widget>? headerActions;
+  final Widget? titleAction; // 新增：标题右侧自定义组件
 
   const TechPanel({
     super.key,
@@ -397,8 +398,9 @@ class TechPanel extends StatelessWidget {
     this.width,
     this.height,
     this.accentColor = TechColors.glowCyan,
-    this.padding = const EdgeInsets.all(12),
+    this.padding = const EdgeInsets.all(4),
     this.headerActions,
+    this.titleAction,
   });
 
   @override
@@ -408,7 +410,7 @@ class TechPanel extends StatelessWidget {
       height: height,
       glowColor: accentColor,
       glowIntensity: 0.2,
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.all(4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -426,8 +428,8 @@ class TechPanel extends StatelessWidget {
 
   Widget _buildHeader() {
     return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: TechColors.bgMedium.withOpacity(0.5),
         border: Border(
@@ -441,18 +443,18 @@ class TechPanel extends StatelessWidget {
           // 标题前装饰
           Container(
             width: 3,
-            height: 18,
+            height: 14,
             decoration: BoxDecoration(
               color: accentColor,
               borderRadius: BorderRadius.circular(1),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           Text(
             title!,
             style: TextStyle(
               color: TechColors.textPrimary,
-              fontSize: 16,
+              fontSize: 14,
               fontWeight: FontWeight.w500,
               letterSpacing: 0.5,
               shadows: [
@@ -464,6 +466,7 @@ class TechPanel extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          if (titleAction != null) titleAction!,
           if (headerActions != null) ...headerActions!,
         ],
       ),

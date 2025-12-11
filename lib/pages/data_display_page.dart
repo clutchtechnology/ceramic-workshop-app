@@ -1,12 +1,16 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../widgets/tech_line_widgets.dart';
-import '../widgets/time_range_selector.dart';
-import '../widgets/tech_line_chart.dart';
-import '../widgets/tech_bar_chart.dart';
+import '../widgets/data_display/data_tech_line_widgets.dart';
+import '../widgets/data_display/data_time_range_selector.dart';
+import '../widgets/data_display/data_tech_line_chart.dart';
+import '../widgets/data_display/data_tech_bar_chart.dart';
+import '../services/history_data_service.dart';
 
 /// 数据展示页面
 /// 包含三个设备容器：回转窑、辊道窑、SCR设备
+///
+/// 默认显示最近120秒的历史数据（静态展示，不自动更新）
 class DataDisplayPage extends StatefulWidget {
   const DataDisplayPage({super.key});
 
@@ -18,89 +22,103 @@ class _DataDisplayPageState extends State<DataDisplayPage>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
-  // 时间范围选择
-  DateTime _startTime = DateTime.now().subtract(const Duration(hours: 24));
-  DateTime _endTime = DateTime.now();
 
-  // 7个有料仓的回转窑的选择状态（窑1,2,4,5,6,7,9，排除窑3,8）
-  int _selectedFeedKiln = 0; // 单选，默认选择第一个（窑1）
-  int _selectedHopperKiln = 0; // 单选，默认选择第一个（窑1）
+  // 历史数据服务
+  final HistoryDataService _historyService = HistoryDataService();
 
-  // 12个温度区域的选择状态（窑1-3,6-8各1个，窑4,5,9各2个）
-  int _selectedTemperatureZone = 0; // 单选，默认选择第一个
+  // 加载状态
+  bool _isLoading = true;
 
-  // 模拟温度数据（待接入PLC）- 12个温度区域
-  final Map<int, List<FlSpot>> _temperatureData = {};
+  // 默认时间范围：最近120秒
+  static const Duration _defaultTimeRange = Duration(seconds: 120);
 
-  // 模拟下料速度数据（待接入PLC）- 9个回转窑
-  final Map<int, List<FlSpot>> _feedSpeedData = {};
+  // ==================== 8个图表的独立时间范围 ====================
+  // 回转窑3个图表（默认最近120秒）
+  late DateTime _tempChartStartTime;
+  late DateTime _tempChartEndTime;
+  late DateTime _feedSpeedChartStartTime;
+  late DateTime _feedSpeedChartEndTime;
+  late DateTime _hopperWeightChartStartTime;
+  late DateTime _hopperWeightChartEndTime;
 
-  // 模拟料仓重量数据（待接入PLC）- 9个回转窑
-  final Map<int, List<FlSpot>> _hopperWeightData = {};
+  // 辊道窑3个图表（默认最近120秒）
+  late DateTime _rollerTempChartStartTime;
+  late DateTime _rollerTempChartEndTime;
+  late DateTime _rollerEnergyChartStartTime;
+  late DateTime _rollerEnergyChartEndTime;
+  late DateTime _rollerPowerChartStartTime;
+  late DateTime _rollerPowerChartEndTime;
 
-  // 辊道窑的选择状态（6个辊道窑区域）
-  final List<bool> _selectedRollerKilns = List.generate(6, (_) => true);
+  // SCR设备2个图表（默认最近120秒）
+  late DateTime _pumpEnergyChartStartTime;
+  late DateTime _pumpEnergyChartEndTime;
+  late DateTime _fanEnergyChartStartTime;
+  late DateTime _fanEnergyChartEndTime;
 
-  // 模拟辊道窑温度数据（待接入PLC）- 6个辊道窑区域
-  final Map<int, List<FlSpot>> _rollerTemperatureData = {};
+  // ==================== 设备选择状态 ====================
+  // 回转窑选择（对应 device_id 映射）
+  // 索引0-8对应：short_hopper_1~4, no_hopper_1~2, long_hopper_1~3
+  int _selectedHopperIndex = 0; // 默认选择第一个
 
-  // 模拟辊道窑能耗数据（待接入PLC）- 6个辊道窑区域
-  final Map<int, List<FlSpot>> _rollerEnergyData = {};
+  // 辊道窑温区选择（6个温区）
+  final List<bool> _selectedRollerZones = List.generate(6, (_) => true);
 
-  // 模拟辊道窑功率数据（待接入PLC）- 6个辊道窑区域
-  final Map<int, List<FlSpot>> _rollerPowerData = {};
+  // SCR设备选择（2个）
+  final List<bool> _selectedScrs = List.generate(2, (_) => true);
 
-  // SCR设备的选择状态（2个水泵，2个风机）
-  final List<bool> _selectedPumps = List.generate(2, (_) => true);
+  // 风机选择（2个）
   final List<bool> _selectedFans = List.generate(2, (_) => true);
 
-  // 模拟SCR水泵能耗数据（待接入PLC）- 2个水泵
-  final Map<int, List<FlSpot>> _pumpEnergyData = {};
+  // ==================== 图表数据 ====================
+  // 回转窑温度数据
+  final Map<int, List<FlSpot>> _temperatureData = {};
 
-  // 模拟SCR风机能耗数据（待接入PLC）- 2个风机
-  final Map<int, List<FlSpot>> _fanEnergyData = {};
+  // 回转窑下料速度数据
+  final Map<int, List<FlSpot>> _feedSpeedData = {};
 
-  // 12种颜色用于区分不同温度区域（允许重复）
-  final List<Color> _temperatureColors = [
-    TechColors.glowOrange, // 窑1
-    TechColors.glowCyan, // 窑2
-    TechColors.glowGreen, // 窑3
-    const Color(0xFFff3b30), // 窑4(1)
-    const Color(0xFFff6b60), // 窑4(2) - 稍亮的红色
-    const Color(0xFFffcc00), // 窑5(1)
-    const Color(0xFFffe44d), // 窑5(2) - 稍亮的黄色
-    const Color(0xFFaf52de), // 窑6
-    const Color(0xFF00d4ff), // 窑7
-    TechColors.glowOrange, // 窑8
-    TechColors.glowCyan, // 窑9(1)
-    const Color(0xFF00ffaa), // 窑9(2) - 亮绿色
+  // 回转窑料仓重量数据
+  final Map<int, List<FlSpot>> _hopperWeightData = {};
+
+  // 辊道窑温度数据（6个温区）
+  final Map<int, List<FlSpot>> _rollerTemperatureData = {};
+
+  // 辊道窑能耗数据（6个温区）
+  final Map<int, List<FlSpot>> _rollerEnergyData = {};
+
+  // 辊道窑功率数据（6个温区）
+  final Map<int, List<FlSpot>> _rollerPowerData = {};
+
+  // SCR功率数据（2个）
+  final Map<int, List<FlSpot>> _scrPowerData = {};
+
+  // 风机功率数据（2个）
+  final Map<int, List<FlSpot>> _fanPowerData = {};
+
+  // 9种颜色用于区分不同回转窑
+  final List<Color> _hopperColors = [
+    TechColors.glowOrange, // short_hopper_1
+    TechColors.glowCyan, // short_hopper_2
+    TechColors.glowGreen, // short_hopper_3
+    const Color(0xFFff3b30), // short_hopper_4
+    const Color(0xFFffcc00), // no_hopper_1
+    const Color(0xFFaf52de), // no_hopper_2
+    const Color(0xFF00d4ff), // long_hopper_1
+    const Color(0xFF00ffaa), // long_hopper_2
+    const Color(0xFFff6b60), // long_hopper_3
   ];
 
-  // 9种颜色用于区分不同回转窑（下料速度、料仓重量）
-  final List<Color> _kilnColors = [
-    TechColors.glowOrange,
-    TechColors.glowCyan,
-    TechColors.glowGreen,
-    const Color(0xFFff3b30), // Red
-    const Color(0xFFffcc00), // Yellow
-    const Color(0xFFaf52de), // Purple
-    const Color(0xFF00d4ff), // Light Blue
-    TechColors.glowOrange, // 重复颜色
-    TechColors.glowCyan, // 重复颜色
+  // 6种颜色用于区分不同辊道窑温区
+  final List<Color> _rollerZoneColors = [
+    TechColors.glowCyan, // zone1
+    TechColors.glowGreen, // zone2
+    const Color(0xFFaf52de), // zone3
+    TechColors.glowOrange, // zone4
+    const Color(0xFFffcc00), // zone5
+    const Color(0xFF00d4ff), // zone6
   ];
 
-  // 6种颜色用于区分不同辊道窑区域（允许重复）
-  final List<Color> _rollerKilnColors = [
-    TechColors.glowCyan,
-    TechColors.glowGreen,
-    const Color(0xFFaf52de), // Purple
-    TechColors.glowOrange,
-    const Color(0xFFffcc00), // Yellow
-    const Color(0xFF00d4ff), // Light Blue
-  ];
-
-  // 2种不同的颜色用于区分SCR设备
-  final List<Color> _scrColors = [
+  // 2种颜色用于区分SCR/风机设备
+  final List<Color> _deviceColors = [
     TechColors.glowGreen,
     TechColors.glowOrange,
   ];
@@ -108,192 +126,365 @@ class _DataDisplayPageState extends State<DataDisplayPage>
   @override
   void initState() {
     super.initState();
-    _generateMockData();
+    _initializeTimeRanges();
+    _loadAllHistoryData();
   }
 
-  // 生成模拟数据
-  void _generateMockData() {
-    // 为12个温度区域生成数据
-    for (int zone = 0; zone < 12; zone++) {
-      _temperatureData[zone] = List.generate(24, (index) {
-        return FlSpot(
-          index.toDouble(),
-          800 + (index * 10) + (index % 5 * 20) + (zone * 25),
-        );
-      });
-    }
+  @override
+  void dispose() {
+    super.dispose();
+  }
 
-    // 为7个有料仓的回转窑生成下料速度和料仓重量数据（窑1,2,4,5,6,7,9）
-    for (int kiln = 0; kiln < 7; kiln++) {
-      _feedSpeedData[kiln] = List.generate(24, (index) {
-        return FlSpot(
-          index.toDouble(),
-          100 + (index * 5) + (index % 4 * 10) + (kiln * 15),
-        );
-      });
+  /// 初始化所有图表的时间范围为最近120秒
+  void _initializeTimeRanges() {
+    final now = DateTime.now();
+    final start = now.subtract(_defaultTimeRange);
 
-      _hopperWeightData[kiln] = List.generate(24, (index) {
-        return FlSpot(
-          index.toDouble(),
-          500 - (index * 15) + (index % 3 * 20) + (kiln * 10),
-        );
-      });
-    }
+    // 回转窑
+    _tempChartStartTime = start;
+    _tempChartEndTime = now;
+    _feedSpeedChartStartTime = start;
+    _feedSpeedChartEndTime = now;
+    _hopperWeightChartStartTime = start;
+    _hopperWeightChartEndTime = now;
 
-    // 为6个辊道窑区域生成模拟数据
-    for (int kiln = 0; kiln < 6; kiln++) {
-      _rollerTemperatureData[kiln] = List.generate(24, (index) {
-        return FlSpot(
-          index.toDouble(),
-          900 + (index * 8) + (index % 6 * 15) + (kiln * 25),
-        );
-      });
+    // 辊道窑
+    _rollerTempChartStartTime = start;
+    _rollerTempChartEndTime = now;
+    _rollerEnergyChartStartTime = start;
+    _rollerEnergyChartEndTime = now;
+    _rollerPowerChartStartTime = start;
+    _rollerPowerChartEndTime = now;
 
-      _rollerEnergyData[kiln] = List.generate(24, (index) {
-        return FlSpot(
-          index.toDouble(),
-          200 + (index * 6) + (index % 5 * 12) + (kiln * 20),
-        );
-      });
+    // SCR/风机
+    _pumpEnergyChartStartTime = start;
+    _pumpEnergyChartEndTime = now;
+    _fanEnergyChartStartTime = start;
+    _fanEnergyChartEndTime = now;
+  }
 
-      _rollerPowerData[kiln] = List.generate(24, (index) {
-        return FlSpot(
-          index.toDouble(),
-          150 + (index * 4) + (index % 4 * 8) + (kiln * 18),
-        );
-      });
-    }
+  /// 加载所有历史数据
+  Future<void> _loadAllHistoryData() async {
+    setState(() => _isLoading = true);
 
-    // 为2个水泵生成模拟能耗数据
-    for (int pump = 0; pump < 2; pump++) {
-      _pumpEnergyData[pump] = List.generate(24, (index) {
-        return FlSpot(
-          index.toDouble(),
-          50 + (index * 3) + (index % 4 * 8) + (pump * 12),
-        );
-      });
-    }
+    await Future.wait([
+      _loadHopperTemperatureData(),
+      _loadHopperWeightData(),
+      _loadRollerData(),
+      _loadScrFanData(),
+    ]);
 
-    // 为2个风机生成模拟能耗数据
-    for (int fan = 0; fan < 2; fan++) {
-      _fanEnergyData[fan] = List.generate(24, (index) {
-        return FlSpot(
-          index.toDouble(),
-          80 + (index * 4) + (index % 5 * 10) + (fan * 15),
-        );
-      });
+    if (mounted) {
+      setState(() => _isLoading = false);
     }
   }
+
+  /// 加载回转窑温度历史数据
+  Future<void> _loadHopperTemperatureData() async {
+    // 加载当前选中设备的温度数据
+    final deviceId =
+        HistoryDataService.hopperDeviceIds[_selectedHopperIndex + 1]!;
+
+    final result = await _historyService.queryHopperTemperatureHistory(
+      deviceId: deviceId,
+      start: _tempChartStartTime,
+      end: _tempChartEndTime,
+    );
+
+    if (result.success && result.hasData) {
+      final spots = _convertToFlSpots(result.dataPoints!, 'temperature');
+      if (mounted) {
+        setState(() {
+          _temperatureData[_selectedHopperIndex] = spots;
+        });
+      }
+    } else {
+      debugPrint('❌ 加载温度数据失败: ${result.error}');
+    }
+  }
+
+  /// 加载回转窑称重历史数据（重量和下料速度）
+  Future<void> _loadHopperWeightData() async {
+    final deviceId =
+        HistoryDataService.hopperDeviceIds[_selectedHopperIndex + 1]!;
+
+    final result = await _historyService.queryHopperWeightHistory(
+      deviceId: deviceId,
+      start: _hopperWeightChartStartTime,
+      end: _hopperWeightChartEndTime,
+    );
+
+    if (result.success && result.hasData) {
+      final weightSpots = _convertToFlSpots(result.dataPoints!, 'weight');
+      final feedSpots = _convertToFlSpots(result.dataPoints!, 'feed_rate');
+
+      if (mounted) {
+        setState(() {
+          _hopperWeightData[_selectedHopperIndex] = weightSpots;
+          _feedSpeedData[_selectedHopperIndex] = feedSpots;
+        });
+      }
+    } else {
+      debugPrint('❌ 加载称重数据失败: ${result.error}');
+    }
+  }
+
+  /// 加载辊道窑历史数据
+  Future<void> _loadRollerData() async {
+    // 加载所有选中温区的数据
+    for (int i = 0; i < 6; i++) {
+      if (!_selectedRollerZones[i]) continue;
+
+      final zoneId = HistoryDataService.rollerZoneIds[i + 1]!;
+
+      // 温度
+      final tempResult = await _historyService.queryRollerTemperatureHistory(
+        start: _rollerTempChartStartTime,
+        end: _rollerTempChartEndTime,
+        zone: zoneId,
+      );
+
+      if (tempResult.success && tempResult.hasData) {
+        final spots = _convertToFlSpots(tempResult.dataPoints!, 'temperature');
+        if (mounted) {
+          setState(() => _rollerTemperatureData[i] = spots);
+        }
+      }
+
+      // 功率
+      final powerResult = await _historyService.queryRollerPowerHistory(
+        start: _rollerPowerChartStartTime,
+        end: _rollerPowerChartEndTime,
+        zone: zoneId,
+      );
+
+      if (powerResult.success && powerResult.hasData) {
+        final powerSpots = _convertToFlSpots(powerResult.dataPoints!, 'Pt');
+        final energySpots = _convertToFlSpots(powerResult.dataPoints!, 'ImpEp');
+        if (mounted) {
+          setState(() {
+            _rollerPowerData[i] = powerSpots;
+            _rollerEnergyData[i] = energySpots;
+          });
+        }
+      }
+    }
+  }
+
+  /// 加载SCR和风机历史数据
+  Future<void> _loadScrFanData() async {
+    // SCR功率数据
+    for (int i = 0; i < 2; i++) {
+      if (!_selectedScrs[i]) continue;
+
+      final deviceId = HistoryDataService.scrDeviceIds[i + 1]!;
+      final result = await _historyService.queryScrPowerHistory(
+        deviceId: deviceId,
+        start: _pumpEnergyChartStartTime,
+        end: _pumpEnergyChartEndTime,
+      );
+
+      if (result.success && result.hasData) {
+        final spots = _convertToFlSpots(result.dataPoints!, 'Pt');
+        if (mounted) {
+          setState(() => _scrPowerData[i] = spots);
+        }
+      }
+    }
+
+    // 风机功率数据
+    for (int i = 0; i < 2; i++) {
+      if (!_selectedFans[i]) continue;
+
+      final deviceId = HistoryDataService.fanDeviceIds[i + 1]!;
+      final result = await _historyService.queryFanPowerHistory(
+        deviceId: deviceId,
+        start: _fanEnergyChartStartTime,
+        end: _fanEnergyChartEndTime,
+      );
+
+      if (result.success && result.hasData) {
+        final spots = _convertToFlSpots(result.dataPoints!, 'Pt');
+        if (mounted) {
+          setState(() => _fanPowerData[i] = spots);
+        }
+      }
+    }
+  }
+
+  /// 将历史数据点转换为FlSpot列表
+  List<FlSpot> _convertToFlSpots(
+      List<HistoryDataPoint> dataPoints, String field) {
+    if (dataPoints.isEmpty) return [];
+
+    return dataPoints.asMap().entries.map((entry) {
+      final index = entry.key;
+      final point = entry.value;
+
+      // X轴：时间索引
+      final x = index.toDouble();
+
+      // Y轴：字段值
+      double y = 0;
+      switch (field) {
+        case 'temperature':
+          y = point.temperature ?? 0;
+          break;
+        case 'weight':
+          y = point.weight ?? 0;
+          break;
+        case 'feed_rate':
+          y = point.feedRate ?? 0;
+          break;
+        case 'Pt':
+          y = point.power ?? 0;
+          break;
+        case 'ImpEp':
+          y = point.energy ?? 0;
+          break;
+        case 'flow_rate':
+          y = point.flowRate ?? 0;
+          break;
+        default:
+          y = point.fields[field]?.toDouble() ?? 0;
+      }
+
+      return FlSpot(x, y);
+    }).toList();
+  }
+
+  /// 获取回转窑设备显示名称
+  String _getHopperLabel(int index) {
+    final deviceId = HistoryDataService.hopperDeviceIds[index + 1];
+    if (deviceId == null) return '设备${index + 1}';
+
+    if (deviceId.startsWith('short_hopper')) {
+      final num = deviceId.split('_').last;
+      return '短料仓$num';
+    } else if (deviceId.startsWith('no_hopper')) {
+      final num = deviceId.split('_').last;
+      return '无料仓$num';
+    } else if (deviceId.startsWith('long_hopper')) {
+      final num = deviceId.split('_').last;
+      return '长料仓$num';
+    }
+    return deviceId;
+  }
+
+  /// 获取辊道窑温区显示名称
+  String _getRollerZoneLabel(int index) => '温区${index + 1}';
 
   @override
   Widget build(BuildContext context) {
     super.build(context); // 必须调用以支持 AutomaticKeepAliveClientMixin
+
+    // 显示加载状态
+    if (_isLoading) {
+      return Container(
+        color: TechColors.bgDeep,
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(TechColors.glowCyan),
+              ),
+              SizedBox(height: 16),
+              Text(
+                '加载历史数据...',
+                style: TextStyle(
+                  color: TechColors.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Container(
       color: TechColors.bgDeep,
+      padding: const EdgeInsets.all(12),
       child: Row(
         children: [
-          // 左侧：回转窑容器（2/5宽度，全高）
+          // 左侧：回转窑容器（38%宽度，全高）
           Expanded(
-            flex: 2,
-            child: Container(
-              margin: const EdgeInsets.all(12),
-              child: TechPanel(
-                title: '回转窑',
-                accentColor: TechColors.glowOrange,
-                headerActions: [
-                  SizedBox(
-                    width: 280,
-                    child: _buildTimeRangeSelector(),
+            flex: 19,
+            child: TechPanel(
+              title: '回转窑',
+              accentColor: TechColors.glowOrange,
+              child: Column(
+                children: [
+                  // 历史温度曲线
+                  Expanded(
+                    child: _buildTemperatureChart(),
+                  ),
+                  const SizedBox(height: 12),
+                  // 下料速度曲线
+                  Expanded(
+                    child: _buildFeedSpeedChart(),
+                  ),
+                  const SizedBox(height: 12),
+                  // 料仓重量曲线
+                  Expanded(
+                    child: _buildHopperWeightChart(),
                   ),
                 ],
-                child: Column(
-                  children: [
-                    // 历史温度曲线
-                    Expanded(
-                      child: _buildTemperatureChart(),
-                    ),
-                    const SizedBox(height: 12),
-                    // 下料速度曲线
-                    Expanded(
-                      child: _buildFeedSpeedChart(),
-                    ),
-                    const SizedBox(height: 12),
-                    // 料仓重量曲线
-                    Expanded(
-                      child: _buildHopperWeightChart(),
-                    ),
-                  ],
-                ),
               ),
             ),
           ),
-          // 右侧：辊道窑和SCR设备（3/5宽度）
+          const SizedBox(width: 12),
+          // 右侧：辊道窑和SCR设备（62%宽度）
           Expanded(
-            flex: 3,
+            flex: 31,
             child: Column(
               children: [
                 // 上部：辊道窑容器（3/5高度）
                 Expanded(
                   flex: 3,
-                  child: Container(
-                    margin: const EdgeInsets.fromLTRB(0, 12, 12, 6),
-                    child: TechPanel(
-                      title: '辊道窑',
-                      accentColor: TechColors.glowCyan,
-                      headerActions: [
-                        SizedBox(
-                          width: 280,
-                          child: _buildRollerTimeRangeSelector(),
+                  child: TechPanel(
+                    title: '辊道窑',
+                    accentColor: TechColors.glowCyan,
+                    child: Row(
+                      children: [
+                        // 历史温度曲线
+                        Expanded(
+                          child: _buildRollerTemperatureChart(),
+                        ),
+                        const SizedBox(width: 12),
+                        // 历史能耗曲线
+                        Expanded(
+                          child: _buildRollerEnergyChart(),
+                        ),
+                        const SizedBox(width: 12),
+                        // 历史功率曲线
+                        Expanded(
+                          child: _buildRollerPowerChart(),
                         ),
                       ],
-                      child: Row(
-                        children: [
-                          // 历史温度曲线
-                          Expanded(
-                            child: _buildRollerTemperatureChart(),
-                          ),
-                          const SizedBox(width: 12),
-                          // 历史能耗曲线
-                          Expanded(
-                            child: _buildRollerEnergyChart(),
-                          ),
-                          const SizedBox(width: 12),
-                          // 历史功率曲线
-                          Expanded(
-                            child: _buildRollerPowerChart(),
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                 ),
+                const SizedBox(height: 12),
                 // 下部：SCR设备容器（2/5高度）
                 Expanded(
                   flex: 2,
-                  child: Container(
-                    margin: const EdgeInsets.fromLTRB(0, 6, 12, 12),
-                    child: TechPanel(
-                      title: 'SCR设备和风机',
-                      accentColor: TechColors.glowGreen,
-                      headerActions: [
-                        SizedBox(
-                          width: 280,
-                          child: _buildScrTimeRangeSelector(),
+                  child: TechPanel(
+                    title: 'SCR设备和风机',
+                    accentColor: TechColors.glowGreen,
+                    child: Row(
+                      children: [
+                        // 水泵能耗曲线
+                        Expanded(
+                          child: _buildPumpEnergyChart(),
+                        ),
+                        const SizedBox(width: 12),
+                        // 风机能耗曲线
+                        Expanded(
+                          child: _buildFanEnergyChart(),
                         ),
                       ],
-                      child: Row(
-                        children: [
-                          // 水泵能耗曲线
-                          Expanded(
-                            child: _buildPumpEnergyChart(),
-                          ),
-                          const SizedBox(width: 12),
-                          // 风机能耗曲线
-                          Expanded(
-                            child: _buildFanEnergyChart(),
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                 ),
@@ -305,75 +496,41 @@ class _DataDisplayPageState extends State<DataDisplayPage>
     );
   }
 
-  /// 时间范围选择器
-  Widget _buildTimeRangeSelector() {
-    return TimeRangeSelector(
-      startTime: _startTime,
-      endTime: _endTime,
-      onStartTimeTap: _selectStartTime,
-      onEndTimeTap: _selectEndTime,
-      accentColor: TechColors.glowOrange,
-    );
-  }
-
-  /// 历史温度曲线图
+  /// 历史温度曲线图（料仓温度）
   Widget _buildTemperatureChart() {
     return TechLineChart(
-      title: '历史温度曲线',
+      title: '料仓温度曲线',
       accentColor: TechColors.glowOrange,
       yAxisLabel: '温度(°C)',
-      xAxisLabel: '时间(h)',
-      minY: 700,
-      maxY: 1200,
-      yInterval: 50,
-      xInterval: 4,
+      xAxisLabel: '数据点',
+      minY: 0,
+      maxY: 200,
+      yInterval: 25,
+      xInterval: 5,
       dataMap: _temperatureData,
       isSingleSelect: true,
-      selectedIndex: _selectedTemperatureZone,
-      itemColors: _temperatureColors,
-      itemCount: 12,
-      getItemLabel: _getTemperatureZoneLabel,
-      selectorLabel: '选择温度区域',
+      selectedIndex: _selectedHopperIndex,
+      itemColors: _hopperColors,
+      itemCount: 9,
+      getItemLabel: _getHopperLabel,
+      selectorLabel: '选择料仓',
+      headerActions: [
+        TimeRangeSelector(
+          startTime: _tempChartStartTime,
+          endTime: _tempChartEndTime,
+          onStartTimeTap: () => _selectChartStartTime('temp'),
+          onEndTimeTap: () => _selectChartEndTime('temp'),
+          onCancel: () => _refreshChartData('temp'),
+          accentColor: TechColors.glowOrange,
+        ),
+      ],
       onItemSelect: (index) {
         setState(() {
-          _selectedTemperatureZone = index;
+          _selectedHopperIndex = index;
         });
+        _loadHopperTemperatureData();
       },
     );
-  }
-
-  /// 获取温度区域标签
-  String _getTemperatureZoneLabel(int index) {
-    // 窑1-3: 索引0-2
-    // 窑4(1), 窑4(2): 索引3-4
-    // 窑5(1), 窑5(2): 索引5-6
-    // 窑6-8: 索引7-9
-    // 窑9(1), 窑9(2): 索引10-11
-
-    if (index <= 2) {
-      return '窑${index + 1}';
-    } else if (index == 3) {
-      return '窑4(1)';
-    } else if (index == 4) {
-      return '窑4(2)';
-    } else if (index == 5) {
-      return '窑5(1)';
-    } else if (index == 6) {
-      return '窑5(2)';
-    } else if (index <= 9) {
-      return '窑${index + 1}';
-    } else if (index == 10) {
-      return '窑9(1)';
-    } else {
-      return '窑9(2)';
-    }
-  }
-
-  /// 获取下料/料仓窑标签（窑1,2,4,5,6,7,9，排除窑3,8）
-  String _getFeedKilnLabel(int index) {
-    // 索引 0-6 对应窑 1,2,4,5,6,7,9
-    const kilnNumbers = [1, 2, 4, 5, 6, 7, 9];
-    return '窑${kilnNumbers[index]}';
   }
 
   /// 下料速度曲线图
@@ -381,23 +538,34 @@ class _DataDisplayPageState extends State<DataDisplayPage>
     return TechLineChart(
       title: '下料速度曲线',
       accentColor: TechColors.glowCyan,
-      yAxisLabel: '速度(kg/h)',
-      xAxisLabel: '时间(h)',
+      yAxisLabel: '速度(kg/s)',
+      xAxisLabel: '数据点',
       minY: 0,
-      maxY: 300,
-      yInterval: 50,
-      xInterval: 4,
+      maxY: 100,
+      yInterval: 20,
+      xInterval: 5,
       dataMap: _feedSpeedData,
       isSingleSelect: true,
-      selectedIndex: _selectedFeedKiln,
-      itemColors: _kilnColors,
-      itemCount: 7,
-      getItemLabel: _getFeedKilnLabel,
-      selectorLabel: '选择回转窑',
+      selectedIndex: _selectedHopperIndex,
+      itemColors: _hopperColors,
+      itemCount: 9,
+      getItemLabel: _getHopperLabel,
+      selectorLabel: '选择料仓',
+      headerActions: [
+        TimeRangeSelector(
+          startTime: _feedSpeedChartStartTime,
+          endTime: _feedSpeedChartEndTime,
+          onStartTimeTap: () => _selectChartStartTime('feedSpeed'),
+          onEndTimeTap: () => _selectChartEndTime('feedSpeed'),
+          onCancel: () => _refreshChartData('feedSpeed'),
+          accentColor: TechColors.glowCyan,
+        ),
+      ],
       onItemSelect: (index) {
         setState(() {
-          _selectedFeedKiln = index;
+          _selectedHopperIndex = index;
         });
+        _loadHopperWeightData();
       },
     );
   }
@@ -408,276 +576,495 @@ class _DataDisplayPageState extends State<DataDisplayPage>
       title: '料仓重量曲线',
       accentColor: TechColors.glowGreen,
       yAxisLabel: '重量(kg)',
-      xAxisLabel: '时间(h)',
+      xAxisLabel: '数据点',
       minY: 0,
-      maxY: 800,
-      yInterval: 100,
-      xInterval: 4,
+      maxY: 3000,
+      yInterval: 500,
+      xInterval: 5,
       dataMap: _hopperWeightData,
       isSingleSelect: true,
-      selectedIndex: _selectedHopperKiln,
-      itemColors: _kilnColors,
-      itemCount: 7,
-      getItemLabel: _getFeedKilnLabel,
-      selectorLabel: '选择回转窑',
+      selectedIndex: _selectedHopperIndex,
+      itemColors: _hopperColors,
+      itemCount: 9,
+      getItemLabel: _getHopperLabel,
+      selectorLabel: '选择料仓',
+      headerActions: [
+        TimeRangeSelector(
+          startTime: _hopperWeightChartStartTime,
+          endTime: _hopperWeightChartEndTime,
+          onStartTimeTap: () => _selectChartStartTime('hopperWeight'),
+          onEndTimeTap: () => _selectChartEndTime('hopperWeight'),
+          onCancel: () => _refreshChartData('hopperWeight'),
+          accentColor: TechColors.glowGreen,
+        ),
+      ],
       onItemSelect: (index) {
         setState(() {
-          _selectedHopperKiln = index;
+          _selectedHopperIndex = index;
         });
+        _loadHopperWeightData();
       },
     );
   }
 
-  /// 选择开始时间
-  Future<void> _selectStartTime() async {
-    final DateTime? pickedDate = await showDatePicker(
-      context: context,
-      initialDate: _startTime,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: TechColors.glowOrange,
-              surface: TechColors.bgMedium,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (pickedDate != null) {
-      final TimeOfDay? pickedTime = await showTimePicker(
-        context: context,
-        initialTime: TimeOfDay.fromDateTime(_startTime),
-        builder: (context, child) {
-          return Theme(
-            data: ThemeData.dark().copyWith(
-              colorScheme: const ColorScheme.dark(
-                primary: TechColors.glowOrange,
-                surface: TechColors.bgMedium,
-              ),
-            ),
-            child: child!,
-          );
-        },
-      );
-
-      if (pickedTime != null) {
-        setState(() {
-          _startTime = DateTime(
-            pickedDate.year,
-            pickedDate.month,
-            pickedDate.day,
-            pickedTime.hour,
-            pickedTime.minute,
-          );
-          // TODO: 根据新的时间范围重新加载数据
-          _generateMockData();
-        });
-      }
-    }
-  }
-
-  /// 选择结束时间
-  Future<void> _selectEndTime() async {
-    final DateTime? pickedDate = await showDatePicker(
-      context: context,
-      initialDate: _endTime,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: TechColors.glowOrange,
-              surface: TechColors.bgMedium,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (pickedDate != null) {
-      final TimeOfDay? pickedTime = await showTimePicker(
-        context: context,
-        initialTime: TimeOfDay.fromDateTime(_endTime),
-        builder: (context, child) {
-          return Theme(
-            data: ThemeData.dark().copyWith(
-              colorScheme: const ColorScheme.dark(
-                primary: TechColors.glowOrange,
-                surface: TechColors.bgMedium,
-              ),
-            ),
-            child: child!,
-          );
-        },
-      );
-
-      if (pickedTime != null) {
-        setState(() {
-          _endTime = DateTime(
-            pickedDate.year,
-            pickedDate.month,
-            pickedDate.day,
-            pickedTime.hour,
-            pickedTime.minute,
-          );
-          // TODO: 根据新的时间范围重新加载数据
-          _generateMockData();
-        });
-      }
-    }
-  }
-
-  /// 辊道窑时间范围选择器
-  Widget _buildRollerTimeRangeSelector() {
-    return TimeRangeSelector(
-      startTime: _startTime,
-      endTime: _endTime,
-      onStartTimeTap: _selectStartTime,
-      onEndTimeTap: _selectEndTime,
-      accentColor: TechColors.glowCyan,
-    );
-  }
-
-  /// 辊道窑历史温度曲线图
+  /// 辊道窑温度曲线图
   Widget _buildRollerTemperatureChart() {
     return TechLineChart(
-      title: '历史温度曲线',
+      title: '辊道窑温度曲线',
       accentColor: TechColors.glowCyan,
       yAxisLabel: '温度(°C)',
-      xAxisLabel: '时间(h)',
+      xAxisLabel: '数据点',
       minY: 800,
       maxY: 1200,
       yInterval: 50,
-      xInterval: 4,
+      xInterval: 5,
       dataMap: _rollerTemperatureData,
-      selectedItems: _selectedRollerKilns,
-      itemColors: _rollerKilnColors,
+      selectedItems: _selectedRollerZones,
+      itemColors: _rollerZoneColors,
       itemCount: 6,
-      getItemLabel: (index) => '辊道窑区域 ${index + 1}',
-      selectorLabel: '选择辊道窑区域',
+      getItemLabel: _getRollerZoneLabel,
+      selectorLabel: '选择温区',
+      compact: true,
+      headerActions: [
+        TimeRangeSelector(
+          startTime: _rollerTempChartStartTime,
+          endTime: _rollerTempChartEndTime,
+          onStartTimeTap: () => _selectChartStartTime('rollerTemp'),
+          onEndTimeTap: () => _selectChartEndTime('rollerTemp'),
+          onCancel: () => _refreshChartData('rollerTemp'),
+          accentColor: TechColors.glowCyan,
+          compact: true,
+        ),
+      ],
       onItemToggle: (index) {
         setState(() {
-          _selectedRollerKilns[index] = !_selectedRollerKilns[index];
+          _selectedRollerZones[index] = !_selectedRollerZones[index];
         });
+        _loadRollerData();
       },
     );
   }
 
-  /// 辊道窑历史能耗折线图
+  /// 辊道窑能耗曲线图
   Widget _buildRollerEnergyChart() {
     return TechBarChart(
-      title: '历史能耗折线',
+      title: '辊道窑能耗曲线',
       accentColor: TechColors.glowGreen,
       yAxisLabel: '能耗(kW·h)',
-      xAxisLabel: '时间(h)',
+      xAxisLabel: '数据点',
       minY: 0,
-      maxY: 400,
-      yInterval: 50,
-      xInterval: 4,
+      maxY: 1000,
+      yInterval: 200,
+      xInterval: 5,
       dataMap: _rollerEnergyData,
-      selectedItems: _selectedRollerKilns,
-      itemColors: _rollerKilnColors,
+      selectedItems: _selectedRollerZones,
+      itemColors: _rollerZoneColors,
       itemCount: 6,
-      getItemLabel: (index) => '辊道窑区域 ${index + 1}',
-      selectorLabel: '选择辊道窑区域',
+      getItemLabel: _getRollerZoneLabel,
+      selectorLabel: '选择温区',
+      compact: true,
+      headerActions: [
+        TimeRangeSelector(
+          startTime: _rollerEnergyChartStartTime,
+          endTime: _rollerEnergyChartEndTime,
+          onStartTimeTap: () => _selectChartStartTime('rollerEnergy'),
+          onEndTimeTap: () => _selectChartEndTime('rollerEnergy'),
+          onCancel: () => _refreshChartData('rollerEnergy'),
+          accentColor: TechColors.glowGreen,
+          compact: true,
+        ),
+      ],
       onItemToggle: (index) {
         setState(() {
-          _selectedRollerKilns[index] = !_selectedRollerKilns[index];
+          _selectedRollerZones[index] = !_selectedRollerZones[index];
         });
+        _loadRollerData();
       },
     );
   }
 
-  /// 辊道窑历史功率折线图
+  /// 辊道窑功率曲线图
   Widget _buildRollerPowerChart() {
     return TechBarChart(
-      title: '历史功率折线',
+      title: '辊道窑功率曲线',
       accentColor: TechColors.glowOrange,
       yAxisLabel: '功率(kW)',
-      xAxisLabel: '时间(h)',
+      xAxisLabel: '数据点',
+      minY: 0,
+      maxY: 500,
+      yInterval: 100,
+      xInterval: 5,
+      dataMap: _rollerPowerData,
+      selectedItems: _selectedRollerZones,
+      itemColors: _rollerZoneColors,
+      itemCount: 6,
+      getItemLabel: _getRollerZoneLabel,
+      selectorLabel: '选择温区',
+      compact: true,
+      headerActions: [
+        TimeRangeSelector(
+          startTime: _rollerPowerChartStartTime,
+          endTime: _rollerPowerChartEndTime,
+          onStartTimeTap: () => _selectChartStartTime('rollerPower'),
+          onEndTimeTap: () => _selectChartEndTime('rollerPower'),
+          onCancel: () => _refreshChartData('rollerPower'),
+          accentColor: TechColors.glowOrange,
+          compact: true,
+        ),
+      ],
+      onItemToggle: (index) {
+        setState(() {
+          _selectedRollerZones[index] = !_selectedRollerZones[index];
+        });
+        _loadRollerData();
+      },
+    );
+  }
+
+  /// SCR功率曲线图
+  Widget _buildPumpEnergyChart() {
+    return TechBarChart(
+      title: 'SCR功率曲线',
+      accentColor: TechColors.glowGreen,
+      yAxisLabel: '功率(kW)',
+      xAxisLabel: '数据点',
+      minY: 0,
+      maxY: 200,
+      yInterval: 40,
+      xInterval: 5,
+      dataMap: _scrPowerData,
+      selectedItems: _selectedScrs,
+      itemColors: _deviceColors,
+      itemCount: 2,
+      getItemLabel: (index) => 'SCR ${index + 1}',
+      selectorLabel: '选择SCR',
+      headerActions: [
+        TimeRangeSelector(
+          startTime: _pumpEnergyChartStartTime,
+          endTime: _pumpEnergyChartEndTime,
+          onStartTimeTap: () => _selectChartStartTime('pumpEnergy'),
+          onEndTimeTap: () => _selectChartEndTime('pumpEnergy'),
+          onCancel: () => _refreshChartData('pumpEnergy'),
+          accentColor: TechColors.glowGreen,
+        ),
+      ],
+      onItemToggle: (index) {
+        setState(() {
+          _selectedScrs[index] = !_selectedScrs[index];
+        });
+        _loadScrFanData();
+      },
+    );
+  }
+
+  /// 风机功率曲线图
+  Widget _buildFanEnergyChart() {
+    return TechBarChart(
+      title: '风机功率曲线',
+      accentColor: TechColors.glowOrange,
+      yAxisLabel: '功率(kW)',
+      xAxisLabel: '数据点',
       minY: 0,
       maxY: 300,
       yInterval: 50,
-      xInterval: 4,
-      dataMap: _rollerPowerData,
-      selectedItems: _selectedRollerKilns,
-      itemColors: _rollerKilnColors,
-      itemCount: 6,
-      getItemLabel: (index) => '辊道窑区域 ${index + 1}',
-      selectorLabel: '选择辊道窑区域',
-      onItemToggle: (index) {
-        setState(() {
-          _selectedRollerKilns[index] = !_selectedRollerKilns[index];
-        });
-      },
-    );
-  }
-
-  /// SCR设备时间范围选择器
-  Widget _buildScrTimeRangeSelector() {
-    return TimeRangeSelector(
-      startTime: _startTime,
-      endTime: _endTime,
-      onStartTimeTap: _selectStartTime,
-      onEndTimeTap: _selectEndTime,
-      accentColor: TechColors.glowGreen,
-    );
-  }
-
-  /// 水泵能耗折线图
-  Widget _buildPumpEnergyChart() {
-    return TechBarChart(
-      title: '水泵能耗折线',
-      accentColor: TechColors.glowGreen,
-      yAxisLabel: '能耗(kW·h)',
-      xAxisLabel: '时间(h)',
-      minY: 0,
-      maxY: 150,
-      yInterval: 20,
-      xInterval: 4,
-      dataMap: _pumpEnergyData,
-      selectedItems: _selectedPumps,
-      itemColors: _scrColors,
-      itemCount: 2,
-      getItemLabel: (index) => '水泵 ${index + 1}',
-      selectorLabel: '选择水泵',
-      onItemToggle: (index) {
-        setState(() {
-          _selectedPumps[index] = !_selectedPumps[index];
-        });
-      },
-    );
-  }
-
-  /// 风机能耗折线图
-  Widget _buildFanEnergyChart() {
-    return TechBarChart(
-      title: '风机能耗折线',
-      accentColor: TechColors.glowOrange,
-      yAxisLabel: '能耗(kW·h)',
-      xAxisLabel: '时间(h)',
-      minY: 0,
-      maxY: 200,
-      yInterval: 30,
-      xInterval: 4,
-      dataMap: _fanEnergyData,
+      xInterval: 5,
+      dataMap: _fanPowerData,
       selectedItems: _selectedFans,
-      itemColors: _scrColors,
+      itemColors: _deviceColors,
       itemCount: 2,
       getItemLabel: (index) => '风机 ${index + 1}',
       selectorLabel: '选择风机',
+      headerActions: [
+        TimeRangeSelector(
+          startTime: _fanEnergyChartStartTime,
+          endTime: _fanEnergyChartEndTime,
+          onStartTimeTap: () => _selectChartStartTime('fanEnergy'),
+          onEndTimeTap: () => _selectChartEndTime('fanEnergy'),
+          onCancel: () => _refreshChartData('fanEnergy'),
+          accentColor: TechColors.glowOrange,
+        ),
+      ],
       onItemToggle: (index) {
         setState(() {
           _selectedFans[index] = !_selectedFans[index];
         });
+        _loadScrFanData();
       },
     );
+  }
+
+  // ==================== 通用图表时间选择方法 ====================
+
+  /// 获取图表对应的强调色
+  Color _getChartAccentColor(String chartType) {
+    switch (chartType) {
+      case 'temp':
+        return TechColors.glowOrange;
+      case 'feedSpeed':
+        return TechColors.glowCyan;
+      case 'hopperWeight':
+        return TechColors.glowGreen;
+      case 'rollerTemp':
+        return TechColors.glowCyan;
+      case 'rollerEnergy':
+        return TechColors.glowGreen;
+      case 'rollerPower':
+        return TechColors.glowOrange;
+      case 'pumpEnergy':
+        return TechColors.glowGreen;
+      case 'fanEnergy':
+        return TechColors.glowOrange;
+      default:
+        return TechColors.glowCyan;
+    }
+  }
+
+  /// 获取图表开始时间
+  DateTime _getChartStartTime(String chartType) {
+    switch (chartType) {
+      case 'temp':
+        return _tempChartStartTime;
+      case 'feedSpeed':
+        return _feedSpeedChartStartTime;
+      case 'hopperWeight':
+        return _hopperWeightChartStartTime;
+      case 'rollerTemp':
+        return _rollerTempChartStartTime;
+      case 'rollerEnergy':
+        return _rollerEnergyChartStartTime;
+      case 'rollerPower':
+        return _rollerPowerChartStartTime;
+      case 'pumpEnergy':
+        return _pumpEnergyChartStartTime;
+      case 'fanEnergy':
+        return _fanEnergyChartStartTime;
+      default:
+        return DateTime.now().subtract(const Duration(hours: 24));
+    }
+  }
+
+  /// 设置图表开始时间
+  void _setChartStartTime(String chartType, DateTime time) {
+    switch (chartType) {
+      case 'temp':
+        _tempChartStartTime = time;
+        break;
+      case 'feedSpeed':
+        _feedSpeedChartStartTime = time;
+        break;
+      case 'hopperWeight':
+        _hopperWeightChartStartTime = time;
+        break;
+      case 'rollerTemp':
+        _rollerTempChartStartTime = time;
+        break;
+      case 'rollerEnergy':
+        _rollerEnergyChartStartTime = time;
+        break;
+      case 'rollerPower':
+        _rollerPowerChartStartTime = time;
+        break;
+      case 'pumpEnergy':
+        _pumpEnergyChartStartTime = time;
+        break;
+      case 'fanEnergy':
+        _fanEnergyChartStartTime = time;
+        break;
+    }
+  }
+
+  /// 获取图表结束时间
+  DateTime _getChartEndTime(String chartType) {
+    switch (chartType) {
+      case 'temp':
+        return _tempChartEndTime;
+      case 'feedSpeed':
+        return _feedSpeedChartEndTime;
+      case 'hopperWeight':
+        return _hopperWeightChartEndTime;
+      case 'rollerTemp':
+        return _rollerTempChartEndTime;
+      case 'rollerEnergy':
+        return _rollerEnergyChartEndTime;
+      case 'rollerPower':
+        return _rollerPowerChartEndTime;
+      case 'pumpEnergy':
+        return _pumpEnergyChartEndTime;
+      case 'fanEnergy':
+        return _fanEnergyChartEndTime;
+      default:
+        return DateTime.now();
+    }
+  }
+
+  /// 设置图表结束时间
+  void _setChartEndTime(String chartType, DateTime time) {
+    switch (chartType) {
+      case 'temp':
+        _tempChartEndTime = time;
+        break;
+      case 'feedSpeed':
+        _feedSpeedChartEndTime = time;
+        break;
+      case 'hopperWeight':
+        _hopperWeightChartEndTime = time;
+        break;
+      case 'rollerTemp':
+        _rollerTempChartEndTime = time;
+        break;
+      case 'rollerEnergy':
+        _rollerEnergyChartEndTime = time;
+        break;
+      case 'rollerPower':
+        _rollerPowerChartEndTime = time;
+        break;
+      case 'pumpEnergy':
+        _pumpEnergyChartEndTime = time;
+        break;
+      case 'fanEnergy':
+        _fanEnergyChartEndTime = time;
+        break;
+    }
+  }
+
+  /// 选择图表开始时间
+  Future<void> _selectChartStartTime(String chartType) async {
+    final accentColor = _getChartAccentColor(chartType);
+    final startTime = _getChartStartTime(chartType);
+
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: startTime,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: ColorScheme.dark(
+              primary: accentColor,
+              surface: TechColors.bgMedium,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedDate != null) {
+      final TimeOfDay? pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(startTime),
+        builder: (context, child) {
+          return Theme(
+            data: ThemeData.dark().copyWith(
+              colorScheme: ColorScheme.dark(
+                primary: accentColor,
+                surface: TechColors.bgMedium,
+              ),
+            ),
+            child: child!,
+          );
+        },
+      );
+
+      if (pickedTime != null) {
+        setState(() {
+          final newTime = DateTime(
+            pickedDate.year,
+            pickedDate.month,
+            pickedDate.day,
+            pickedTime.hour,
+            pickedTime.minute,
+          );
+          _setChartStartTime(chartType, newTime);
+          _refreshChartData(chartType);
+        });
+      }
+    }
+  }
+
+  /// 选择图表结束时间
+  Future<void> _selectChartEndTime(String chartType) async {
+    final accentColor = _getChartAccentColor(chartType);
+    final endTime = _getChartEndTime(chartType);
+
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: endTime,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: ColorScheme.dark(
+              primary: accentColor,
+              surface: TechColors.bgMedium,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedDate != null) {
+      final TimeOfDay? pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(endTime),
+        builder: (context, child) {
+          return Theme(
+            data: ThemeData.dark().copyWith(
+              colorScheme: ColorScheme.dark(
+                primary: accentColor,
+                surface: TechColors.bgMedium,
+              ),
+            ),
+            child: child!,
+          );
+        },
+      );
+
+      if (pickedTime != null) {
+        setState(() {
+          final newTime = DateTime(
+            pickedDate.year,
+            pickedDate.month,
+            pickedDate.day,
+            pickedTime.hour,
+            pickedTime.minute,
+          );
+          _setChartEndTime(chartType, newTime);
+          _refreshChartData(chartType);
+        });
+      }
+    }
+  }
+
+  /// 刷新图表数据（从API获取）
+  void _refreshChartData(String chartType) {
+    // 根据图表类型刷新对应数据
+    if (chartType == 'temp') {
+      _loadHopperTemperatureData();
+    } else if (chartType == 'feedSpeed' || chartType == 'hopperWeight') {
+      _loadHopperWeightData();
+    } else if (chartType == 'rollerTemp' ||
+        chartType == 'rollerEnergy' ||
+        chartType == 'rollerPower') {
+      _loadRollerData();
+    } else if (chartType == 'pumpEnergy' || chartType == 'fanEnergy') {
+      _loadScrFanData();
+    }
+  }
+
+  /// 重置图表为默认120秒时间范围
+  void _resetChartToDefault(String chartType) {
+    final now = DateTime.now();
+    final defaultStart = now.subtract(const Duration(seconds: 120));
+
+    setState(() {
+      _setChartStartTime(chartType, defaultStart);
+      _setChartEndTime(chartType, now);
+    });
+
+    _refreshChartData(chartType);
   }
 }

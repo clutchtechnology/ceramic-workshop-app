@@ -1,19 +1,49 @@
 import 'package:flutter/material.dart';
-import 'tech_line_widgets.dart';
+import 'package:provider/provider.dart';
+import '../../models/hopper_model.dart';
+import '../../providers/realtime_config_provider.dart';
+import '../data_display/data_tech_line_widgets.dart';
 
-/// 回转窑单元组件
-/// 用于显示单个回转窑设备
-class RotaryKilnCell extends StatelessWidget {
-  /// 窑编号（1-7）
+/// 长回转窑单元组件
+/// 用于显示单个长回转窑设备
+class RotaryKilnLongCell extends StatelessWidget {
+  /// 窑编号
   final int index;
+  final HopperData? data;
 
-  const RotaryKilnCell({
+  /// 设备ID，用于获取阈值配置
+  final String? deviceId;
+
+  const RotaryKilnLongCell({
     super.key,
     required this.index,
+    this.data,
+    this.deviceId,
   });
 
   @override
   Widget build(BuildContext context) {
+    final weight = data?.weighSensor?.weight ?? 0.0;
+    final feedRate = data?.weighSensor?.feedRate ?? 0.0;
+    final power = data?.electricityMeter?.pt ?? 0.0;
+    final energy = data?.electricityMeter?.impEp ?? 0.0;
+    // ✅ 长料仓显示两个温度
+    final temperature1 = data?.temperatureSensor1?.temperature ?? 0.0;
+    final temperature2 = data?.temperatureSensor2?.temperature ?? 0.0;
+
+    // 获取温度颜色配置 (长窑有两个温度点，使用同一个设备配置)
+    final configProvider = context.watch<RealtimeConfigProvider>();
+    final tempColor1 = deviceId != null
+        ? configProvider.getRotaryKilnTempColor(deviceId!, temperature1)
+        : ThresholdColors.normal;
+    final tempColor2 = deviceId != null
+        ? configProvider.getRotaryKilnTempColor(deviceId!, temperature2)
+        : ThresholdColors.normal;
+
+    // 假设最大容量为1000kg，计算百分比
+    final double capacityPercentage = (weight / 1000.0).clamp(0.0, 1.0);
+    final int percentageInt = (capacityPercentage * 100).toInt();
+
     return Container(
       decoration: BoxDecoration(
         color: TechColors.bgMedium.withOpacity(0.3),
@@ -30,7 +60,7 @@ class RotaryKilnCell extends StatelessWidget {
             children: [
               // 主图片
               Image.asset(
-                'assets/images/rotary_kiln1.png',
+                'assets/images/rotary_kiln3.png',
                 fit: BoxFit.contain,
                 width: double.infinity,
                 height: double.infinity,
@@ -83,7 +113,7 @@ class RotaryKilnCell extends StatelessWidget {
                             alignment: Alignment.bottomCenter,
                             child: FractionallySizedBox(
                               alignment: Alignment.bottomCenter,
-                              heightFactor: 0.65, // 65%进度
+                              heightFactor: capacityPercentage,
                               child: Container(
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
@@ -100,7 +130,7 @@ class RotaryKilnCell extends StatelessWidget {
                           ),
                           // 百分比文字（横向显示在进度条内）
                           Text(
-                            '65',
+                            '$percentageInt',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 9,
@@ -121,14 +151,14 @@ class RotaryKilnCell extends StatelessWidget {
                   ),
                 ),
               ),
-              // 数据标签（）
+              // 数据标签
               Positioned(
                 left: 0,
                 right: 0,
                 top: 0,
                 bottom: 0,
                 child: Align(
-                  alignment: const Alignment(0.3, -1.1), //
+                  alignment: const Alignment(0.1, -1.1),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -147,7 +177,7 @@ class RotaryKilnCell extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '重量: 300kg',
+                          '重量: ${weight.toStringAsFixed(0)}kg',
                           style: const TextStyle(
                             color: TechColors.glowCyan,
                             fontSize: 11,
@@ -157,7 +187,7 @@ class RotaryKilnCell extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '下料速度: 10kg/h',
+                          '下料速度: ${feedRate.toStringAsFixed(1)}kg/h',
                           style: const TextStyle(
                             color: TechColors.glowGreen,
                             fontSize: 11,
@@ -167,7 +197,7 @@ class RotaryKilnCell extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '能耗: 45kW',
+                          '能耗: ${energy.toStringAsFixed(1)}kWh',
                           style: const TextStyle(
                             color: TechColors.glowOrange,
                             fontSize: 11,
@@ -180,7 +210,7 @@ class RotaryKilnCell extends StatelessWidget {
                   ),
                 ),
               ),
-              // 中间温度显示
+              // 中间温度显示 - 显示两个温度
               Positioned(
                 left: 10,
                 right: 0,
@@ -189,17 +219,62 @@ class RotaryKilnCell extends StatelessWidget {
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
+                      horizontal: 8,
+                      vertical: 4,
                     ),
-                    child: Text(
-                      '温度: 850°C',
-                      style: const TextStyle(
-                        color: TechColors.glowRed,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        fontFamily: 'Roboto Mono',
-                      ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 温度1
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '温度1:',
+                              style: TextStyle(
+                                color: tempColor1.withOpacity(0.8),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${temperature1.toStringAsFixed(1)}°C',
+                              style: TextStyle(
+                                color: tempColor1,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        // 温度2
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '温度2:',
+                              style: TextStyle(
+                                color: tempColor2.withOpacity(0.8),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${temperature2.toStringAsFixed(1)}°C',
+                              style: TextStyle(
+                                color: tempColor2,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'tech_line_widgets.dart';
+import '../data_display/data_tech_line_widgets.dart';
 
 /// 水泵单元组件
 /// 用于显示SCR设备中的水泵（氨泵）
@@ -92,17 +92,7 @@ class WaterPumpCell extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '累计电量: ${cumulativeEnergy.toStringAsFixed(1)}kW·h',
-                    style: const TextStyle(
-                      color: TechColors.glowGreen,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      fontFamily: 'Roboto Mono',
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '能耗: ${energyConsumption.toStringAsFixed(1)}kW',
+                    '能耗: ${energyConsumption.toStringAsFixed(1)}kWh',
                     style: const TextStyle(
                       color: TechColors.glowOrange,
                       fontSize: 11,

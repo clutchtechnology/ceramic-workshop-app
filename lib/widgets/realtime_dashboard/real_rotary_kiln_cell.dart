@@ -1,19 +1,45 @@
 import 'package:flutter/material.dart';
-import 'tech_line_widgets.dart';
+import 'package:provider/provider.dart';
+import '../../models/hopper_model.dart';
+import '../../providers/realtime_config_provider.dart';
+import '../data_display/data_tech_line_widgets.dart';
 
-/// 长回转窑单元组件
-/// 用于显示单个长回转窑设备
-class RotaryKilnLongCell extends StatelessWidget {
-  /// 窑编号
+/// 回转窑单元组件
+/// 用于显示单个回转窑设备
+class RotaryKilnCell extends StatelessWidget {
+  /// 窑编号（1-7）
   final int index;
+  final HopperData? data;
 
-  const RotaryKilnLongCell({
+  /// 设备ID，用于获取阈值配置
+  final String? deviceId;
+
+  const RotaryKilnCell({
     super.key,
     required this.index,
+    this.data,
+    this.deviceId,
   });
 
   @override
   Widget build(BuildContext context) {
+    final weight = data?.weighSensor?.weight ?? 0.0;
+    final feedRate = data?.weighSensor?.feedRate ?? 0.0;
+    final power = data?.electricityMeter?.pt ?? 0.0;
+    final energy = data?.electricityMeter?.impEp ?? 0.0;
+    final temperature = data?.temperatureSensor?.temperature ?? 0.0;
+
+    // 获取温度颜色配置
+    final configProvider = context.watch<RealtimeConfigProvider>();
+    final tempColor = deviceId != null
+        ? configProvider.getRotaryKilnTempColor(deviceId!, temperature)
+        : ThresholdColors.normal;
+
+    // 假设最大重量为 500kg 用于显示进度条 (需根据实际情况调整)
+    final maxWeight = 500.0;
+    final weightPercentage = (weight / maxWeight).clamp(0.0, 1.0);
+    final weightPercentageInt = (weightPercentage * 100).toInt();
+
     return Container(
       decoration: BoxDecoration(
         color: TechColors.bgMedium.withOpacity(0.3),
@@ -30,7 +56,7 @@ class RotaryKilnLongCell extends StatelessWidget {
             children: [
               // 主图片
               Image.asset(
-                'assets/images/rotary_kiln3.png',
+                'assets/images/rotary_kiln1.png',
                 fit: BoxFit.contain,
                 width: double.infinity,
                 height: double.infinity,
@@ -83,7 +109,7 @@ class RotaryKilnLongCell extends StatelessWidget {
                             alignment: Alignment.bottomCenter,
                             child: FractionallySizedBox(
                               alignment: Alignment.bottomCenter,
-                              heightFactor: 0.65, // 65%进度
+                              heightFactor: weightPercentage, // 实时进度
                               child: Container(
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
@@ -100,7 +126,7 @@ class RotaryKilnLongCell extends StatelessWidget {
                           ),
                           // 百分比文字（横向显示在进度条内）
                           Text(
-                            '65',
+                            '$weightPercentageInt',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 9,
@@ -121,14 +147,14 @@ class RotaryKilnLongCell extends StatelessWidget {
                   ),
                 ),
               ),
-              // 数据标签
+              // 数据标签（）
               Positioned(
                 left: 0,
                 right: 0,
                 top: 0,
                 bottom: 0,
                 child: Align(
-                  alignment: const Alignment(0.1, -1.1),
+                  alignment: const Alignment(0.3, -1.1), //
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -147,7 +173,7 @@ class RotaryKilnLongCell extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '重量: 300kg',
+                          '重量: ${weight.toStringAsFixed(1)}kg',
                           style: const TextStyle(
                             color: TechColors.glowCyan,
                             fontSize: 11,
@@ -157,7 +183,7 @@ class RotaryKilnLongCell extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '下料速度: 10kg/h',
+                          '下料速度: ${feedRate.toStringAsFixed(1)}kg/h',
                           style: const TextStyle(
                             color: TechColors.glowGreen,
                             fontSize: 11,
@@ -167,7 +193,7 @@ class RotaryKilnLongCell extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '能耗: 45kW',
+                          '能耗: ${energy.toStringAsFixed(1)}kWh',
                           style: const TextStyle(
                             color: TechColors.glowOrange,
                             fontSize: 11,
@@ -180,11 +206,11 @@ class RotaryKilnLongCell extends StatelessWidget {
                   ),
                 ),
               ),
-              // 中间温度显示（两组）
+              // 中间温度显示
               Positioned(
                 left: 10,
                 right: 0,
-                top: 25,
+                top: 20,
                 bottom: 0,
                 child: Center(
                   child: Container(
@@ -192,59 +218,14 @@ class RotaryKilnLongCell extends StatelessWidget {
                       horizontal: 12,
                       vertical: 6,
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // 第一组温度
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '温度1',
-                              style: TextStyle(
-                                color: TechColors.glowRed,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '850°C',
-                              style: const TextStyle(
-                                color: TechColors.glowRed,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                fontFamily: 'Roboto Mono',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(width: 10),
-                        // 第二组温度
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '温度2',
-                              style: TextStyle(
-                                color: TechColors.glowRed,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '850°C',
-                              style: const TextStyle(
-                                color: TechColors.glowRed,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                fontFamily: 'Roboto Mono',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                    child: Text(
+                      '温度: ${temperature.toStringAsFixed(1)}°C',
+                      style: TextStyle(
+                        color: tempColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'Roboto Mono',
+                      ),
                     ),
                   ),
                 ),

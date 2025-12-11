@@ -48,6 +48,9 @@ dependencies:
   # Industrial Communication
   dart_snap7: ^0.5.3 # Adjusted version based on availability
 
+  # HTTP Client
+  http: ^1.2.0
+
   # Utilities
   intl: ^0.19.0
   logger: ^2.3.0

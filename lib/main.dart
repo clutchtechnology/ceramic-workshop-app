@@ -1,7 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
-import 'pages/digital_twin_page.dart';
+import 'pages/top_bar.dart';
+import 'providers/realtime_config_provider.dart';
+import 'providers/admin_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,20 +35,43 @@ void main() async {
     });
   }
 
-  runApp(const MyApp());
+  // 创建并初始化 Provider
+  final realtimeConfigProvider = RealtimeConfigProvider();
+  await realtimeConfigProvider.loadConfig();
+
+  final adminProvider = AdminProvider();
+  await adminProvider.initialize();
+
+  runApp(MyApp(
+    realtimeConfigProvider: realtimeConfigProvider,
+    adminProvider: adminProvider,
+  ));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final RealtimeConfigProvider realtimeConfigProvider;
+  final AdminProvider adminProvider;
+
+  const MyApp({
+    super.key,
+    required this.realtimeConfigProvider,
+    required this.adminProvider,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Ceramic Workshop Digital Twin',
-      theme: ThemeData.dark(),
-      themeMode: ThemeMode.dark,
-      home: const DigitalTwinPage(),
-      debugShowCheckedModeBanner: false,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: realtimeConfigProvider),
+        ChangeNotifierProvider.value(value: adminProvider),
+      ],
+      child: MaterialApp(
+        title: 'Ceramic Workshop Digital Twin',
+        theme: ThemeData.dark(),
+        themeMode: ThemeMode.dark,
+        home: const DigitalTwinPage(),
+        debugShowCheckedModeBanner: false,
+      ),
     );
   }
 }

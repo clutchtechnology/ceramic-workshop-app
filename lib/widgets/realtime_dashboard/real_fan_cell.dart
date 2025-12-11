@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'tech_line_widgets.dart';
+import '../data_display/data_tech_line_widgets.dart';
 
 /// 风机单元组件
 /// 用于显示单个风机设备
@@ -7,9 +7,21 @@ class FanCell extends StatelessWidget {
   /// 风机编号
   final int index;
 
+  /// 是否运行中
+  final bool isRunning;
+
+  /// 功率 (kW)
+  final double power;
+
+  /// 累计能耗 (kWh)
+  final double cumulativeEnergy;
+
   const FanCell({
     super.key,
     required this.index,
+    this.isRunning = false,
+    this.power = 0.0,
+    this.cumulativeEnergy = 0.0,
   });
 
   @override
@@ -71,7 +83,7 @@ class FanCell extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '功率: 15kW',
+                          '功率: ${power.toStringAsFixed(1)}kW',
                           style: const TextStyle(
                             color: TechColors.glowCyan,
                             fontSize: 11,
@@ -81,17 +93,7 @@ class FanCell extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '累计电量: 1250kW·h',
-                          style: const TextStyle(
-                            color: TechColors.glowGreen,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Roboto Mono',
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '能耗: 12kW',
+                          '能耗: ${cumulativeEnergy.toStringAsFixed(1)}kWh',
                           style: const TextStyle(
                             color: TechColors.glowOrange,
                             fontSize: 11,
@@ -118,10 +120,14 @@ class FanCell extends StatelessWidget {
                   height: 12,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: TechColors.statusNormal, // 绿色表示运行
+                    color: isRunning
+                        ? TechColors.statusNormal
+                        : TechColors.statusOffline,
                     boxShadow: [
                       BoxShadow(
-                        color: TechColors.statusNormal.withOpacity(0.6),
+                        color: isRunning
+                            ? TechColors.statusNormal.withOpacity(0.6)
+                            : TechColors.statusOffline.withOpacity(0.3),
                         blurRadius: 6,
                         spreadRadius: 2,
                       ),
@@ -129,10 +135,12 @@ class FanCell extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                const Text(
-                  '运行',
+                Text(
+                  isRunning ? '运行' : '停止',
                   style: TextStyle(
-                    color: TechColors.statusNormal,
+                    color: isRunning
+                        ? TechColors.statusNormal
+                        : TechColors.statusOffline,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     fontFamily: 'Roboto Mono',

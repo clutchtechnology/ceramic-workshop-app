@@ -1,19 +1,38 @@
 import 'package:flutter/material.dart';
-import 'tech_line_widgets.dart';
+import 'package:provider/provider.dart';
+import '../../models/hopper_model.dart';
+import '../../providers/realtime_config_provider.dart';
+import '../data_display/data_tech_line_widgets.dart';
 
 /// 无料仓回转窑单元组件
 /// 用于显示单个无料仓回转窑设备
 class RotaryKilnNoHopperCell extends StatelessWidget {
   /// 窑编号
   final int index;
+  final HopperData? data;
+
+  /// 设备ID，用于获取阈值配置
+  final String? deviceId;
 
   const RotaryKilnNoHopperCell({
     super.key,
     required this.index,
+    this.data,
+    this.deviceId,
   });
 
   @override
   Widget build(BuildContext context) {
+    final power = data?.electricityMeter?.pt ?? 0.0;
+    final energy = data?.electricityMeter?.impEp ?? 0.0;
+    final temperature = data?.temperatureSensor?.temperature ?? 0.0;
+
+    // 获取温度颜色配置
+    final configProvider = context.watch<RealtimeConfigProvider>();
+    final tempColor = deviceId != null
+        ? configProvider.getRotaryKilnTempColor(deviceId!, temperature)
+        : ThresholdColors.normal;
+
     return Container(
       decoration: BoxDecoration(
         color: TechColors.bgMedium.withOpacity(0.3),
@@ -82,27 +101,7 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '重量: 300kg',
-                          style: const TextStyle(
-                            color: TechColors.glowCyan,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Roboto Mono',
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '下料速度: 10kg/h',
-                          style: const TextStyle(
-                            color: TechColors.glowGreen,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Roboto Mono',
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '能耗: 45kW',
+                          '能耗: ${energy.toStringAsFixed(1)}kWh',
                           style: const TextStyle(
                             color: TechColors.glowOrange,
                             fontSize: 11,
@@ -117,7 +116,7 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
               ),
               // 中间温度显示
               Positioned(
-                left: -35,
+                left: 10,
                 right: 0,
                 top: 20,
                 bottom: 0,
@@ -128,9 +127,9 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                       vertical: 6,
                     ),
                     child: Text(
-                      '温度: 850°C',
-                      style: const TextStyle(
-                        color: TechColors.glowRed,
+                      '温度: ${temperature.toStringAsFixed(1)}°C',
+                      style: TextStyle(
+                        color: tempColor,
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                         fontFamily: 'Roboto Mono',

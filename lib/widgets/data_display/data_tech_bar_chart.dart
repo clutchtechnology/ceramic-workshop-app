@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'tech_line_widgets.dart';
-import 'multi_select_dropdown.dart';
-import 'single_select_dropdown.dart';
+import 'data_tech_line_widgets.dart';
+import 'data_multi_select_dropdown.dart';
+import 'data_single_select_dropdown.dart';
 
-/// 可复用的技术风格折线图组件
+/// 可复用的技术风格柱状折线图组件
+/// 显示真正的折线图效果：带数据点、直线连接
 /// 支持单选和多选两种模式
-class TechLineChart extends StatelessWidget {
+class TechBarChart extends StatelessWidget {
   /// 图表标题
   final String title;
 
@@ -55,13 +56,19 @@ class TechLineChart extends StatelessWidget {
   /// 下拉框标签
   final String selectorLabel;
 
+  /// 标题栏右侧自定义组件（如时间选择器）
+  final List<Widget>? headerActions;
+
   /// 单选模式：设备选择回调
   final void Function(int index)? onItemSelect;
 
   /// 多选模式：设备切换回调
   final void Function(int index)? onItemToggle;
 
-  const TechLineChart({
+  /// 是否使用紧凑模式（更小的字体和间距）
+  final bool compact;
+
+  const TechBarChart({
     super.key,
     required this.title,
     required this.accentColor,
@@ -76,11 +83,13 @@ class TechLineChart extends StatelessWidget {
     required this.itemCount,
     required this.getItemLabel,
     required this.selectorLabel,
+    this.headerActions,
     this.isSingleSelect = false,
     this.selectedIndex,
     this.selectedItems,
     this.onItemSelect,
     this.onItemToggle,
+    this.compact = false,
   }) : assert(
           isSingleSelect
               ? (selectedIndex != null && onItemSelect != null)
@@ -110,29 +119,17 @@ class TechLineChart extends StatelessWidget {
     );
   }
 
-  /// 构建图表头部
+  /// 构建图表头部 - 选择器和时间选择器靠右上角
   Widget _buildHeader() {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        Container(
-          width: 3,
-          height: 12,
-          decoration: BoxDecoration(
-            color: accentColor,
-            borderRadius: BorderRadius.circular(1),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: const TextStyle(
-            color: TechColors.textPrimary,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const Spacer(),
+        // 设备选择器
         _buildSelector(),
+        // 间距
+        if (headerActions != null) SizedBox(width: compact ? 4 : 10),
+        // 时间选择器（headerActions）
+        if (headerActions != null) ...headerActions!,
       ],
     );
   }
@@ -148,6 +145,7 @@ class TechLineChart extends StatelessWidget {
         getItemLabel: getItemLabel,
         accentColor: accentColor,
         onItemSelect: onItemSelect!,
+        compact: compact,
       );
     } else {
       return MultiSelectDropdown(
@@ -158,11 +156,12 @@ class TechLineChart extends StatelessWidget {
         getItemLabel: getItemLabel,
         accentColor: accentColor,
         onItemToggle: onItemToggle!,
+        compact: compact,
       );
     }
   }
 
-  /// 构建折线图
+  /// 构建折线图（真正的折线图：点到点直线连接）
   Widget _buildChart() {
     return LineChart(
       LineChartData(
@@ -208,16 +207,9 @@ class TechLineChart extends StatelessWidget {
             ),
           ),
           bottomTitles: AxisTitles(
-            axisNameWidget: Text(
-              xAxisLabel,
-              style: const TextStyle(
-                color: TechColors.textSecondary,
-                fontSize: 10,
-              ),
-            ),
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 24,
+              reservedSize: 16,
               interval: xInterval,
               getTitlesWidget: (value, meta) {
                 return Text(
@@ -250,7 +242,7 @@ class TechLineChart extends StatelessWidget {
     );
   }
 
-  /// 获取选中设备的数据
+  /// 获取选中设备的数据（折线图模式：显示点，直线连接）
   List<LineChartBarData> _getSelectedData() {
     List<LineChartBarData> result = [];
 
@@ -260,10 +252,20 @@ class TechLineChart extends StatelessWidget {
         result.add(
           LineChartBarData(
             spots: dataMap[selectedIndex]!,
-            isCurved: true,
+            isCurved: false, // [关键] 不使用曲线，使用直线连接
             color: itemColors[selectedIndex!],
             barWidth: 2,
-            dotData: const FlDotData(show: false),
+            dotData: FlDotData(
+              show: true, // [关键] 显示数据点
+              getDotPainter: (spot, percent, barData, index) {
+                return FlDotCirclePainter(
+                  radius: 3, // 数据点半径
+                  color: itemColors[selectedIndex!], // 数据点颜色
+                  strokeWidth: 1.5,
+                  strokeColor: TechColors.bgDeep, // 数据点边框颜色
+                );
+              },
+            ),
           ),
         );
       }
@@ -274,10 +276,20 @@ class TechLineChart extends StatelessWidget {
           result.add(
             LineChartBarData(
               spots: dataMap[i]!,
-              isCurved: true,
+              isCurved: false, // [关键] 不使用曲线，使用直线连接
               color: itemColors[i],
               barWidth: 2,
-              dotData: const FlDotData(show: false),
+              dotData: FlDotData(
+                show: true, // [关键] 显示数据点
+                getDotPainter: (spot, percent, barData, index) {
+                  return FlDotCirclePainter(
+                    radius: 3, // 数据点半径
+                    color: itemColors[i], // 数据点颜色
+                    strokeWidth: 1.5,
+                    strokeColor: TechColors.bgDeep, // 数据点边框颜色
+                  );
+                },
+              ),
             ),
           );
         }

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'tech_line_widgets.dart';
+import 'data_tech_line_widgets.dart';
 
 /// 单选下拉框组件
 /// 用于选择单个设备或区域
@@ -25,6 +25,9 @@ class SingleSelectDropdown extends StatefulWidget {
   /// 设备选择回调
   final void Function(int index) onItemSelect;
 
+  /// 是否使用紧凑模式（更小的字体和间距）
+  final bool compact;
+
   const SingleSelectDropdown({
     super.key,
     required this.label,
@@ -34,6 +37,7 @@ class SingleSelectDropdown extends StatefulWidget {
     required this.getItemLabel,
     required this.accentColor,
     required this.onItemSelect,
+    this.compact = false,
   });
 
   @override
@@ -125,21 +129,27 @@ class _SingleSelectDropdownState extends State<SingleSelectDropdown> {
     return InkWell(
       onTap: _toggleDropdown,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: EdgeInsets.symmetric(
+          horizontal: widget.compact ? 4 : 8,
+          vertical: widget.compact ? 3 : 6,
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              widget.label,
-              style: const TextStyle(
+              widget.compact ? _getCompactLabel() : widget.label,
+              style: TextStyle(
                 color: TechColors.textSecondary,
-                fontSize: 11,
+                fontSize: widget.compact ? 9 : 11,
               ),
             ),
-            const SizedBox(width: 4),
+            SizedBox(width: widget.compact ? 2 : 4),
             // 显示当前选中项
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: EdgeInsets.symmetric(
+                horizontal: widget.compact ? 3 : 6,
+                vertical: widget.compact ? 1 : 2,
+              ),
               decoration: BoxDecoration(
                 color: widget.itemColors[widget.selectedIndex].withOpacity(0.2),
                 borderRadius: BorderRadius.circular(2),
@@ -149,24 +159,46 @@ class _SingleSelectDropdownState extends State<SingleSelectDropdown> {
                 ),
               ),
               child: Text(
-                widget.getItemLabel(widget.selectedIndex),
+                widget.compact
+                    ? _getCompactItemLabel(widget.selectedIndex)
+                    : widget.getItemLabel(widget.selectedIndex),
                 style: TextStyle(
                   color: widget.itemColors[widget.selectedIndex],
-                  fontSize: 10,
+                  fontSize: widget.compact ? 8 : 10,
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ),
-            const SizedBox(width: 4),
+            SizedBox(width: widget.compact ? 2 : 4),
             Icon(
               _overlayEntry != null ? Icons.expand_less : Icons.expand_more,
               color: TechColors.textSecondary,
-              size: 16,
+              size: widget.compact ? 12 : 16,
             ),
           ],
         ),
       ),
     );
+  }
+
+  /// 获取紧凑模式的标签（缩短显示）
+  String _getCompactLabel() {
+    // 将 "选择温区" -> "温区"
+    if (widget.label.startsWith('选择')) {
+      return widget.label.substring(2);
+    }
+    return widget.label;
+  }
+
+  /// 获取紧凑模式的项目标签（缩短显示）
+  String _getCompactItemLabel(int index) {
+    final label = widget.getItemLabel(index);
+    // 将 "温区1" -> "1", "短料仓1" -> "1"
+    final match = RegExp(r'(\d+)').firstMatch(label);
+    if (match != null) {
+      return match.group(1)!;
+    }
+    return label;
   }
 
   /// 构建下拉列表

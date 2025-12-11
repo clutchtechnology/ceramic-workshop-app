@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../models/config_models.dart';
-import '../widgets/tech_line_widgets.dart';
-import '../services/config_service.dart';
+import 'package:provider/provider.dart';
+import '../widgets/data_display/data_tech_line_widgets.dart';
+import '../widgets/settings/realtime_data_settings_widget.dart';
+import '../providers/backend_config_provider.dart';
+import '../providers/admin_provider.dart';
 
 /// 系统配置页
-/// 支持配置服务器、PLC、数据库、传感器等参数
+/// 支持配置服务器、PLC等参数
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
@@ -14,110 +16,42 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  late SystemConfig _systemConfig;
-  int _selectedSection = 0; // 0: 服务器, 1: PLC, 2: 数据库, 3: 传感器
+  int _selectedSection = 0; // 0: 服务配置, 1: PLC配置, 2: 实时数据设置, 3: 管理员设置
 
-  final _configService = ConfigService();
+  final BackendConfigProvider _configProvider = BackendConfigProvider();
 
-  // 表单控制器
-  final _serverIpController = TextEditingController();
-  final _serverPortController = TextEditingController();
+  // PLC配置表单控制器
   final _plcIpController = TextEditingController();
-  final _plcPortController = TextEditingController();
-  final _plcRackController = TextEditingController();
-  final _plcSlotController = TextEditingController();
-  final _dbHostController = TextEditingController();
-  final _dbPortController = TextEditingController();
-  final _dbUserController = TextEditingController();
-  final _dbPasswordController = TextEditingController();
-  final _dbNameController = TextEditingController();
+  final _plcPollIntervalController = TextEditingController();
 
   bool _isTestingConnection = false;
   String? _connectionTestResult;
+  bool? _connectionTestSuccess;
 
   @override
   void initState() {
     super.initState();
-    _loadConfig();
+    _initializeConfig();
   }
 
-  void _loadConfig() async {
-    // 从持久化存储加载配置
-    final savedConfig = await _configService.loadConfig();
-
-    setState(() {
-      _systemConfig = savedConfig ??
-          SystemConfig(
-            sensors: _getDefaultSensors(),
-          );
-      _updateControllers();
-    });
+  Future<void> _initializeConfig() async {
+    await _configProvider.initialize();
+    _updatePlcControllers();
+    if (mounted) setState(() {});
   }
 
-  void _updateControllers() {
-    _serverIpController.text = _systemConfig.serverConfig.ipAddress;
-    _serverPortController.text = _systemConfig.serverConfig.port.toString();
-    _plcIpController.text = _systemConfig.plcConfig.ipAddress;
-    _plcPortController.text = _systemConfig.plcConfig.port.toString();
-    _plcRackController.text = _systemConfig.plcConfig.rack.toString();
-    _plcSlotController.text = _systemConfig.plcConfig.slot.toString();
-    _dbHostController.text = _systemConfig.databaseConfig.host;
-    _dbPortController.text = _systemConfig.databaseConfig.port.toString();
-    _dbUserController.text = _systemConfig.databaseConfig.username;
-    _dbPasswordController.text = _systemConfig.databaseConfig.password;
-    _dbNameController.text = _systemConfig.databaseConfig.databaseName;
-  }
-
-  List<SensorConfig> _getDefaultSensors() {
-    return [
-      SensorConfig(
-        id: 'TEMP_ZONE_1',
-        name: '温区1温度传感器',
-        type: 'temperature',
-        modbusAddress: 100,
-        dataPoint: 0,
-        unit: '℃',
-      ),
-      SensorConfig(
-        id: 'TEMP_ZONE_2',
-        name: '温区2温度传感器',
-        type: 'temperature',
-        modbusAddress: 101,
-        dataPoint: 0,
-        unit: '℃',
-      ),
-      SensorConfig(
-        id: 'FLOW_METER_1',
-        name: '气体流量计1',
-        type: 'flow',
-        modbusAddress: 200,
-        dataPoint: 0,
-        unit: 'm³/h',
-      ),
-      SensorConfig(
-        id: 'PRESSURE_1',
-        name: '压力传感器1',
-        type: 'pressure',
-        modbusAddress: 300,
-        dataPoint: 0,
-        unit: 'Pa',
-      ),
-    ];
+  void _updatePlcControllers() {
+    if (_configProvider.plcConfig != null) {
+      _plcIpController.text = _configProvider.plcConfig!.ipAddress;
+      _plcPollIntervalController.text =
+          _configProvider.plcConfig!.pollInterval.toString();
+    }
   }
 
   @override
   void dispose() {
-    _serverIpController.dispose();
-    _serverPortController.dispose();
     _plcIpController.dispose();
-    _plcPortController.dispose();
-    _plcRackController.dispose();
-    _plcSlotController.dispose();
-    _dbHostController.dispose();
-    _dbPortController.dispose();
-    _dbUserController.dispose();
-    _dbPasswordController.dispose();
-    _dbNameController.dispose();
+    _plcPollIntervalController.dispose();
     super.dispose();
   }
 
@@ -145,10 +79,10 @@ class _SettingsPageState extends State<SettingsPage> {
   /// 左侧导航菜单
   Widget _buildNavigationMenu() {
     final sections = [
-      {'icon': Icons.dns, 'label': '服务器配置'},
+      {'icon': Icons.dns, 'label': '服务配置'},
       {'icon': Icons.settings_input_component, 'label': 'PLC 配置'},
-      {'icon': Icons.storage, 'label': '数据库配置'},
-      {'icon': Icons.sensors, 'label': '传感器配置'},
+      {'icon': Icons.dashboard_customize, 'label': '实时数据设置'},
+      {'icon': Icons.security, 'label': '管理员设置'},
     ];
 
     return Container(
@@ -171,6 +105,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     setState(() {
                       _selectedSection = index;
                       _connectionTestResult = null;
+                      _connectionTestSuccess = null;
                     });
                   },
                   borderRadius: BorderRadius.circular(4),
@@ -231,6 +166,18 @@ class _SettingsPageState extends State<SettingsPage> {
 
   /// 右侧配置内容区域
   Widget _buildConfigContent() {
+    // 实时数据设置页面使用独立的布局
+    if (_selectedSection == 2) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(0, 12, 12, 12),
+        child: TechPanel(
+          title: '实时数据阈值与颜色配置',
+          accentColor: TechColors.glowOrange,
+          child: const RealtimeDataSettingsWidget(),
+        ),
+      );
+    }
+
     return Container(
       margin: const EdgeInsets.fromLTRB(0, 12, 12, 12),
       child: TechPanel(
@@ -242,12 +189,6 @@ class _SettingsPageState extends State<SettingsPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildSectionContent(),
-              const SizedBox(height: 24),
-              _buildActionButtons(),
-              if (_connectionTestResult != null) ...[
-                const SizedBox(height: 16),
-                _buildConnectionTestResult(),
-              ],
             ],
           ),
         ),
@@ -258,13 +199,13 @@ class _SettingsPageState extends State<SettingsPage> {
   String _getSectionTitle() {
     switch (_selectedSection) {
       case 0:
-        return '服务器地址配置';
+        return '服务配置 (只读)';
       case 1:
-        return 'PLC 地址配置';
+        return 'PLC 配置';
       case 2:
-        return '数据库地址配置';
+        return '实时数据阈值与颜色配置';
       case 3:
-        return '传感器地址配置';
+        return '管理员设置';
       default:
         return '系统配置';
     }
@@ -276,326 +217,252 @@ class _SettingsPageState extends State<SettingsPage> {
         return _buildServerConfig();
       case 1:
         return _buildPLCConfig();
-      case 2:
-        return _buildDatabaseConfig();
       case 3:
-        return _buildSensorConfig();
+        return _buildAdminSettings();
       default:
         return const SizedBox();
     }
   }
 
-  /// 服务器配置表单
+  // ============================================================================
+  // 服务配置 (只读)
+  // ============================================================================
+
   Widget _buildServerConfig() {
+    if (_configProvider.isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(TechColors.glowCyan),
+        ),
+      );
+    }
+
+    if (_configProvider.error != null && _configProvider.serverConfig == null) {
+      return _buildErrorWidget(_configProvider.error!);
+    }
+
+    final serverConfig = _configProvider.serverConfig;
+    if (serverConfig == null) {
+      return _buildErrorWidget('无法获取服务配置');
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildConfigField(
-          label: 'IP 地址',
-          controller: _serverIpController,
-          icon: Icons.language,
-          hint: '例: 192.168.1.100',
+        _buildInfoCard(
+          title: '后端服务信息',
+          icon: Icons.dns,
+          children: [
+            _buildInfoRow('主机地址', serverConfig.host, Icons.computer),
+            _buildInfoRow(
+                '端口号', serverConfig.port.toString(), Icons.settings_ethernet),
+            _buildInfoRow(
+                '调试模式', serverConfig.debug ? '开启' : '关闭', Icons.bug_report),
+          ],
         ),
         const SizedBox(height: 16),
-        _buildConfigField(
-          label: '端口号',
-          controller: _serverPortController,
-          icon: Icons.settings_ethernet,
-          hint: '例: 8080',
-          isNumber: true,
+        // 刷新按钮
+        OutlinedButton.icon(
+          onPressed: () async {
+            await _configProvider.refreshFromBackend();
+            if (mounted) setState(() {});
+          },
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('刷新配置'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: TechColors.glowCyan,
+            side: BorderSide(color: TechColors.glowCyan.withOpacity(0.5)),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          ),
         ),
       ],
     );
   }
 
-  /// PLC 配置表单
+  // ============================================================================
+  // PLC 配置
+  // ============================================================================
+
   Widget _buildPLCConfig() {
+    if (_configProvider.isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(TechColors.glowCyan),
+        ),
+      );
+    }
+
+    if (_configProvider.error != null && _configProvider.plcConfig == null) {
+      return _buildErrorWidget(_configProvider.error!);
+    }
+
+    final plcConfig = _configProvider.plcConfig;
+    if (plcConfig == null) {
+      return _buildErrorWidget('无法获取PLC配置');
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 只读信息
+        _buildInfoCard(
+          title: 'PLC 连接信息 (只读)',
+          icon: Icons.info_outline,
+          children: [
+            _buildInfoRow('Rack', plcConfig.rack.toString(), Icons.view_module),
+            _buildInfoRow('Slot', plcConfig.slot.toString(), Icons.memory),
+            _buildInfoRow('超时时间', '${plcConfig.timeoutMs} ms', Icons.timer),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // 可编辑字段
+        const Text(
+          '可编辑配置',
+          style: TextStyle(
+            color: TechColors.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 12),
+
         _buildConfigField(
-          label: 'IP 地址',
+          label: 'PLC IP 地址',
           controller: _plcIpController,
           icon: Icons.router,
-          hint: '例: 192.168.0.1',
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildConfigField(
-                label: '端口号',
-                controller: _plcPortController,
-                icon: Icons.settings_input_hdmi,
-                hint: '102',
-                isNumber: true,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildConfigField(
-                label: 'Rack',
-                controller: _plcRackController,
-                icon: Icons.view_module,
-                hint: '0',
-                isNumber: true,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildConfigField(
-                label: 'Slot',
-                controller: _plcSlotController,
-                icon: Icons.memory,
-                hint: '1',
-                isNumber: true,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        _buildProtocolSelector(),
-      ],
-    );
-  }
-
-  Widget _buildProtocolSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              Icons.settings_input_component,
-              size: 16,
-              color: TechColors.glowCyan,
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              '通信协议',
-              style: TextStyle(
-                color: TechColors.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: TechColors.bgMedium,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: TechColors.glowCyan.withOpacity(0.3),
-            ),
-          ),
-          child: DropdownButton<String>(
-            value: _systemConfig.plcConfig.protocol,
-            isExpanded: true,
-            underline: const SizedBox(),
-            dropdownColor: TechColors.bgMedium,
-            style: const TextStyle(
-              color: TechColors.textPrimary,
-              fontSize: 13,
-              fontFamily: 'Roboto Mono',
-            ),
-            items: ['S7-1200', 'S7-1500', 'S7-300', 'S7-400']
-                .map((protocol) => DropdownMenuItem(
-                      value: protocol,
-                      child: Text(protocol),
-                    ))
-                .toList(),
-            onChanged: (value) {
-              if (value != null) {
-                setState(() {
-                  _systemConfig.plcConfig.protocol = value;
-                });
-              }
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// 数据库配置表单
-  Widget _buildDatabaseConfig() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildConfigField(
-          label: '主机地址',
-          controller: _dbHostController,
-          icon: Icons.computer,
-          hint: 'localhost 或 IP 地址',
+          hint: '例: 192.168.50.223',
         ),
         const SizedBox(height: 16),
         _buildConfigField(
-          label: '端口号',
-          controller: _dbPortController,
-          icon: Icons.settings_ethernet,
-          hint: '3306',
+          label: '轮询间隔 (秒)',
+          controller: _plcPollIntervalController,
+          icon: Icons.update,
+          hint: '例: 5',
           isNumber: true,
         ),
-        const SizedBox(height: 16),
-        _buildConfigField(
-          label: '数据库名称',
-          controller: _dbNameController,
-          icon: Icons.storage,
-          hint: 'ceramic_workshop',
-        ),
-        const SizedBox(height: 16),
-        _buildConfigField(
-          label: '用户名',
-          controller: _dbUserController,
-          icon: Icons.person,
-          hint: 'root',
-        ),
-        const SizedBox(height: 16),
-        _buildConfigField(
-          label: '密码',
-          controller: _dbPasswordController,
-          icon: Icons.lock,
-          hint: '••••••',
-          isPassword: true,
-        ),
+        const SizedBox(height: 24),
+
+        // 操作按钮
+        _buildPlcActionButtons(),
+
+        // 连接测试结果
+        if (_connectionTestResult != null) ...[
+          const SizedBox(height: 16),
+          _buildConnectionTestResult(),
+        ],
       ],
     );
   }
 
-  /// 传感器配置表单
-  Widget _buildSensorConfig() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildPlcActionButtons() {
+    return Row(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              '传感器列表',
-              style: TextStyle(
-                color: TechColors.textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+        ElevatedButton.icon(
+          onPressed: _savePlcConfig,
+          icon: const Icon(Icons.save, size: 18),
+          label: const Text('保存配置'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: TechColors.glowCyan.withOpacity(0.2),
+            foregroundColor: TechColors.glowCyan,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+              side: BorderSide(color: TechColors.glowCyan.withOpacity(0.5)),
             ),
-            ElevatedButton.icon(
-              onPressed: _addNewSensor,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('添加传感器'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: TechColors.glowCyan.withOpacity(0.2),
-                foregroundColor: TechColors.glowCyan,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-            ),
-          ],
+          ),
         ),
-        const SizedBox(height: 16),
-        ..._systemConfig.sensors.asMap().entries.map((entry) {
-          final index = entry.key;
-          final sensor = entry.value;
-          return _buildSensorItem(sensor, index);
-        }),
+        const SizedBox(width: 12),
+        ElevatedButton.icon(
+          onPressed: _isTestingConnection ? null : _testPlcConnection,
+          icon: _isTestingConnection
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(TechColors.glowGreen),
+                  ),
+                )
+              : const Icon(Icons.wifi_tethering, size: 18),
+          label: Text(_isTestingConnection ? '测试中...' : '测试连接'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: TechColors.glowGreen.withOpacity(0.2),
+            foregroundColor: TechColors.glowGreen,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+              side: BorderSide(color: TechColors.glowGreen.withOpacity(0.5)),
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildSensorItem(SensorConfig sensor, int index) {
+  // ============================================================================
+  // 通用组件
+  // ============================================================================
+
+  Widget _buildInfoCard({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: TechColors.bgMedium.withOpacity(0.5),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: sensor.enabled
-              ? TechColors.glowCyan.withOpacity(0.3)
-              : TechColors.borderDark,
-        ),
+        border: Border.all(color: TechColors.borderDark),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          _getSensorIcon(sensor.type),
-                          size: 16,
-                          color: sensor.enabled
-                              ? TechColors.glowCyan
-                              : TechColors.textMuted,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          sensor.name,
-                          style: TextStyle(
-                            color: sensor.enabled
-                                ? TechColors.textPrimary
-                                : TechColors.textMuted,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'ID: ${sensor.id}',
-                      style: const TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 11,
-                        fontFamily: 'Roboto Mono',
-                      ),
-                    ),
-                  ],
+              Icon(icon, size: 18, color: TechColors.glowCyan),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: TechColors.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
                 ),
-              ),
-              Switch(
-                value: sensor.enabled,
-                onChanged: (value) {
-                  setState(() {
-                    _systemConfig.sensors[index].enabled = value;
-                  });
-                },
-                activeColor: TechColors.glowCyan,
-              ),
-              IconButton(
-                icon: const Icon(Icons.edit, size: 18),
-                color: TechColors.glowCyan,
-                onPressed: () => _editSensor(index),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete, size: 18),
-                color: TechColors.statusAlarm,
-                onPressed: () => _deleteSensor(index),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: TechColors.bgDeep.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(4),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: TechColors.textSecondary),
+          const SizedBox(width: 8),
+          Text(
+            '$label:',
+            style: const TextStyle(
+              color: TechColors.textSecondary,
+              fontSize: 12,
             ),
-            child: Row(
-              children: [
-                _buildSensorDetail('Modbus', '${sensor.modbusAddress}'),
-                const SizedBox(width: 16),
-                _buildSensorDetail('数据点', '${sensor.dataPoint}'),
-                const SizedBox(width: 16),
-                _buildSensorDetail('单位', sensor.unit),
-              ],
+          ),
+          const SizedBox(width: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: TechColors.textPrimary,
+              fontSize: 13,
+              fontFamily: 'Roboto Mono',
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -603,61 +470,56 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildSensorDetail(String label, String value) {
-    return Row(
-      children: [
-        Text(
-          '$label: ',
-          style: const TextStyle(
-            color: TechColors.textSecondary,
-            fontSize: 11,
+  Widget _buildErrorWidget(String message) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: TechColors.statusAlarm.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: TechColors.statusAlarm.withOpacity(0.5)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline,
+              color: TechColors.statusAlarm, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style:
+                  const TextStyle(color: TechColors.statusAlarm, fontSize: 13),
+            ),
           ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            color: TechColors.glowCyan,
-            fontSize: 11,
-            fontFamily: 'Roboto Mono',
-            fontWeight: FontWeight.w500,
+          const SizedBox(width: 12),
+          OutlinedButton(
+            onPressed: () async {
+              await _configProvider.refreshFromBackend();
+              if (mounted) setState(() {});
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: TechColors.statusAlarm,
+              side: BorderSide(color: TechColors.statusAlarm.withOpacity(0.5)),
+            ),
+            child: const Text('重试'),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  IconData _getSensorIcon(String type) {
-    switch (type) {
-      case 'temperature':
-        return Icons.thermostat;
-      case 'pressure':
-        return Icons.speed;
-      case 'flow':
-        return Icons.water;
-      default:
-        return Icons.sensors;
-    }
-  }
-
-  /// 通用配置字段
   Widget _buildConfigField({
     required String label,
     required TextEditingController controller,
     required IconData icon,
     required String hint,
     bool isNumber = false,
-    bool isPassword = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Icon(
-              icon,
-              size: 16,
-              color: TechColors.glowCyan,
-            ),
+            Icon(icon, size: 16, color: TechColors.glowCyan),
             const SizedBox(width: 8),
             Text(
               label,
@@ -672,7 +534,6 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(height: 8),
         TextField(
           controller: controller,
-          obscureText: isPassword,
           keyboardType: isNumber ? TextInputType.number : TextInputType.text,
           inputFormatters:
               isNumber ? [FilteringTextInputFormatter.digitsOnly] : null,
@@ -716,63 +577,266 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  /// 操作按钮
-  Widget _buildActionButtons() {
-    return Row(
-      children: [
-        ElevatedButton.icon(
-          onPressed: _saveConfig,
-          icon: const Icon(Icons.save, size: 18),
-          label: const Text('保存配置'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: TechColors.glowCyan.withOpacity(0.2),
-            foregroundColor: TechColors.glowCyan,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(4),
-              side: BorderSide(
-                color: TechColors.glowCyan.withOpacity(0.5),
+  // ============================================================================
+  // 管理员设置
+  // ============================================================================
+
+  Widget _buildAdminSettings() {
+    return Consumer<AdminProvider>(
+      builder: (context, adminProvider, child) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildInfoCard(
+              title: '账号信息',
+              icon: Icons.account_circle,
+              children: [
+                _buildInfoRow('用户名', adminProvider.adminConfig?.username ?? '-',
+                    Icons.person),
+              ],
+            ),
+            const SizedBox(height: 24),
+            _buildChangePasswordSection(adminProvider),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildChangePasswordSection(AdminProvider adminProvider) {
+    final oldPasswordController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool showOldPassword = false;
+    bool showNewPassword = false;
+    bool showConfirmPassword = false;
+
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '修改密码',
+              style: TextStyle(
+                color: TechColors.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
               ),
             ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        ElevatedButton.icon(
-          onPressed: _isTestingConnection ? null : _testConnection,
-          icon: _isTestingConnection
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(TechColors.glowCyan),
+            const SizedBox(height: 12),
+            _buildPasswordField(
+              label: '旧密码',
+              controller: oldPasswordController,
+              showPassword: showOldPassword,
+              onVisibilityToggle: () {
+                setState(() => showOldPassword = !showOldPassword);
+              },
+            ),
+            const SizedBox(height: 16),
+            _buildPasswordField(
+              label: '新密码',
+              controller: newPasswordController,
+              showPassword: showNewPassword,
+              onVisibilityToggle: () {
+                setState(() => showNewPassword = !showNewPassword);
+              },
+            ),
+            const SizedBox(height: 16),
+            _buildPasswordField(
+              label: '确认新密码',
+              controller: confirmPasswordController,
+              showPassword: showConfirmPassword,
+              onVisibilityToggle: () {
+                setState(() => showConfirmPassword = !showConfirmPassword);
+              },
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final oldPassword = oldPasswordController.text;
+                    final newPassword = newPasswordController.text;
+                    final confirmPassword = confirmPasswordController.text;
+
+                    // 验证输入
+                    if (oldPassword.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('请输入旧密码'),
+                          backgroundColor: TechColors.statusAlarm,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (newPassword.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('请输入新密码'),
+                          backgroundColor: TechColors.statusAlarm,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (newPassword != confirmPassword) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('两次输入的新密码不一致'),
+                          backgroundColor: TechColors.statusAlarm,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (newPassword.length < 6) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('新密码长度至少6位'),
+                          backgroundColor: TechColors.statusAlarm,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                      return;
+                    }
+
+                    // 修改密码
+                    final success = await adminProvider.updatePassword(
+                      oldPassword,
+                      newPassword,
+                    );
+
+                    if (!mounted) return;
+
+                    if (success) {
+                      oldPasswordController.clear();
+                      newPasswordController.clear();
+                      confirmPasswordController.clear();
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('密码修改成功'),
+                          backgroundColor: TechColors.glowGreen,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            adminProvider.error ?? '密码修改失败',
+                          ),
+                          backgroundColor: TechColors.statusAlarm,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('确认修改'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: TechColors.glowCyan.withOpacity(0.2),
+                    foregroundColor: TechColors.glowCyan,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      side: BorderSide(
+                        color: TechColors.glowCyan.withOpacity(0.5),
+                      ),
+                    ),
                   ),
-                )
-              : const Icon(Icons.wifi_tethering, size: 18),
-          label: Text(_isTestingConnection ? '测试中...' : '测试连接'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: TechColors.glowGreen.withOpacity(0.2),
-            foregroundColor: TechColors.glowGreen,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(4),
-              side: BorderSide(
-                color: TechColors.glowGreen.withOpacity(0.5),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    oldPasswordController.clear();
+                    newPasswordController.clear();
+                    confirmPasswordController.clear();
+                  },
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('重置'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: TechColors.textSecondary,
+                    side: const BorderSide(color: TechColors.borderDark),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildPasswordField({
+    required String label,
+    required TextEditingController controller,
+    required bool showPassword,
+    required VoidCallback onVisibilityToggle,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.lock, size: 16, color: TechColors.textSecondary),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: TechColors.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
               ),
             ),
-          ),
+          ],
         ),
-        const SizedBox(width: 12),
-        OutlinedButton.icon(
-          onPressed: _resetConfig,
-          icon: const Icon(Icons.refresh, size: 18),
-          label: const Text('重置'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: TechColors.textSecondary,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            side: BorderSide(
-              color: TechColors.borderDark,
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          obscureText: !showPassword,
+          style: const TextStyle(
+            color: TechColors.textPrimary,
+            fontSize: 13,
+            fontFamily: 'Roboto Mono',
+          ),
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            filled: true,
+            fillColor: TechColors.bgDeep,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: TechColors.borderDark),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: TechColors.borderDark),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: TechColors.glowCyan),
+            ),
+            suffixIcon: IconButton(
+              icon: Icon(
+                showPassword ? Icons.visibility : Icons.visibility_off,
+                color: TechColors.textSecondary,
+                size: 18,
+              ),
+              onPressed: onVisibilityToggle,
+            ),
+            hintText: '输入 $label',
+            hintStyle: TextStyle(
+              color: TechColors.textSecondary.withOpacity(0.5),
             ),
           ),
         ),
@@ -780,9 +844,8 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  /// 连接测试结果
   Widget _buildConnectionTestResult() {
-    final isSuccess = _connectionTestResult == 'success';
+    final isSuccess = _connectionTestSuccess == true;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -804,7 +867,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              isSuccess ? '连接测试成功！' : '连接测试失败，请检查配置参数。',
+              _connectionTestResult ?? '',
               style: TextStyle(
                 color:
                     isSuccess ? TechColors.glowGreen : TechColors.statusAlarm,
@@ -822,24 +885,16 @@ class _SettingsPageState extends State<SettingsPage> {
   // 操作方法
   // ============================================================================
 
-  void _saveConfig() async {
-    // 更新配置对象
-    _systemConfig.serverConfig.ipAddress = _serverIpController.text;
-    _systemConfig.serverConfig.port =
-        int.tryParse(_serverPortController.text) ?? 8080;
-    _systemConfig.plcConfig.ipAddress = _plcIpController.text;
-    _systemConfig.plcConfig.port = int.tryParse(_plcPortController.text) ?? 102;
-    _systemConfig.plcConfig.rack = int.tryParse(_plcRackController.text) ?? 0;
-    _systemConfig.plcConfig.slot = int.tryParse(_plcSlotController.text) ?? 1;
-    _systemConfig.databaseConfig.host = _dbHostController.text;
-    _systemConfig.databaseConfig.port =
-        int.tryParse(_dbPortController.text) ?? 3306;
-    _systemConfig.databaseConfig.username = _dbUserController.text;
-    _systemConfig.databaseConfig.password = _dbPasswordController.text;
-    _systemConfig.databaseConfig.databaseName = _dbNameController.text;
+  Future<void> _savePlcConfig() async {
+    final newConfig = PlcConfigData(
+      ipAddress: _plcIpController.text,
+      rack: _configProvider.plcConfig?.rack ?? 0,
+      slot: _configProvider.plcConfig?.slot ?? 1,
+      timeoutMs: _configProvider.plcConfig?.timeoutMs ?? 5000,
+      pollInterval: int.tryParse(_plcPollIntervalController.text) ?? 5,
+    );
 
-    // 持久化保存配置到本地存储
-    final success = await _configService.saveConfig(_systemConfig);
+    final success = await _configProvider.updatePlcConfig(newConfig);
 
     if (!mounted) return;
 
@@ -854,7 +909,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(width: 12),
             Text(
-              success ? '配置保存成功！' : '配置保存失败，请重试',
+              success ? 'PLC配置保存成功！' : '配置保存失败: ${_configProvider.error}',
               style: const TextStyle(color: TechColors.textPrimary),
             ),
           ],
@@ -863,276 +918,28 @@ class _SettingsPageState extends State<SettingsPage> {
         duration: const Duration(seconds: 2),
       ),
     );
+
+    if (success) {
+      _updatePlcControllers();
+      setState(() {});
+    }
   }
 
-  void _testConnection() async {
+  Future<void> _testPlcConnection() async {
     setState(() {
       _isTestingConnection = true;
       _connectionTestResult = null;
+      _connectionTestSuccess = null;
     });
 
-    // TODO: 实现实际的连接测试逻辑
-    await Future.delayed(const Duration(seconds: 2));
+    final result = await _configProvider.testPlcConnection();
+
+    if (!mounted) return;
 
     setState(() {
       _isTestingConnection = false;
-      // 模拟测试结果
-      _connectionTestResult =
-          DateTime.now().second % 2 == 0 ? 'success' : 'failed';
+      _connectionTestSuccess = result['connected'] == true;
+      _connectionTestResult = result['message'] as String?;
     });
-  }
-
-  void _resetConfig() {
-    setState(() {
-      _loadConfig();
-      _connectionTestResult = null;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.info, color: TechColors.glowCyan, size: 20),
-            SizedBox(width: 12),
-            Text('配置已重置为默认值', style: TextStyle(color: TechColors.textPrimary)),
-          ],
-        ),
-        backgroundColor: TechColors.bgMedium,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  void _addNewSensor() {
-    showDialog(
-      context: context,
-      builder: (context) => _SensorEditDialog(
-        onSave: (sensor) {
-          setState(() {
-            _systemConfig.sensors.add(sensor);
-          });
-        },
-      ),
-    );
-  }
-
-  void _editSensor(int index) {
-    showDialog(
-      context: context,
-      builder: (context) => _SensorEditDialog(
-        sensor: _systemConfig.sensors[index],
-        onSave: (sensor) {
-          setState(() {
-            _systemConfig.sensors[index] = sensor;
-          });
-        },
-      ),
-    );
-  }
-
-  void _deleteSensor(int index) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: TechColors.bgMedium,
-        title: const Text(
-          '删除传感器',
-          style: TextStyle(color: TechColors.textPrimary),
-        ),
-        content: Text(
-          '确定要删除传感器 "${_systemConfig.sensors[index].name}" 吗？',
-          style: const TextStyle(color: TechColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消',
-                style: TextStyle(color: TechColors.textSecondary)),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _systemConfig.sensors.removeAt(index);
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('删除',
-                style: TextStyle(color: TechColors.statusAlarm)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// 传感器编辑对话框
-// ============================================================================
-
-class _SensorEditDialog extends StatefulWidget {
-  final SensorConfig? sensor;
-  final Function(SensorConfig) onSave;
-
-  const _SensorEditDialog({
-    this.sensor,
-    required this.onSave,
-  });
-
-  @override
-  State<_SensorEditDialog> createState() => _SensorEditDialogState();
-}
-
-class _SensorEditDialogState extends State<_SensorEditDialog> {
-  late TextEditingController _idController;
-  late TextEditingController _nameController;
-  late TextEditingController _modbusController;
-  late TextEditingController _dataPointController;
-  late TextEditingController _unitController;
-  late String _selectedType;
-
-  @override
-  void initState() {
-    super.initState();
-    final sensor = widget.sensor;
-    _idController = TextEditingController(text: sensor?.id ?? '');
-    _nameController = TextEditingController(text: sensor?.name ?? '');
-    _modbusController =
-        TextEditingController(text: sensor?.modbusAddress.toString() ?? '0');
-    _dataPointController =
-        TextEditingController(text: sensor?.dataPoint.toString() ?? '0');
-    _unitController = TextEditingController(text: sensor?.unit ?? '℃');
-    _selectedType = sensor?.type ?? 'temperature';
-  }
-
-  @override
-  void dispose() {
-    _idController.dispose();
-    _nameController.dispose();
-    _modbusController.dispose();
-    _dataPointController.dispose();
-    _unitController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: TechColors.bgMedium,
-      title: Text(
-        widget.sensor == null ? '添加传感器' : '编辑传感器',
-        style: const TextStyle(color: TechColors.textPrimary),
-      ),
-      content: SizedBox(
-        width: 400,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildDialogField('传感器ID', _idController, Icons.fingerprint),
-              const SizedBox(height: 12),
-              _buildDialogField('传感器名称', _nameController, Icons.label),
-              const SizedBox(height: 12),
-              _buildTypeSelector(),
-              const SizedBox(height: 12),
-              _buildDialogField(
-                  'Modbus地址', _modbusController, Icons.location_on,
-                  isNumber: true),
-              const SizedBox(height: 12),
-              _buildDialogField('数据点', _dataPointController, Icons.scatter_plot,
-                  isNumber: true),
-              const SizedBox(height: 12),
-              _buildDialogField('单位', _unitController, Icons.straighten),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消',
-              style: TextStyle(color: TechColors.textSecondary)),
-        ),
-        ElevatedButton(
-          onPressed: _save,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: TechColors.glowCyan.withOpacity(0.2),
-            foregroundColor: TechColors.glowCyan,
-          ),
-          child: const Text('保存'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDialogField(
-    String label,
-    TextEditingController controller,
-    IconData icon, {
-    bool isNumber = false,
-  }) {
-    return TextField(
-      controller: controller,
-      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-      inputFormatters:
-          isNumber ? [FilteringTextInputFormatter.digitsOnly] : null,
-      style: const TextStyle(color: TechColors.textPrimary, fontSize: 13),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: TechColors.textSecondary),
-        prefixIcon: Icon(icon, size: 18, color: TechColors.glowCyan),
-        filled: true,
-        fillColor: TechColors.bgDeep,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
-          borderSide: BorderSide(color: TechColors.glowCyan.withOpacity(0.3)),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTypeSelector() {
-    return DropdownButtonFormField<String>(
-      value: _selectedType,
-      dropdownColor: TechColors.bgDeep,
-      style: const TextStyle(color: TechColors.textPrimary, fontSize: 13),
-      decoration: InputDecoration(
-        labelText: '传感器类型',
-        labelStyle: const TextStyle(color: TechColors.textSecondary),
-        prefixIcon:
-            const Icon(Icons.category, size: 18, color: TechColors.glowCyan),
-        filled: true,
-        fillColor: TechColors.bgDeep,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
-          borderSide: BorderSide(color: TechColors.glowCyan.withOpacity(0.3)),
-        ),
-      ),
-      items: const [
-        DropdownMenuItem(value: 'temperature', child: Text('温度传感器')),
-        DropdownMenuItem(value: 'pressure', child: Text('压力传感器')),
-        DropdownMenuItem(value: 'flow', child: Text('流量传感器')),
-        DropdownMenuItem(value: 'other', child: Text('其他')),
-      ],
-      onChanged: (value) {
-        if (value != null) {
-          setState(() => _selectedType = value);
-        }
-      },
-    );
-  }
-
-  void _save() {
-    final sensor = SensorConfig(
-      id: _idController.text,
-      name: _nameController.text,
-      type: _selectedType,
-      modbusAddress: int.tryParse(_modbusController.text) ?? 0,
-      dataPoint: int.tryParse(_dataPointController.text) ?? 0,
-      unit: _unitController.text,
-      enabled: widget.sensor?.enabled ?? true,
-    );
-
-    widget.onSave(sensor);
-    Navigator.pop(context);
   }
 }

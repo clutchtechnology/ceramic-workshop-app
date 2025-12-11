@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'tech_line_widgets.dart';
+import '../data_display/data_tech_line_widgets.dart';
 
 /// 燃气管单元组件
 /// 用于显示SCR设备中的燃气管道
@@ -72,7 +72,7 @@ class GasPipeCell extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '流速: ${flowRate.toStringAsFixed(1)}m³/h',
+                    '实时流量: ${flowRate.toStringAsFixed(1)}m³/h',
                     style: const TextStyle(
                       color: TechColors.glowCyan,
                       fontSize: 11,
@@ -82,9 +82,9 @@ class GasPipeCell extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '能耗: ${energyConsumption.toStringAsFixed(1)}kW',
+                    '累计流量: ${energyConsumption.toStringAsFixed(1)}m³',
                     style: const TextStyle(
-                      color: TechColors.glowOrange,
+                      color: TechColors.glowGreen,
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
                       fontFamily: 'Roboto Mono',
