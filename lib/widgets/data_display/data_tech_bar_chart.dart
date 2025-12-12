@@ -20,14 +20,14 @@ class TechBarChart extends StatelessWidget {
   /// X轴单位标签
   final String xAxisLabel;
 
-  /// Y轴最小值
-  final double minY;
+  /// Y轴最小值（可选，不传则自动计算）
+  final double? minY;
 
-  /// Y轴最大值
-  final double maxY;
+  /// Y轴最大值（可选，不传则自动计算）
+  final double? maxY;
 
-  /// Y轴间隔
-  final double yInterval;
+  /// Y轴间隔（可选，不传则自动计算）
+  final double? yInterval;
 
   /// X轴间隔
   final double xInterval;
@@ -74,9 +74,9 @@ class TechBarChart extends StatelessWidget {
     required this.accentColor,
     required this.yAxisLabel,
     required this.xAxisLabel,
-    required this.minY,
-    required this.maxY,
-    required this.yInterval,
+    this.minY,
+    this.maxY,
+    this.yInterval,
     required this.xInterval,
     required this.dataMap,
     required this.itemColors,
@@ -161,14 +161,76 @@ class TechBarChart extends StatelessWidget {
     }
   }
 
+  /// 计算数据的Y轴范围（自动计算时使用）
+  ({double min, double max, double interval}) _calculateYAxisRange() {
+    // 收集所有选中设备的Y值
+    List<double> allYValues = [];
+
+    if (isSingleSelect) {
+      if (dataMap.containsKey(selectedIndex)) {
+        allYValues.addAll(dataMap[selectedIndex]!.map((spot) => spot.y));
+      }
+    } else {
+      for (int i = 0; i < itemCount; i++) {
+        if (selectedItems![i] && dataMap.containsKey(i)) {
+          allYValues.addAll(dataMap[i]!.map((spot) => spot.y));
+        }
+      }
+    }
+
+    // 如果没有数据，返回默认范围
+    if (allYValues.isEmpty) {
+      return (min: 0, max: 100, interval: 20);
+    }
+
+    double dataMin = allYValues.reduce((a, b) => a < b ? a : b);
+    double dataMax = allYValues.reduce((a, b) => a > b ? a : b);
+
+    // 添加10%的边距，让数据线不贴边
+    double range = dataMax - dataMin;
+    if (range < 0.01) range = dataMax * 0.2; // 如果数据几乎不变，用数据值的20%作为范围
+    if (range < 1) range = 10; // 最小范围
+
+    double padding = range * 0.1;
+    double calculatedMin = dataMin - padding;
+    double calculatedMax = dataMax + padding;
+
+    // 计算合适的间隔（大约5-8条网格线）
+    double rawInterval = range / 5;
+    // 向上取整到"好看"的数字
+    double magnitude = 1;
+    while (rawInterval >= 10) {
+      rawInterval /= 10;
+      magnitude *= 10;
+    }
+    while (rawInterval < 1) {
+      rawInterval *= 10;
+      magnitude /= 10;
+    }
+    double niceInterval =
+        (rawInterval <= 2 ? 2 : (rawInterval <= 5 ? 5 : 10)) * magnitude;
+
+    // 调整min/max到间隔的整数倍
+    calculatedMin = (calculatedMin / niceInterval).floor() * niceInterval;
+    calculatedMax = (calculatedMax / niceInterval).ceil() * niceInterval;
+
+    return (min: calculatedMin, max: calculatedMax, interval: niceInterval);
+  }
+
   /// 构建折线图（真正的折线图：点到点直线连接）
   Widget _buildChart() {
+    // 计算Y轴范围
+    final yAxisRange = _calculateYAxisRange();
+    final effectiveMinY = minY ?? yAxisRange.min;
+    final effectiveMaxY = maxY ?? yAxisRange.max;
+    final effectiveYInterval = yInterval ?? yAxisRange.interval;
+
     return LineChart(
       LineChartData(
         gridData: FlGridData(
           show: true,
           drawVerticalLine: true,
-          horizontalInterval: yInterval,
+          horizontalInterval: effectiveYInterval,
           verticalInterval: xInterval,
           getDrawingHorizontalLine: (value) {
             return FlLine(
@@ -195,9 +257,14 @@ class TechBarChart extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 40,
+              interval: effectiveYInterval,
               getTitlesWidget: (value, meta) {
+                // 只显示在范围内的标签
+                if (value < effectiveMinY || value > effectiveMaxY) {
+                  return const SizedBox.shrink();
+                }
                 return Text(
-                  value.toInt().toString(),
+                  value.toStringAsFixed(value == value.roundToDouble() ? 0 : 1),
                   style: const TextStyle(
                     color: TechColors.textSecondary,
                     fontSize: 9,
@@ -236,8 +303,8 @@ class TechBarChart extends StatelessWidget {
           ),
         ),
         lineBarsData: _getSelectedData(),
-        minY: minY,
-        maxY: maxY,
+        minY: effectiveMinY,
+        maxY: effectiveMaxY,
       ),
     );
   }
