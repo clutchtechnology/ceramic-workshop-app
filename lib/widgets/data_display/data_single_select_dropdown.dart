@@ -129,26 +129,26 @@ class _SingleSelectDropdownState extends State<SingleSelectDropdown> {
     return InkWell(
       onTap: _toggleDropdown,
       child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: widget.compact ? 4 : 8,
-          vertical: widget.compact ? 3 : 6,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 8,
+          vertical: 6,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               widget.compact ? _getCompactLabel() : widget.label,
-              style: TextStyle(
+              style: const TextStyle(
                 color: TechColors.textSecondary,
-                fontSize: widget.compact ? 9 : 11,
+                fontSize: 11,
               ),
             ),
             SizedBox(width: widget.compact ? 2 : 4),
             // 显示当前选中项
             Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: widget.compact ? 3 : 6,
-                vertical: widget.compact ? 1 : 2,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 6,
+                vertical: 2,
               ),
               decoration: BoxDecoration(
                 color: widget.itemColors[widget.selectedIndex].withOpacity(0.2),
@@ -164,7 +164,7 @@ class _SingleSelectDropdownState extends State<SingleSelectDropdown> {
                     : widget.getItemLabel(widget.selectedIndex),
                 style: TextStyle(
                   color: widget.itemColors[widget.selectedIndex],
-                  fontSize: widget.compact ? 8 : 10,
+                  fontSize: 10,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -173,7 +173,7 @@ class _SingleSelectDropdownState extends State<SingleSelectDropdown> {
             Icon(
               _overlayEntry != null ? Icons.expand_less : Icons.expand_more,
               color: TechColors.textSecondary,
-              size: widget.compact ? 12 : 16,
+              size: 16,
             ),
           ],
         ),

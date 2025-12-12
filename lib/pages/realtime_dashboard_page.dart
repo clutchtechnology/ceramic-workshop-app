@@ -99,6 +99,25 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
           '✓ 辊道窑数据: ${rollerData != null ? rollerData.zones.length : 0} 个温区');
       debugPrint('✓ SCR设备: ${scrFanData?.scr.total ?? 0} 个');
       debugPrint('✓ 风机设备: ${scrFanData?.fan.total ?? 0} 个');
+      
+      // 调试: 打印风机和SCR的具体数值
+      if (scrFanData != null) {
+        for (var i = 0; i < scrFanData.fan.devices.length; i++) {
+          final fan = scrFanData.fan.devices[i];
+          debugPrint('  📊 风机${i + 1}: Pt=${fan.elec?.pt.toStringAsFixed(2)}, ImpEp=${fan.elec?.impEp.toStringAsFixed(2)}');
+        }
+        for (var i = 0; i < scrFanData.scr.devices.length; i++) {
+          final scr = scrFanData.scr.devices[i];
+          debugPrint('  📊 SCR${i + 1}: Pt=${scr.elec?.pt.toStringAsFixed(2)}, flow=${scr.gas?.flowRate.toStringAsFixed(2)}');
+        }
+      }
+      
+      // 调试: 打印辊道窑的温度数据
+      if (rollerData != null) {
+        final temps = rollerData.zones.map((z) => '${z.zoneName}:${z.temperature.toStringAsFixed(0)}°C').join(', ');
+        debugPrint('  🌡️ 辊道窑温度: $temps');
+      }
+      
       debugPrint('=== 数据获取完成 ===');
 
       if (mounted) {
@@ -395,7 +414,7 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   /// 辊道窑区域 - 显示设备图片
   Widget _buildRollerKilnSection(double width, double height) {
     // 计算总能耗（6个温区电表能耗的总和）
-    final totalPower = _rollerKilnData?.zones.fold<double>(
+    final totalEnergy = _rollerKilnData?.zones.fold<double>(
           0.0,
           (sum, zone) => sum + zone.energy,
         ) ??
@@ -517,8 +536,8 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                       ),
                     ),
                     Text(
-                      totalPower > 0
-                          ? '${totalPower.toStringAsFixed(1)}kWh'
+                      _rollerKilnData != null
+                          ? '${totalEnergy.toStringAsFixed(1)}kWh'
                           : '--kWh',
                       style: TextStyle(
                         color: TechColors.glowOrange,

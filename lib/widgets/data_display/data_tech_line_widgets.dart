@@ -31,6 +31,7 @@ class TechColors {
   static const Color glowOrange = Color(0xFFff9500);
   static const Color glowRed = Color(0xFFff3b30);
   static const Color glowBlue = Color(0xFF0088ff);
+  static const Color glowPurple = Color(0xFF9966ff); // 紫色
 
   // ===== 文字 =====
   static const Color textPrimary = Color(0xFFe6edf3);

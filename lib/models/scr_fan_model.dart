@@ -77,11 +77,11 @@ class ScrDevice {
     return ScrDevice(
       deviceId: json['device_id'] ?? '',
       timestamp: json['timestamp'],
-      elec: modules.containsKey('elec')
-          ? ElectricityModule.fromJson(modules['elec']['fields'] ?? {})
+      elec: modules.containsKey('meter')
+          ? ElectricityModule.fromJson(modules['meter']['fields'] ?? {})
           : null,
-      gas: modules.containsKey('gas')
-          ? GasModule.fromJson(modules['gas']['fields'] ?? {})
+      gas: modules.containsKey('gas_meter')
+          ? GasModule.fromJson(modules['gas_meter']['fields'] ?? {})
           : null,
     );
   }
@@ -105,8 +105,8 @@ class FanDevice {
     return FanDevice(
       deviceId: json['device_id'] ?? '',
       timestamp: json['timestamp'],
-      elec: modules.containsKey('elec')
-          ? ElectricityModule.fromJson(modules['elec']['fields'] ?? {})
+      elec: modules.containsKey('meter')
+          ? ElectricityModule.fromJson(modules['meter']['fields'] ?? {})
           : null,
     );
   }

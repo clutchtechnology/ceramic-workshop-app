@@ -78,6 +78,40 @@ class ThresholdConfig {
   }
 }
 
+/// 料仓容量配置（用于计算百分比）
+class HopperCapacityConfig {
+  final String key; // 设备键值
+  final String displayName; // 显示名称
+  double maxCapacity; // 最大容量 (kg)
+
+  HopperCapacityConfig({
+    required this.key,
+    required this.displayName,
+    this.maxCapacity = 1000.0,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'key': key,
+        'displayName': displayName,
+        'maxCapacity': maxCapacity,
+      };
+
+  factory HopperCapacityConfig.fromJson(Map<String, dynamic> json) {
+    return HopperCapacityConfig(
+      key: json['key'] as String,
+      displayName: json['displayName'] as String,
+      maxCapacity: (json['maxCapacity'] as num?)?.toDouble() ?? 1000.0,
+    );
+  }
+
+  /// 根据当前重量计算百分比容量
+  double calculatePercentage(double currentWeight) {
+    if (maxCapacity <= 0) return 0.0;
+    final percentage = (currentWeight / maxCapacity) * 100;
+    return percentage.clamp(0.0, 100.0);
+  }
+}
+
 /// 实时数据配置 Provider
 class RealtimeConfigProvider extends ChangeNotifier {
   static const String _storageKey = 'realtime_threshold_config_v2';
@@ -225,6 +259,41 @@ class RealtimeConfigProvider extends ChangeNotifier {
         warningMax: 150.0),
   ];
 
+  // ============================================================
+  // 料仓容量配置 (7个带料仓的回转窑: 1-4短料仓, 7-9长料仓)
+  // 键值格式: {device_id}_capacity
+  // ============================================================
+  final List<HopperCapacityConfig> hopperCapacityConfigs = [
+    HopperCapacityConfig(
+        key: 'short_hopper_1_capacity',
+        displayName: '1号短料仓',
+        maxCapacity: 1000.0),
+    HopperCapacityConfig(
+        key: 'short_hopper_2_capacity',
+        displayName: '2号短料仓',
+        maxCapacity: 1000.0),
+    HopperCapacityConfig(
+        key: 'short_hopper_3_capacity',
+        displayName: '3号短料仓',
+        maxCapacity: 1000.0),
+    HopperCapacityConfig(
+        key: 'short_hopper_4_capacity',
+        displayName: '4号短料仓',
+        maxCapacity: 1000.0),
+    HopperCapacityConfig(
+        key: 'long_hopper_1_capacity',
+        displayName: '1号长料仓',
+        maxCapacity: 1500.0),
+    HopperCapacityConfig(
+        key: 'long_hopper_2_capacity',
+        displayName: '2号长料仓',
+        maxCapacity: 1500.0),
+    HopperCapacityConfig(
+        key: 'long_hopper_3_capacity',
+        displayName: '3号长料仓',
+        maxCapacity: 1500.0),
+  ];
+
   /// 初始化加载配置
   Future<void> loadConfig() async {
     try {
@@ -314,6 +383,18 @@ class RealtimeConfigProvider extends ChangeNotifier {
         }
       }
     }
+
+    // 加载料仓容量配置
+    if (json['hopperCapacity'] != null) {
+      final capacityData = json['hopperCapacity'] as Map<String, dynamic>;
+      for (var config in hopperCapacityConfigs) {
+        if (capacityData[config.key] != null) {
+          final data = capacityData[config.key] as Map<String, dynamic>;
+          config.maxCapacity =
+              (data['maxCapacity'] as num?)?.toDouble() ?? config.maxCapacity;
+        }
+      }
+    }
   }
 
   Map<String, dynamic> _toJson() {
@@ -352,6 +433,10 @@ class RealtimeConfigProvider extends ChangeNotifier {
             'normalMax': config.normalMax,
             'warningMax': config.warningMax
           }
+      },
+      'hopperCapacity': {
+        for (var config in hopperCapacityConfigs)
+          config.key: {'maxCapacity': config.maxCapacity}
       },
     };
   }
@@ -417,6 +502,16 @@ class RealtimeConfigProvider extends ChangeNotifier {
     }
   }
 
+  /// 更新料仓容量配置
+  void updateHopperCapacityConfig(int index, {double? maxCapacity}) {
+    if (index >= 0 && index < hopperCapacityConfigs.length) {
+      if (maxCapacity != null) {
+        hopperCapacityConfigs[index].maxCapacity = maxCapacity;
+      }
+      notifyListeners();
+    }
+  }
+
   /// 重置为默认配置
   void resetToDefault() {
     // 重置回转窑
@@ -443,6 +538,14 @@ class RealtimeConfigProvider extends ChangeNotifier {
     for (var config in scrGasConfigs) {
       config.normalMax = 100.0;
       config.warningMax = 150.0;
+    }
+    // 重置料仓容量 (短料仓1000kg, 长料仓1500kg)
+    for (int i = 0; i < hopperCapacityConfigs.length; i++) {
+      if (hopperCapacityConfigs[i].key.contains('short')) {
+        hopperCapacityConfigs[i].maxCapacity = 1000.0;
+      } else {
+        hopperCapacityConfigs[i].maxCapacity = 1500.0;
+      }
     }
     notifyListeners();
   }
@@ -595,5 +698,55 @@ class RealtimeConfigProvider extends ChangeNotifier {
     if (scrIndex < 1 || scrIndex > scrGasConfigs.length) return flowRate > 0;
     final config = scrGasConfigs[scrIndex - 1];
     return config.isRunning(flowRate);
+  }
+
+  // ============================================================
+  // 料仓容量相关方法
+  // ============================================================
+
+  /// 根据设备ID获取料仓容量百分比
+  /// deviceId: 例如 "short_hopper_1", "long_hopper_2"
+  /// currentWeight: 当前重量 (kg)
+  /// 返回: 百分比 (0-100)
+  double getHopperCapacityPercentage(String deviceId, double currentWeight) {
+    final key = '${deviceId}_capacity';
+    final config = hopperCapacityConfigs.firstWhere(
+      (c) => c.key == key,
+      orElse: () =>
+          HopperCapacityConfig(key: key, displayName: '', maxCapacity: 1000.0),
+    );
+    return config.calculatePercentage(currentWeight);
+  }
+
+  /// 根据设备ID获取料仓最大容量
+  /// deviceId: 例如 "short_hopper_1", "long_hopper_2"
+  double getHopperMaxCapacity(String deviceId) {
+    final key = '${deviceId}_capacity';
+    final config = hopperCapacityConfigs.firstWhere(
+      (c) => c.key == key,
+      orElse: () =>
+          HopperCapacityConfig(key: key, displayName: '', maxCapacity: 1000.0),
+    );
+    return config.maxCapacity;
+  }
+
+  /// 获取料仓容量配置
+  HopperCapacityConfig? getHopperCapacityConfig(String deviceId) {
+    final key = '${deviceId}_capacity';
+    try {
+      return hopperCapacityConfigs.firstWhere((c) => c.key == key);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// 根据设备ID获取料仓容量比例 (0.0 - 1.0)
+  /// 用于进度条显示
+  /// deviceId: 例如 "short_hopper_1", "long_hopper_2"
+  /// currentWeight: 当前重量 (kg)
+  /// 返回: 比例 (0.0 - 1.0)
+  double getHopperPercentage(String deviceId, double currentWeight) {
+    final percentage = getHopperCapacityPercentage(deviceId, currentWeight);
+    return (percentage / 100.0).clamp(0.0, 1.0);
   }
 }

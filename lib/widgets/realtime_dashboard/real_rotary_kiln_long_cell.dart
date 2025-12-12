@@ -25,7 +25,6 @@ class RotaryKilnLongCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final weight = data?.weighSensor?.weight ?? 0.0;
     final feedRate = data?.weighSensor?.feedRate ?? 0.0;
-    final power = data?.electricityMeter?.pt ?? 0.0;
     final energy = data?.electricityMeter?.impEp ?? 0.0;
     // ✅ 长料仓显示两个温度
     final temperature1 = data?.temperatureSensor1?.temperature ?? 0.0;
@@ -40,9 +39,14 @@ class RotaryKilnLongCell extends StatelessWidget {
         ? configProvider.getRotaryKilnTempColor(deviceId!, temperature2)
         : ThresholdColors.normal;
 
-    // 假设最大容量为1000kg，计算百分比
-    final double capacityPercentage = (weight / 1000.0).clamp(0.0, 1.0);
+    // 使用配置的料斗容量计算百分比 (getHopperPercentage 返回 0.0-1.0)
+    final double capacityPercentage = deviceId != null
+        ? configProvider.getHopperPercentage(deviceId!, weight)
+        : (weight / 800.0).clamp(0.0, 1.0);
     final int percentageInt = (capacityPercentage * 100).toInt();
+
+    // 料仓颜色（固定青色，不需要报警变化）
+    const hopperColor = TechColors.glowCyan;
 
     return Container(
       decoration: BoxDecoration(
@@ -99,7 +103,7 @@ class RotaryKilnLongCell extends StatelessWidget {
                       color: TechColors.bgDeep.withOpacity(0.8),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: TechColors.glowCyan.withOpacity(0.5),
+                        color: hopperColor.withOpacity(0.5),
                         width: 1.5,
                       ),
                     ),
@@ -120,8 +124,8 @@ class RotaryKilnLongCell extends StatelessWidget {
                                     begin: Alignment.bottomCenter,
                                     end: Alignment.topCenter,
                                     colors: [
-                                      TechColors.glowCyan,
-                                      TechColors.glowCyan.withOpacity(0.6),
+                                      hopperColor,
+                                      hopperColor.withOpacity(0.6),
                                     ],
                                   ),
                                 ),
@@ -168,7 +172,7 @@ class RotaryKilnLongCell extends StatelessWidget {
                       color: TechColors.bgDeep.withOpacity(0.85),
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
-                        color: TechColors.glowCyan.withOpacity(0.4),
+                        color: hopperColor.withOpacity(0.4),
                         width: 1,
                       ),
                     ),
@@ -178,8 +182,8 @@ class RotaryKilnLongCell extends StatelessWidget {
                       children: [
                         Text(
                           '重量: ${weight.toStringAsFixed(0)}kg',
-                          style: const TextStyle(
-                            color: TechColors.glowCyan,
+                          style: TextStyle(
+                            color: hopperColor,
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',

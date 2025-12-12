@@ -100,7 +100,7 @@ class TechBarChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(compact ? 8 : 12),
       decoration: BoxDecoration(
         color: TechColors.bgMedium.withOpacity(0.3),
         borderRadius: BorderRadius.circular(4),
@@ -110,7 +110,7 @@ class TechBarChart extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
-          const SizedBox(height: 12),
+          SizedBox(height: compact ? 6 : 12),
           Expanded(
             child: _buildChart(),
           ),

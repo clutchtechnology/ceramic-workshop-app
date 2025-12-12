@@ -32,9 +32,9 @@ class MultiSelectDropdown extends StatelessWidget {
     return PopupMenuButton<int>(
       color: TechColors.bgMedium,
       icon: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: compact ? 4 : 8,
-          vertical: compact ? 2 : 4,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 8,
+          vertical: 4,
         ),
         decoration: BoxDecoration(
           color: TechColors.bgDark,
@@ -48,15 +48,15 @@ class MultiSelectDropdown extends StatelessWidget {
           children: [
             Text(
               compact ? _getCompactLabel() : label,
-              style: TextStyle(
+              style: const TextStyle(
                 color: TechColors.textPrimary,
-                fontSize: compact ? 9 : 10,
+                fontSize: 10,
               ),
             ),
             SizedBox(width: compact ? 2 : 4),
-            Icon(
+            const Icon(
               Icons.arrow_drop_down,
-              size: compact ? 12 : 16,
+              size: 16,
               color: TechColors.textSecondary,
             ),
           ],

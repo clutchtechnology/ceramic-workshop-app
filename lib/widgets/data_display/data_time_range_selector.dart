@@ -39,7 +39,7 @@ class TimeRangeSelector extends StatelessWidget {
             '-',
             style: TextStyle(
               color: accentColor.withOpacity(0.6),
-              fontSize: compact ? 10 : 12,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -48,18 +48,18 @@ class TimeRangeSelector extends StatelessWidget {
         _buildTimeButton(endTime, onEndTimeTap),
         // 取消按钮（返回实时模式）
         if (onCancel != null) ...[
-          SizedBox(width: compact ? 4 : 6),
+          SizedBox(width: compact ? 3 : 6),
           GestureDetector(
             onTap: onCancel,
             child: Container(
-              padding: EdgeInsets.all(compact ? 3 : 4),
+              padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: accentColor.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(3),
               ),
               child: Icon(
                 Icons.refresh,
-                size: compact ? 12 : 14,
+                size: 14,
                 color: accentColor,
               ),
             ),
@@ -74,9 +74,9 @@ class TimeRangeSelector extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: compact ? 4 : 8,
-          vertical: compact ? 2 : 4,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 8,
+          vertical: 4,
         ),
         decoration: BoxDecoration(
           color: accentColor.withOpacity(0.1),
@@ -90,7 +90,7 @@ class TimeRangeSelector extends StatelessWidget {
           compact ? _formatDateTimeCompact(time) : _formatDateTime(time),
           style: TextStyle(
             color: accentColor,
-            fontSize: compact ? 9 : 11,
+            fontSize: 11,
             fontWeight: FontWeight.w500,
             fontFamily: 'Roboto Mono',
           ),

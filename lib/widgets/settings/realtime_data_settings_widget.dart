@@ -74,6 +74,12 @@ class _RealtimeDataSettingsWidgetState
           TextEditingController(text: config.warningMax.toString());
     }
 
+    // 初始化料仓容量控制器
+    for (var config in provider.hopperCapacityConfigs) {
+      _controllers['${config.key}_maxCapacity'] =
+          TextEditingController(text: config.maxCapacity.toString());
+    }
+
     setState(() {});
   }
 
@@ -104,6 +110,11 @@ class _RealtimeDataSettingsWidgetState
       _controllers['${config.key}_normal']?.text = config.normalMax.toString();
       _controllers['${config.key}_warning']?.text =
           config.warningMax.toString();
+    }
+    // 更新料仓容量控制器
+    for (var config in provider.hopperCapacityConfigs) {
+      _controllers['${config.key}_maxCapacity']?.text =
+          config.maxCapacity.toString();
     }
   }
 
@@ -208,6 +219,22 @@ class _RealtimeDataSettingsWidgetState
                 onUpdate: (index, normalMax, warningMax) {
                   provider.updateScrGasConfig(index,
                       normalMax: normalMax, warningMax: warningMax);
+                },
+              ),
+
+              const SizedBox(height: 12),
+
+              // 料仓容量配置
+              _buildHopperCapacitySection(
+                index: 5,
+                title: '料仓容量配置',
+                subtitle: '7个带料仓的回转窑',
+                icon: Icons.inventory_2,
+                accentColor: TechColors.glowPurple,
+                configs: provider.hopperCapacityConfigs,
+                onUpdate: (index, maxCapacity) {
+                  provider.updateHopperCapacityConfig(index,
+                      maxCapacity: maxCapacity);
                 },
               ),
 
@@ -638,6 +665,211 @@ class _RealtimeDataSettingsWidgetState
           ),
         ),
       ],
+    );
+  }
+
+  /// 料仓容量配置区块（可展开）
+  Widget _buildHopperCapacitySection({
+    required int index,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color accentColor,
+    required List<HopperCapacityConfig> configs,
+    required Function(int index, double? maxCapacity) onUpdate,
+  }) {
+    final isExpanded = _expandedIndex == index;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: TechColors.bgMedium.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color:
+              isExpanded ? accentColor.withOpacity(0.5) : TechColors.borderDark,
+        ),
+      ),
+      child: Column(
+        children: [
+          // 标题栏
+          InkWell(
+            onTap: () {
+              setState(() {
+                _expandedIndex = isExpanded ? -1 : index;
+              });
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: accentColor.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Icon(icon, color: accentColor, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            color: TechColors.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: const TextStyle(
+                            color: TechColors.textSecondary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    isExpanded ? Icons.expand_less : Icons.expand_more,
+                    color: TechColors.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // 展开内容 - 表格
+          if (isExpanded) ...[
+            Container(height: 1, color: TechColors.borderDark),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: _buildHopperCapacityTable(configs, onUpdate),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 料仓容量配置表格
+  Widget _buildHopperCapacityTable(
+    List<HopperCapacityConfig> configs,
+    Function(int index, double? maxCapacity) onUpdate,
+  ) {
+    return Column(
+      children: [
+        // 表头
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          decoration: BoxDecoration(
+            color: TechColors.bgDeep.withOpacity(0.5),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(4),
+              topRight: Radius.circular(4),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Expanded(
+                flex: 3,
+                child: Text(
+                  '料仓名称',
+                  style: TextStyle(
+                    color: TechColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: TechColors.glowCyan,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Text(
+                      '最大容量 (kg)',
+                      style: TextStyle(
+                        color: TechColors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        // 表格行
+        ...configs.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final config = entry.value;
+          return _buildHopperCapacityRow(idx, config, onUpdate);
+        }),
+      ],
+    );
+  }
+
+  /// 料仓容量配置表格行
+  Widget _buildHopperCapacityRow(
+    int index,
+    HopperCapacityConfig config,
+    Function(int index, double? maxCapacity) onUpdate,
+  ) {
+    final maxCapacityController = _controllers['${config.key}_maxCapacity'];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+      decoration: BoxDecoration(
+        color: index.isEven
+            ? TechColors.bgDeep.withOpacity(0.3)
+            : TechColors.bgMedium.withOpacity(0.3),
+        border: Border(
+          bottom: BorderSide(color: TechColors.borderDark.withOpacity(0.5)),
+        ),
+      ),
+      child: Row(
+        children: [
+          // 料仓名称
+          Expanded(
+            flex: 3,
+            child: Text(
+              config.displayName,
+              style: const TextStyle(
+                color: TechColors.textPrimary,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          // 最大容量输入框
+          Expanded(
+            flex: 2,
+            child: _buildInputField(
+              controller: maxCapacityController,
+              color: TechColors.glowCyan,
+              onChanged: (value) {
+                final v = double.tryParse(value);
+                if (v != null && v > 0) {
+                  onUpdate(index, v);
+                }
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
