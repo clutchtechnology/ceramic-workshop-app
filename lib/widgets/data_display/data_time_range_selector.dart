@@ -90,7 +90,7 @@ class TimeRangeSelector extends StatelessWidget {
           compact ? _formatDateTimeCompact(time) : _formatDateTime(time),
           style: TextStyle(
             color: accentColor,
-            fontSize: 11,
+            fontSize: 13,
             fontWeight: FontWeight.w500,
             fontFamily: 'Roboto Mono',
           ),

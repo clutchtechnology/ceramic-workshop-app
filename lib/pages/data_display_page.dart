@@ -11,14 +11,16 @@ import '../services/history_data_service.dart';
 /// 包含三个设备容器：回转窑、辊道窑、SCR设备
 ///
 /// 默认显示最近120秒的历史数据（静态展示，不自动更新）
+/// 每次进入页面自动刷新历史数据，10秒防抖机制防止重复调用
 class DataDisplayPage extends StatefulWidget {
   const DataDisplayPage({super.key});
 
   @override
-  State<DataDisplayPage> createState() => _DataDisplayPageState();
+  DataDisplayPageState createState() => DataDisplayPageState();
 }
 
-class _DataDisplayPageState extends State<DataDisplayPage>
+/// DataDisplayPage 的 State 类（公开以便通过 GlobalKey 访问）
+class DataDisplayPageState extends State<DataDisplayPage>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
@@ -32,22 +34,21 @@ class _DataDisplayPageState extends State<DataDisplayPage>
   // 默认时间范围：最近120秒
   static const Duration _defaultTimeRange = Duration(seconds: 120);
 
-  // ==================== 8个图表的独立时间范围 ====================
-  // 回转窑3个图表（默认最近120秒）
-  late DateTime _tempChartStartTime;
-  late DateTime _tempChartEndTime;
-  late DateTime _feedSpeedChartStartTime;
-  late DateTime _feedSpeedChartEndTime;
-  late DateTime _hopperWeightChartStartTime;
-  late DateTime _hopperWeightChartEndTime;
+  // ==================== 刷新防抖机制 ====================
+  /// 上次刷新历史数据的时间戳
+  DateTime? _lastRefreshTime;
 
-  // 辊道窑3个图表（默认最近120秒）
-  late DateTime _rollerTempChartStartTime;
-  late DateTime _rollerTempChartEndTime;
-  late DateTime _rollerEnergyChartStartTime;
-  late DateTime _rollerEnergyChartEndTime;
-  late DateTime _rollerPowerChartStartTime;
-  late DateTime _rollerPowerChartEndTime;
+  /// 刷新防抖间隔：10秒内不重复刷新
+  static const Duration _refreshDebounceInterval = Duration(seconds: 10);
+
+  // ==================== 8个图表的独立时间范围 ====================
+  // 回转窑3个图表共用一个时间范围（默认最近120秒）
+  late DateTime _hopperChartStartTime;
+  late DateTime _hopperChartEndTime;
+
+  // 辊道窑3个图表共用一个时间范围（默认最近120秒）
+  late DateTime _rollerChartStartTime;
+  late DateTime _rollerChartEndTime;
 
   // SCR设备2个图表（默认最近120秒）
   late DateTime _pumpEnergyChartStartTime;
@@ -127,7 +128,8 @@ class _DataDisplayPageState extends State<DataDisplayPage>
   void initState() {
     super.initState();
     _initializeTimeRanges();
-    _loadAllHistoryData();
+    // 首次加载时强制刷新
+    _refreshHistoryDataWithDebounce(forceRefresh: true);
   }
 
   @override
@@ -135,26 +137,51 @@ class _DataDisplayPageState extends State<DataDisplayPage>
     super.dispose();
   }
 
+  /// 页面进入时调用的刷新方法（由父组件调用）
+  /// 自动获取最近120秒历史数据，超过10秒才会真正刷新
+  void onPageEnter() {
+    _refreshHistoryDataWithDebounce();
+  }
+
+  /// 带防抖机制的历史数据刷新
+  /// [forceRefresh] 是否强制刷新（忽略防抖间隔）
+  void _refreshHistoryDataWithDebounce({bool forceRefresh = false}) {
+    final now = DateTime.now();
+
+    // 检查是否需要刷新：首次加载 或 强制刷新 或 距离上次刷新超过10秒
+    final shouldRefresh = forceRefresh ||
+        _lastRefreshTime == null ||
+        now.difference(_lastRefreshTime!) > _refreshDebounceInterval;
+
+    if (shouldRefresh) {
+      debugPrint(
+          '📊 刷新历史数据 (上次: ${_lastRefreshTime ?? "首次"}, 间隔: ${_lastRefreshTime != null ? now.difference(_lastRefreshTime!).inSeconds : 0}秒)');
+      _lastRefreshTime = now;
+
+      // 重新初始化时间范围为最近120秒
+      _initializeTimeRanges();
+
+      // 加载所有历史数据
+      _loadAllHistoryData();
+    } else {
+      final elapsed = now.difference(_lastRefreshTime!).inSeconds;
+      debugPrint(
+          '📊 跳过刷新 (距上次刷新仅 $elapsed 秒，需超过 ${_refreshDebounceInterval.inSeconds} 秒)');
+    }
+  }
+
   /// 初始化所有图表的时间范围为最近120秒
   void _initializeTimeRanges() {
     final now = DateTime.now();
     final start = now.subtract(_defaultTimeRange);
 
-    // 回转窑
-    _tempChartStartTime = start;
-    _tempChartEndTime = now;
-    _feedSpeedChartStartTime = start;
-    _feedSpeedChartEndTime = now;
-    _hopperWeightChartStartTime = start;
-    _hopperWeightChartEndTime = now;
+    // 回转窑（3个图表共用一个时间范围）
+    _hopperChartStartTime = start;
+    _hopperChartEndTime = now;
 
-    // 辊道窑
-    _rollerTempChartStartTime = start;
-    _rollerTempChartEndTime = now;
-    _rollerEnergyChartStartTime = start;
-    _rollerEnergyChartEndTime = now;
-    _rollerPowerChartStartTime = start;
-    _rollerPowerChartEndTime = now;
+    // 辊道窑（3个图表共用一个时间范围）
+    _rollerChartStartTime = start;
+    _rollerChartEndTime = now;
 
     // SCR/风机
     _pumpEnergyChartStartTime = start;
@@ -187,8 +214,8 @@ class _DataDisplayPageState extends State<DataDisplayPage>
 
     final result = await _historyService.queryHopperTemperatureHistory(
       deviceId: deviceId,
-      start: _tempChartStartTime,
-      end: _tempChartEndTime,
+      start: _hopperChartStartTime,
+      end: _hopperChartEndTime,
     );
 
     if (result.success && result.hasData) {
@@ -210,8 +237,8 @@ class _DataDisplayPageState extends State<DataDisplayPage>
 
     final result = await _historyService.queryHopperWeightHistory(
       deviceId: deviceId,
-      start: _hopperWeightChartStartTime,
-      end: _hopperWeightChartEndTime,
+      start: _hopperChartStartTime,
+      end: _hopperChartEndTime,
     );
 
     if (result.success && result.hasData) {
@@ -237,10 +264,10 @@ class _DataDisplayPageState extends State<DataDisplayPage>
 
       final zoneId = HistoryDataService.rollerZoneIds[i + 1]!;
 
-      // 温度
+      // 温度（使用统一的辊道窑时间范围）
       final tempResult = await _historyService.queryRollerTemperatureHistory(
-        start: _rollerTempChartStartTime,
-        end: _rollerTempChartEndTime,
+        start: _rollerChartStartTime,
+        end: _rollerChartEndTime,
         zone: zoneId,
       );
 
@@ -251,10 +278,10 @@ class _DataDisplayPageState extends State<DataDisplayPage>
         }
       }
 
-      // 功率
+      // 功率（使用统一的辊道窑时间范围）
       final powerResult = await _historyService.queryRollerPowerHistory(
-        start: _rollerPowerChartStartTime,
-        end: _rollerPowerChartEndTime,
+        start: _rollerChartStartTime,
+        end: _rollerChartEndTime,
         zone: zoneId,
       );
 
@@ -313,6 +340,7 @@ class _DataDisplayPageState extends State<DataDisplayPage>
   }
 
   /// 将历史数据点转换为FlSpot列表
+  /// 所有数值保留两位小数
   List<FlSpot> _convertToFlSpots(
       List<HistoryDataPoint> dataPoints, String field) {
     if (dataPoints.isEmpty) return [];
@@ -348,6 +376,9 @@ class _DataDisplayPageState extends State<DataDisplayPage>
         default:
           y = point.fields[field]?.toDouble() ?? 0;
       }
+
+      // 保留两位小数
+      y = double.parse(y.toStringAsFixed(2));
 
       return FlSpot(x, y);
     }).toList();
@@ -416,18 +447,21 @@ class _DataDisplayPageState extends State<DataDisplayPage>
               accentColor: TechColors.glowOrange,
               child: Column(
                 children: [
-                  // 历史温度曲线
+                  // 历史温度曲线（包含选择器，高度稍大）
                   Expanded(
+                    flex: 4,
                     child: _buildTemperatureChart(),
                   ),
-                  const SizedBox(height: 12),
-                  // 下料速度曲线
+                  const SizedBox(height: 8),
+                  // 下料速度曲线（无选择器）
                   Expanded(
+                    flex: 3,
                     child: _buildFeedSpeedChart(),
                   ),
-                  const SizedBox(height: 12),
-                  // 料仓重量曲线
+                  const SizedBox(height: 8),
+                  // 料仓重量曲线（无选择器）
                   Expanded(
+                    flex: 3,
                     child: _buildHopperWeightChart(),
                   ),
                 ],
@@ -497,6 +531,7 @@ class _DataDisplayPageState extends State<DataDisplayPage>
   }
 
   /// 历史温度曲线图（料仓温度）
+  /// 回转窑3个图表共用这个选择器
   Widget _buildTemperatureChart() {
     return TechLineChart(
       title: '料仓温度曲线',
@@ -510,14 +545,14 @@ class _DataDisplayPageState extends State<DataDisplayPage>
       itemColors: _hopperColors,
       itemCount: 9,
       getItemLabel: _getHopperLabel,
-      selectorLabel: '选择料仓',
+      selectorLabel: '选择回转窑',
       headerActions: [
         TimeRangeSelector(
-          startTime: _tempChartStartTime,
-          endTime: _tempChartEndTime,
-          onStartTimeTap: () => _selectChartStartTime('temp'),
-          onEndTimeTap: () => _selectChartEndTime('temp'),
-          onCancel: () => _refreshChartData('temp'),
+          startTime: _hopperChartStartTime,
+          endTime: _hopperChartEndTime,
+          onStartTimeTap: () => _selectChartStartTime('hopper'),
+          onEndTimeTap: () => _selectChartEndTime('hopper'),
+          onCancel: () => _refreshChartData('hopper'),
           accentColor: TechColors.glowOrange,
         ),
       ],
@@ -525,12 +560,14 @@ class _DataDisplayPageState extends State<DataDisplayPage>
         setState(() {
           _selectedHopperIndex = index;
         });
+        // 切换料仓时，同时刷新三个图表的数据
         _loadHopperTemperatureData();
+        _loadHopperWeightData();
       },
     );
   }
 
-  /// 下料速度曲线图
+  /// 下料速度曲线图（不显示选择器，与温度图共用选择器）
   Widget _buildFeedSpeedChart() {
     return TechLineChart(
       title: '下料速度曲线',
@@ -544,27 +581,13 @@ class _DataDisplayPageState extends State<DataDisplayPage>
       itemColors: _hopperColors,
       itemCount: 9,
       getItemLabel: _getHopperLabel,
-      selectorLabel: '选择料仓',
-      headerActions: [
-        TimeRangeSelector(
-          startTime: _feedSpeedChartStartTime,
-          endTime: _feedSpeedChartEndTime,
-          onStartTimeTap: () => _selectChartStartTime('feedSpeed'),
-          onEndTimeTap: () => _selectChartEndTime('feedSpeed'),
-          onCancel: () => _refreshChartData('feedSpeed'),
-          accentColor: TechColors.glowCyan,
-        ),
-      ],
-      onItemSelect: (index) {
-        setState(() {
-          _selectedHopperIndex = index;
-        });
-        _loadHopperWeightData();
-      },
+      selectorLabel: '选择回转窑',
+      showSelector: false, // 不显示选择器
+      onItemSelect: (index) {},
     );
   }
 
-  /// 料仓重量曲线图
+  /// 料仓重量曲线图（不显示选择器，与温度图共用选择器）
   Widget _buildHopperWeightChart() {
     return TechLineChart(
       title: '料仓重量曲线',
@@ -578,27 +601,13 @@ class _DataDisplayPageState extends State<DataDisplayPage>
       itemColors: _hopperColors,
       itemCount: 9,
       getItemLabel: _getHopperLabel,
-      selectorLabel: '选择料仓',
-      headerActions: [
-        TimeRangeSelector(
-          startTime: _hopperWeightChartStartTime,
-          endTime: _hopperWeightChartEndTime,
-          onStartTimeTap: () => _selectChartStartTime('hopperWeight'),
-          onEndTimeTap: () => _selectChartEndTime('hopperWeight'),
-          onCancel: () => _refreshChartData('hopperWeight'),
-          accentColor: TechColors.glowGreen,
-        ),
-      ],
-      onItemSelect: (index) {
-        setState(() {
-          _selectedHopperIndex = index;
-        });
-        _loadHopperWeightData();
-      },
+      selectorLabel: '选择回转窑',
+      showSelector: false, // 不显示选择器
+      onItemSelect: (index) {},
     );
   }
 
-  /// 辊道窑温度曲线图
+  /// 辊道窑温度曲线图（不显示选择器，与功率图共用选择器）
   Widget _buildRollerTemperatureChart() {
     return TechLineChart(
       title: '辊道窑温度曲线',
@@ -611,29 +620,13 @@ class _DataDisplayPageState extends State<DataDisplayPage>
       itemColors: _rollerZoneColors,
       itemCount: 6,
       getItemLabel: _getRollerZoneLabel,
-      selectorLabel: '选择温区',
-      compact: true,
-      headerActions: [
-        TimeRangeSelector(
-          startTime: _rollerTempChartStartTime,
-          endTime: _rollerTempChartEndTime,
-          onStartTimeTap: () => _selectChartStartTime('rollerTemp'),
-          onEndTimeTap: () => _selectChartEndTime('rollerTemp'),
-          onCancel: () => _refreshChartData('rollerTemp'),
-          accentColor: TechColors.glowCyan,
-          compact: true,
-        ),
-      ],
-      onItemToggle: (index) {
-        setState(() {
-          _selectedRollerZones[index] = !_selectedRollerZones[index];
-        });
-        _loadRollerData();
-      },
+      selectorLabel: '选择分区',
+      showSelector: false, // 不显示选择器
+      onItemToggle: (index) {},
     );
   }
 
-  /// 辊道窑能耗曲线图
+  /// 辊道窑能耗曲线图（不显示选择器，与功率图共用选择器）
   Widget _buildRollerEnergyChart() {
     return TechBarChart(
       title: '辊道窑能耗曲线',
@@ -646,33 +639,17 @@ class _DataDisplayPageState extends State<DataDisplayPage>
       itemColors: _rollerZoneColors,
       itemCount: 6,
       getItemLabel: _getRollerZoneLabel,
-      selectorLabel: '选择温区',
-      compact: true,
-      headerActions: [
-        TimeRangeSelector(
-          startTime: _rollerEnergyChartStartTime,
-          endTime: _rollerEnergyChartEndTime,
-          onStartTimeTap: () => _selectChartStartTime('rollerEnergy'),
-          onEndTimeTap: () => _selectChartEndTime('rollerEnergy'),
-          onCancel: () => _refreshChartData('rollerEnergy'),
-          accentColor: TechColors.glowGreen,
-          compact: true,
-        ),
-      ],
-      onItemToggle: (index) {
-        setState(() {
-          _selectedRollerZones[index] = !_selectedRollerZones[index];
-        });
-        _loadRollerData();
-      },
+      selectorLabel: '选择分区',
+      showSelector: false, // 不显示选择器
+      onItemToggle: (index) {},
     );
   }
 
-  /// 辊道窑功率曲线图
+  /// 辊道窑功率曲线图（包含选择器，3个图表共用）
   Widget _buildRollerPowerChart() {
     return TechBarChart(
       title: '辊道窑功率曲线',
-      accentColor: TechColors.glowOrange,
+      accentColor: TechColors.glowCyan,
       yAxisLabel: '功率(kW)',
       xAxisLabel: '数据点',
       xInterval: 5,
@@ -681,23 +658,22 @@ class _DataDisplayPageState extends State<DataDisplayPage>
       itemColors: _rollerZoneColors,
       itemCount: 6,
       getItemLabel: _getRollerZoneLabel,
-      selectorLabel: '选择温区',
-      compact: true,
+      selectorLabel: '选择分区',
       headerActions: [
         TimeRangeSelector(
-          startTime: _rollerPowerChartStartTime,
-          endTime: _rollerPowerChartEndTime,
-          onStartTimeTap: () => _selectChartStartTime('rollerPower'),
-          onEndTimeTap: () => _selectChartEndTime('rollerPower'),
-          onCancel: () => _refreshChartData('rollerPower'),
-          accentColor: TechColors.glowOrange,
-          compact: true,
+          startTime: _rollerChartStartTime,
+          endTime: _rollerChartEndTime,
+          onStartTimeTap: () => _selectChartStartTime('roller'),
+          onEndTimeTap: () => _selectChartEndTime('roller'),
+          onCancel: () => _refreshChartData('roller'),
+          accentColor: TechColors.glowCyan,
         ),
       ],
       onItemToggle: (index) {
         setState(() {
           _selectedRollerZones[index] = !_selectedRollerZones[index];
         });
+        // 切换温区时刷新所有辊道窑数据
         _loadRollerData();
       },
     );
@@ -740,7 +716,7 @@ class _DataDisplayPageState extends State<DataDisplayPage>
   Widget _buildFanEnergyChart() {
     return TechBarChart(
       title: '风机功率曲线',
-      accentColor: TechColors.glowOrange,
+      accentColor: TechColors.glowGreen,
       yAxisLabel: '功率(kW)',
       xAxisLabel: '数据点',
       xInterval: 5,
@@ -757,7 +733,7 @@ class _DataDisplayPageState extends State<DataDisplayPage>
           onStartTimeTap: () => _selectChartStartTime('fanEnergy'),
           onEndTimeTap: () => _selectChartEndTime('fanEnergy'),
           onCancel: () => _refreshChartData('fanEnergy'),
-          accentColor: TechColors.glowOrange,
+          accentColor: TechColors.glowGreen,
         ),
       ],
       onItemToggle: (index) {
@@ -774,22 +750,14 @@ class _DataDisplayPageState extends State<DataDisplayPage>
   /// 获取图表对应的强调色
   Color _getChartAccentColor(String chartType) {
     switch (chartType) {
-      case 'temp':
+      case 'hopper': // 回转窑3个图表统一使用
         return TechColors.glowOrange;
-      case 'feedSpeed':
+      case 'roller': // 辊道窑3个图表统一使用
         return TechColors.glowCyan;
-      case 'hopperWeight':
-        return TechColors.glowGreen;
-      case 'rollerTemp':
-        return TechColors.glowCyan;
-      case 'rollerEnergy':
-        return TechColors.glowGreen;
-      case 'rollerPower':
-        return TechColors.glowOrange;
       case 'pumpEnergy':
         return TechColors.glowGreen;
       case 'fanEnergy':
-        return TechColors.glowOrange;
+        return TechColors.glowGreen;
       default:
         return TechColors.glowCyan;
     }
@@ -798,18 +766,10 @@ class _DataDisplayPageState extends State<DataDisplayPage>
   /// 获取图表开始时间
   DateTime _getChartStartTime(String chartType) {
     switch (chartType) {
-      case 'temp':
-        return _tempChartStartTime;
-      case 'feedSpeed':
-        return _feedSpeedChartStartTime;
-      case 'hopperWeight':
-        return _hopperWeightChartStartTime;
-      case 'rollerTemp':
-        return _rollerTempChartStartTime;
-      case 'rollerEnergy':
-        return _rollerEnergyChartStartTime;
-      case 'rollerPower':
-        return _rollerPowerChartStartTime;
+      case 'hopper': // 回转窑3个图表统一使用
+        return _hopperChartStartTime;
+      case 'roller': // 辊道窑3个图表统一使用
+        return _rollerChartStartTime;
       case 'pumpEnergy':
         return _pumpEnergyChartStartTime;
       case 'fanEnergy':
@@ -822,23 +782,11 @@ class _DataDisplayPageState extends State<DataDisplayPage>
   /// 设置图表开始时间
   void _setChartStartTime(String chartType, DateTime time) {
     switch (chartType) {
-      case 'temp':
-        _tempChartStartTime = time;
+      case 'hopper': // 回转窑3个图表统一使用
+        _hopperChartStartTime = time;
         break;
-      case 'feedSpeed':
-        _feedSpeedChartStartTime = time;
-        break;
-      case 'hopperWeight':
-        _hopperWeightChartStartTime = time;
-        break;
-      case 'rollerTemp':
-        _rollerTempChartStartTime = time;
-        break;
-      case 'rollerEnergy':
-        _rollerEnergyChartStartTime = time;
-        break;
-      case 'rollerPower':
-        _rollerPowerChartStartTime = time;
+      case 'roller': // 辊道窑3个图表统一使用
+        _rollerChartStartTime = time;
         break;
       case 'pumpEnergy':
         _pumpEnergyChartStartTime = time;
@@ -852,18 +800,10 @@ class _DataDisplayPageState extends State<DataDisplayPage>
   /// 获取图表结束时间
   DateTime _getChartEndTime(String chartType) {
     switch (chartType) {
-      case 'temp':
-        return _tempChartEndTime;
-      case 'feedSpeed':
-        return _feedSpeedChartEndTime;
-      case 'hopperWeight':
-        return _hopperWeightChartEndTime;
-      case 'rollerTemp':
-        return _rollerTempChartEndTime;
-      case 'rollerEnergy':
-        return _rollerEnergyChartEndTime;
-      case 'rollerPower':
-        return _rollerPowerChartEndTime;
+      case 'hopper': // 回转窑3个图表统一使用
+        return _hopperChartEndTime;
+      case 'roller': // 辊道窑3个图表统一使用
+        return _rollerChartEndTime;
       case 'pumpEnergy':
         return _pumpEnergyChartEndTime;
       case 'fanEnergy':
@@ -876,23 +816,11 @@ class _DataDisplayPageState extends State<DataDisplayPage>
   /// 设置图表结束时间
   void _setChartEndTime(String chartType, DateTime time) {
     switch (chartType) {
-      case 'temp':
-        _tempChartEndTime = time;
+      case 'hopper': // 回转窑3个图表统一使用
+        _hopperChartEndTime = time;
         break;
-      case 'feedSpeed':
-        _feedSpeedChartEndTime = time;
-        break;
-      case 'hopperWeight':
-        _hopperWeightChartEndTime = time;
-        break;
-      case 'rollerTemp':
-        _rollerTempChartEndTime = time;
-        break;
-      case 'rollerEnergy':
-        _rollerEnergyChartEndTime = time;
-        break;
-      case 'rollerPower':
-        _rollerPowerChartEndTime = time;
+      case 'roller': // 辊道窑3个图表统一使用
+        _rollerChartEndTime = time;
         break;
       case 'pumpEnergy':
         _pumpEnergyChartEndTime = time;
@@ -1015,16 +943,15 @@ class _DataDisplayPageState extends State<DataDisplayPage>
     }
   }
 
-  /// 刷新图表数据（从API获取）
+  /// 刷新图表数据（从 API 获取）
   void _refreshChartData(String chartType) {
     // 根据图表类型刷新对应数据
-    if (chartType == 'temp') {
+    if (chartType == 'hopper') {
+      // 回转窑：同时刷新温度和称重数据
       _loadHopperTemperatureData();
-    } else if (chartType == 'feedSpeed' || chartType == 'hopperWeight') {
       _loadHopperWeightData();
-    } else if (chartType == 'rollerTemp' ||
-        chartType == 'rollerEnergy' ||
-        chartType == 'rollerPower') {
+    } else if (chartType == 'roller') {
+      // 辊道窑：刷新所有温区数据
       _loadRollerData();
     } else if (chartType == 'pumpEnergy' || chartType == 'fanEnergy') {
       _loadScrFanData();

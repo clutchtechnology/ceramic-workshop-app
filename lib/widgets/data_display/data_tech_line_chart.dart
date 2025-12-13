@@ -67,6 +67,10 @@ class TechLineChart extends StatelessWidget {
   /// 是否使用紧凑模式（更小的字体和间距）
   final bool compact;
 
+  /// 是否显示选择器（默认true）
+  /// 设置为false时不显示设备选择器和时间选择器
+  final bool showSelector;
+
   const TechLineChart({
     super.key,
     required this.title,
@@ -89,10 +93,13 @@ class TechLineChart extends StatelessWidget {
     this.onItemSelect,
     this.onItemToggle,
     this.compact = false,
+    this.showSelector = true,
   }) : assert(
-          isSingleSelect
-              ? (selectedIndex != null && onItemSelect != null)
-              : (selectedItems != null && onItemToggle != null),
+          // 当 showSelector 为 true 时才需要验证选择器参数
+          !showSelector ||
+              (isSingleSelect
+                  ? (selectedIndex != null && onItemSelect != null)
+                  : (selectedItems != null && onItemToggle != null)),
           '单选模式需要 selectedIndex 和 onItemSelect，多选模式需要 selectedItems 和 onItemToggle',
         );
 
@@ -108,8 +115,22 @@ class TechLineChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildHeader(),
-          SizedBox(height: compact ? 6 : 12),
+          // 只有当 showSelector 为 true 时才显示 header
+          if (showSelector) ...[
+            _buildHeader(),
+            SizedBox(height: compact ? 6 : 12),
+          ],
+          // Y轴标签（水平放置在左上角）
+          Padding(
+            padding: const EdgeInsets.only(left: 28, bottom: 4),
+            child: Text(
+              yAxisLabel,
+              style: const TextStyle(
+                color: TechColors.textSecondary,
+                fontSize: 10,
+              ),
+            ),
+          ),
           Expanded(
             child: _buildChart(),
           ),
@@ -246,16 +267,9 @@ class TechLineChart extends StatelessWidget {
         ),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(
-            axisNameWidget: Text(
-              yAxisLabel,
-              style: const TextStyle(
-                color: TechColors.textSecondary,
-                fontSize: 10,
-              ),
-            ),
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 40,
+              reservedSize: 32,
               interval: effectiveYInterval,
               getTitlesWidget: (value, meta) {
                 // 只显示在范围内的标签

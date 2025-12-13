@@ -19,14 +19,20 @@ class DigitalTwinPage extends StatefulWidget {
 class _DigitalTwinPageState extends State<DigitalTwinPage> {
   int _selectedNavIndex = 0;
 
+  // DataDisplayPage 的 GlobalKey，用于调用 onPageEnter 方法
+  final GlobalKey<DataDisplayPageState> _dataDisplayPageKey =
+      GlobalKey<DataDisplayPageState>();
+
   // 页面实例缓存 - 保持页面状态
   late final Widget _realtimeDashboardPage = const RealtimeDashboardPage();
-  late final Widget _dataDisplayPage = const DataDisplayPage();
+  late final Widget _dataDisplayPage;
   late final Widget _settingsPage = const SettingsPage();
 
   @override
   void initState() {
     super.initState();
+    // 初始化 DataDisplayPage 并传入 GlobalKey
+    _dataDisplayPage = DataDisplayPage(key: _dataDisplayPageKey);
     // TODO: 接入PLC数据后，在此处初始化数据连接
   }
 
@@ -34,6 +40,20 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
   void dispose() {
     // TODO: 接入PLC数据后，在此处释放数据连接
     super.dispose();
+  }
+
+  /// 导航项点击处理
+  /// 切换页面并在进入数据展示页面时自动刷新历史数据
+  void _onNavItemTap(int index) {
+    setState(() => _selectedNavIndex = index);
+
+    // 切换到数据展示页面（index=1）时，调用 onPageEnter 刷新历史数据
+    if (index == 1) {
+      // 使用 addPostFrameCallback 确保状态更新完成后再调用
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _dataDisplayPageKey.currentState?.onPageEnter();
+      });
+    }
   }
 
   @override
@@ -126,7 +146,7 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
           ...List.generate(navItems.length, (index) {
             final isSelected = _selectedNavIndex == index;
             return GestureDetector(
-              onTap: () => setState(() => _selectedNavIndex = index),
+              onTap: () => _onNavItemTap(index),
               child: Container(
                 margin: const EdgeInsets.only(right: 8),
                 padding:

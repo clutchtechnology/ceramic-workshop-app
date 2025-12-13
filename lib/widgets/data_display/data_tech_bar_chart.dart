@@ -68,6 +68,10 @@ class TechBarChart extends StatelessWidget {
   /// 是否使用紧凑模式（更小的字体和间距）
   final bool compact;
 
+  /// 是否显示选择器（默认true）
+  /// 设置为false时不显示设备选择器和时间选择器
+  final bool showSelector;
+
   const TechBarChart({
     super.key,
     required this.title,
@@ -90,10 +94,13 @@ class TechBarChart extends StatelessWidget {
     this.onItemSelect,
     this.onItemToggle,
     this.compact = false,
+    this.showSelector = true,
   }) : assert(
-          isSingleSelect
-              ? (selectedIndex != null && onItemSelect != null)
-              : (selectedItems != null && onItemToggle != null),
+          // 当 showSelector 为 true 时才需要验证选择器参数
+          !showSelector ||
+              (isSingleSelect
+                  ? (selectedIndex != null && onItemSelect != null)
+                  : (selectedItems != null && onItemToggle != null)),
           '单选模式需要 selectedIndex 和 onItemSelect，多选模式需要 selectedItems 和 onItemToggle',
         );
 
@@ -109,8 +116,22 @@ class TechBarChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildHeader(),
-          SizedBox(height: compact ? 6 : 12),
+          // 只有当 showSelector 为 true 时才显示 header
+          if (showSelector) ...[
+            _buildHeader(),
+            SizedBox(height: compact ? 6 : 12),
+          ],
+          // Y轴标签（水平放置在左上角）
+          Padding(
+            padding: const EdgeInsets.only(left: 28, bottom: 4),
+            child: Text(
+              yAxisLabel,
+              style: const TextStyle(
+                color: TechColors.textSecondary,
+                fontSize: 10,
+              ),
+            ),
+          ),
           Expanded(
             child: _buildChart(),
           ),
@@ -119,17 +140,29 @@ class TechBarChart extends StatelessWidget {
     );
   }
 
-  /// 构建图表头部 - 选择器和时间选择器靠右上角
+  /// 构建图表头部 - 选择器和时间选择器靠右上角，允许向左动态移动
   Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        // 设备选择器
-        _buildSelector(),
-        // 间距
-        if (headerActions != null) SizedBox(width: compact ? 4 : 10),
-        // 时间选择器（headerActions）
-        if (headerActions != null) ...headerActions!,
+        // 使用 Flexible 包裹，允许内容在空间不足时压缩
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 设备选择器
+                _buildSelector(),
+                // 间距
+                if (headerActions != null) const SizedBox(width: 8),
+                // 时间选择器（headerActions）
+                if (headerActions != null) ...headerActions!,
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -247,16 +280,9 @@ class TechBarChart extends StatelessWidget {
         ),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(
-            axisNameWidget: Text(
-              yAxisLabel,
-              style: const TextStyle(
-                color: TechColors.textSecondary,
-                fontSize: 10,
-              ),
-            ),
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 40,
+              reservedSize: 32,
               interval: effectiveYInterval,
               getTitlesWidget: (value, meta) {
                 // 只显示在范围内的标签

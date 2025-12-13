@@ -204,7 +204,6 @@ class _SingleSelectDropdownState extends State<SingleSelectDropdown> {
   /// 构建下拉列表
   Widget _buildDropdownList() {
     return Container(
-      constraints: const BoxConstraints(maxHeight: 200),
       decoration: BoxDecoration(
         color: TechColors.bgMedium,
         borderRadius: BorderRadius.circular(4),
@@ -217,70 +216,68 @@ class _SingleSelectDropdownState extends State<SingleSelectDropdown> {
           ),
         ],
       ),
-      child: SingleChildScrollView(
-        child: Column(
-          children: List.generate(widget.itemCount, (index) {
-            final isSelected = index == widget.selectedIndex;
-            return InkWell(
-              onTap: () {
-                widget.onItemSelect(index);
-                _removeOverlay();
-              },
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? widget.accentColor.withOpacity(0.1)
-                      : Colors.transparent,
-                  border: Border(
-                    bottom: BorderSide(
-                      color: TechColors.borderDark.withOpacity(0.3),
-                      width: 0.5,
-                    ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(widget.itemCount, (index) {
+          final isSelected = index == widget.selectedIndex;
+          return InkWell(
+            onTap: () {
+              widget.onItemSelect(index);
+              _removeOverlay();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? widget.accentColor.withOpacity(0.1)
+                    : Colors.transparent,
+                border: Border(
+                  bottom: BorderSide(
+                    color: TechColors.borderDark.withOpacity(0.3),
+                    width: 0.5,
                   ),
                 ),
-                child: Row(
-                  children: [
-                    // 颜色指示器
-                    Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: widget.itemColors[index].withOpacity(0.3),
-                        border: Border.all(
-                          color: widget.itemColors[index],
-                          width: 1.5,
-                        ),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                      child: isSelected
-                          ? Icon(
-                              Icons.check,
-                              size: 8,
-                              color: widget.itemColors[index],
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 8),
-                    // 设备名称
-                    Text(
-                      widget.getItemLabel(index),
-                      style: TextStyle(
-                        color: isSelected
-                            ? widget.itemColors[index]
-                            : TechColors.textSecondary,
-                        fontSize: 10,
-                        fontWeight:
-                            isSelected ? FontWeight.w500 : FontWeight.normal,
-                      ),
-                    ),
-                  ],
-                ),
               ),
-            );
-          }),
-        ),
+              child: Row(
+                children: [
+                  // 颜色指示器
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: widget.itemColors[index].withOpacity(0.3),
+                      border: Border.all(
+                        color: widget.itemColors[index],
+                        width: 1.5,
+                      ),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    child: isSelected
+                        ? Icon(
+                            Icons.check,
+                            size: 8,
+                            color: widget.itemColors[index],
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  // 设备名称
+                  Text(
+                    widget.getItemLabel(index),
+                    style: TextStyle(
+                      color: isSelected
+                          ? widget.itemColors[index]
+                          : TechColors.textSecondary,
+                      fontSize: 10,
+                      fontWeight:
+                          isSelected ? FontWeight.w500 : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
       ),
     );
   }
