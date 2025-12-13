@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../data_display/data_tech_line_widgets.dart';
+import '../icons/icons.dart';
 
 /// 燃气管单元组件
 /// 用于显示SCR设备中的燃气管道
@@ -58,7 +59,7 @@ class GasPipeCell extends StatelessWidget {
             right: 8,
             bottom: 8,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
               decoration: BoxDecoration(
                 color: TechColors.bgDeep.withOpacity(0.92),
                 borderRadius: BorderRadius.circular(4),
@@ -71,24 +72,37 @@ class GasPipeCell extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '实时流量: ${flowRate.toStringAsFixed(1)}m³/h',
-                    style: const TextStyle(
-                      color: TechColors.glowCyan,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      fontFamily: 'Roboto Mono',
-                    ),
+                  Row(
+                    children: [
+                      const FlowRateIcon(size: 16, color: TechColors.glowCyan),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${flowRate.toStringAsFixed(1)} m³/h',
+                        style: const TextStyle(
+                          color: TechColors.glowCyan,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          fontFamily: 'Roboto Mono',
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '累计流量: ${energyConsumption.toStringAsFixed(1)}m³',
-                    style: const TextStyle(
-                      color: TechColors.glowGreen,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      fontFamily: 'Roboto Mono',
-                    ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const TotalFlowIcon(
+                          size: 16, color: TechColors.glowGreen),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${energyConsumption.toStringAsFixed(1)} m³',
+                        style: const TextStyle(
+                          color: TechColors.glowGreen,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          fontFamily: 'Roboto Mono',
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../models/hopper_model.dart';
 import '../../providers/realtime_config_provider.dart';
 import '../data_display/data_tech_line_widgets.dart';
+import '../icons/icons.dart';
 
 /// 长回转窑单元组件
 /// 用于显示单个长回转窑设备
@@ -180,106 +181,133 @@ class RotaryKilnLongCell extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '重量: ${weight.toStringAsFixed(0)}kg',
-                          style: TextStyle(
-                            color: hopperColor,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Roboto Mono',
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            WeightIcon(color: hopperColor, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${weight.toStringAsFixed(0)}kg',
+                              style: TextStyle(
+                                color: hopperColor,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          '下料速度: ${feedRate.toStringAsFixed(1)}kg/h',
-                          style: const TextStyle(
-                            color: TechColors.glowGreen,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Roboto Mono',
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FeedRateIcon(color: TechColors.glowGreen, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${feedRate.toStringAsFixed(1)}kg/h',
+                              style: const TextStyle(
+                                color: TechColors.glowGreen,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          '能耗: ${energy.toStringAsFixed(1)}kWh',
-                          style: const TextStyle(
-                            color: TechColors.glowOrange,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Roboto Mono',
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            EnergyIcon(color: TechColors.glowOrange, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${energy.toStringAsFixed(1)}kWh',
+                              style: const TextStyle(
+                                color: TechColors.glowOrange,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
                 ),
               ),
-              // 中间温度显示 - 显示两个温度
+              // 中间温度显示 - 左右两边显示两个温度
               Positioned(
-                left: 10,
-                right: 0,
-                top: 20,
+                left: 36,
+                right: 32,
+                top: 24,
                 bottom: 0,
                 child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // 温度1
-                        Row(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisSize: MainAxisSize.max,
+                    children: [
+                      // 温度1 - 左侧
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: TechColors.bgDeep.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              '温度1:',
-                              style: TextStyle(
-                                color: tempColor1.withOpacity(0.8),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                              ),
+                            ThermometerIcon(
+                              color: tempColor1,
+                              size: 16,
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 2),
                             Text(
                               '${temperature1.toStringAsFixed(1)}°C',
                               style: TextStyle(
                                 color: tempColor1,
-                                fontSize: 11,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w700,
                                 fontFamily: 'Roboto Mono',
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 2),
-                        // 温度2
-                        Row(
+                      ),
+                      // 温度2 - 右侧
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: TechColors.bgDeep.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              '温度2:',
-                              style: TextStyle(
-                                color: tempColor2.withOpacity(0.8),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                              ),
+                            ThermometerIcon(
+                              color: tempColor2,
+                              size: 16,
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 2),
                             Text(
                               '${temperature2.toStringAsFixed(1)}°C',
                               style: TextStyle(
                                 color: tempColor2,
-                                fontSize: 11,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w700,
                                 fontFamily: 'Roboto Mono',
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),

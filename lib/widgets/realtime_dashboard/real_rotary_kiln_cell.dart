@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../models/hopper_model.dart';
 import '../../providers/realtime_config_provider.dart';
 import '../data_display/data_tech_line_widgets.dart';
+import '../icons/icons.dart';
 
 /// 回转窑单元组件
 /// 用于显示单个回转窑设备
@@ -175,34 +176,55 @@ class RotaryKilnCell extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '重量: ${weight.toStringAsFixed(1)}kg ($weightPercentageInt%)',
-                          style: TextStyle(
-                            color: hopperColor,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Roboto Mono',
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            WeightIcon(color: hopperColor, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${weight.toStringAsFixed(1)}kg ($weightPercentageInt%)',
+                              style: TextStyle(
+                                color: hopperColor,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          '下料速度: ${feedRate.toStringAsFixed(1)}kg/h',
-                          style: const TextStyle(
-                            color: TechColors.glowGreen,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Roboto Mono',
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FeedRateIcon(color: TechColors.glowGreen, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${feedRate.toStringAsFixed(1)}kg/h',
+                              style: const TextStyle(
+                                color: TechColors.glowGreen,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          '能耗: ${energy.toStringAsFixed(1)}kWh',
-                          style: const TextStyle(
-                            color: TechColors.glowOrange,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Roboto Mono',
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            EnergyIcon(color: TechColors.glowOrange, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${energy.toStringAsFixed(1)}kWh',
+                              style: const TextStyle(
+                                color: TechColors.glowOrange,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -211,24 +233,38 @@ class RotaryKilnCell extends StatelessWidget {
               ),
               // 中间温度显示
               Positioned(
-                left: 10,
+                left: -1,
                 right: 0,
-                top: 20,
+                top: 27,
                 bottom: 0,
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
+                      horizontal: 8,
+                      vertical: 4,
                     ),
-                    child: Text(
-                      '温度: ${temperature.toStringAsFixed(1)}°C',
-                      style: TextStyle(
-                        color: tempColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        fontFamily: 'Roboto Mono',
-                      ),
+                    decoration: BoxDecoration(
+                      color: TechColors.bgDeep.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ThermometerIcon(
+                          color: tempColor,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          '${temperature.toStringAsFixed(1)}°C',
+                          style: TextStyle(
+                            color: tempColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Roboto Mono',
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

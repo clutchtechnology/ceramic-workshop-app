@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../models/hopper_model.dart';
 import '../../providers/realtime_config_provider.dart';
 import '../data_display/data_tech_line_widgets.dart';
+import '../icons/icons.dart';
 
 /// 无料仓回转窑单元组件
 /// 用于显示单个无料仓回转窑设备
@@ -47,33 +48,36 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
           padding: const EdgeInsets.all(8.0),
           child: Stack(
             children: [
-              // 主图片
-              Image.asset(
-                'assets/images/rotary_kiln2.png',
-                fit: BoxFit.contain,
-                width: double.infinity,
-                height: double.infinity,
-                errorBuilder: (context, error, stackTrace) {
-                  // 图片加载失败时的占位符
-                  return Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.image_not_supported,
-                        color: TechColors.textSecondary.withOpacity(0.5),
-                        size: 32,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '回转窑 $index',
-                        style: TextStyle(
-                          color: TechColors.textSecondary,
-                          fontSize: 10,
+              // 主图片（右移20px，上移8px）
+              Transform.translate(
+                offset: const Offset(20, -8),
+                child: Image.asset(
+                  'assets/images/rotary_kiln2.png',
+                  fit: BoxFit.contain,
+                  width: double.infinity,
+                  height: double.infinity,
+                  errorBuilder: (context, error, stackTrace) {
+                    // 图片加载失败时的占位符
+                    return Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.image_not_supported,
+                          color: TechColors.textSecondary.withOpacity(0.5),
+                          size: 32,
                         ),
-                      ),
-                    ],
-                  );
-                },
+                        const SizedBox(height: 4),
+                        Text(
+                          '回转窑 $index',
+                          style: TextStyle(
+                            color: TechColors.textSecondary,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
               // 数据标签（左侧30%位置，垂直居中）
               Positioned(
@@ -82,7 +86,7 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                 top: 0,
                 bottom: 0,
                 child: Align(
-                  alignment: const Alignment(0.1, -1), // 左侧30%位置，垂直居中
+                  alignment: const Alignment(0.1, -0.7), // 下移20px
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -96,15 +100,16 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                         width: 1,
                       ),
                     ),
-                    child: Column(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        EnergyIcon(color: TechColors.glowOrange, size: 16),
+                        const SizedBox(width: 4),
                         Text(
-                          '能耗: ${energy.toStringAsFixed(1)}kWh',
+                          '${energy.toStringAsFixed(1)}kWh',
                           style: const TextStyle(
                             color: TechColors.glowOrange,
-                            fontSize: 11,
+                            fontSize: 13,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -116,24 +121,38 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
               ),
               // 中间温度显示
               Positioned(
-                left: 10,
+                left: -1,
                 right: 0,
                 top: 20,
                 bottom: 0,
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
+                      horizontal: 8,
+                      vertical: 4,
                     ),
-                    child: Text(
-                      '温度: ${temperature.toStringAsFixed(1)}°C',
-                      style: TextStyle(
-                        color: tempColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        fontFamily: 'Roboto Mono',
-                      ),
+                    decoration: BoxDecoration(
+                      color: TechColors.bgDeep.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ThermometerIcon(
+                          color: tempColor,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          '${temperature.toStringAsFixed(1)}°C',
+                          style: TextStyle(
+                            color: tempColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Roboto Mono',
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

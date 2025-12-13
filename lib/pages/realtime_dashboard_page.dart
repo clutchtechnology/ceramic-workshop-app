@@ -9,6 +9,7 @@ import '../services/hopper_service.dart';
 import '../services/roller_kiln_service.dart';
 import '../services/scr_fan_service.dart';
 import '../widgets/data_display/data_tech_line_widgets.dart';
+import '../widgets/icons/icons.dart';
 import '../widgets/realtime_dashboard/real_rotary_kiln_cell.dart';
 import '../widgets/realtime_dashboard/real_rotary_kiln_no_hopper_cell.dart';
 import '../widgets/realtime_dashboard/real_rotary_kiln_long_cell.dart';
@@ -99,25 +100,29 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
           '✓ 辊道窑数据: ${rollerData != null ? rollerData.zones.length : 0} 个温区');
       debugPrint('✓ SCR设备: ${scrFanData?.scr.total ?? 0} 个');
       debugPrint('✓ 风机设备: ${scrFanData?.fan.total ?? 0} 个');
-      
+
       // 调试: 打印风机和SCR的具体数值
       if (scrFanData != null) {
         for (var i = 0; i < scrFanData.fan.devices.length; i++) {
           final fan = scrFanData.fan.devices[i];
-          debugPrint('  📊 风机${i + 1}: Pt=${fan.elec?.pt.toStringAsFixed(2)}, ImpEp=${fan.elec?.impEp.toStringAsFixed(2)}');
+          debugPrint(
+              '  📊 风机${i + 1}: Pt=${fan.elec?.pt.toStringAsFixed(2)}, ImpEp=${fan.elec?.impEp.toStringAsFixed(2)}');
         }
         for (var i = 0; i < scrFanData.scr.devices.length; i++) {
           final scr = scrFanData.scr.devices[i];
-          debugPrint('  📊 SCR${i + 1}: Pt=${scr.elec?.pt.toStringAsFixed(2)}, flow=${scr.gas?.flowRate.toStringAsFixed(2)}');
+          debugPrint(
+              '  📊 SCR${i + 1}: Pt=${scr.elec?.pt.toStringAsFixed(2)}, flow=${scr.gas?.flowRate.toStringAsFixed(2)}');
         }
       }
-      
+
       // 调试: 打印辊道窑的温度数据
       if (rollerData != null) {
-        final temps = rollerData.zones.map((z) => '${z.zoneName}:${z.temperature.toStringAsFixed(0)}°C').join(', ');
+        final temps = rollerData.zones
+            .map((z) => '${z.zoneName}:${z.temperature.toStringAsFixed(0)}°C')
+            .join(', ');
         debugPrint('  🌡️ 辊道窑温度: $temps');
       }
-      
+
       debugPrint('=== 数据获取完成 ===');
 
       if (mounted) {
@@ -465,7 +470,7 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
               left: 0,
               right: 0,
               child: SizedBox(
-                height: 70,
+                height: 80,
                 child: Row(
                   children: _rollerKilnData?.zones.asMap().entries.map((entry) {
                         final index = entry.key;
@@ -517,24 +522,18 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: TechColors.bgDeep.withOpacity(0.92),
+                  color: TechColors.bgDeep.withOpacity(0.85),
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(
-                    color: TechColors.glowOrange.withOpacity(0.5),
+                    color: TechColors.glowCyan.withOpacity(0.4),
                     width: 1,
                   ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      '总能耗: ',
-                      style: TextStyle(
-                        color: TechColors.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    EnergyIcon(color: TechColors.glowOrange, size: 16),
+                    const SizedBox(width: 4),
                     Text(
                       _rollerKilnData != null
                           ? '${totalEnergy.toStringAsFixed(1)}kWh'
@@ -580,7 +579,7 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
         color: TechColors.bgDeep.withOpacity(0.85),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(
-          color: TechColors.glowGreen.withOpacity(0.4),
+          color: TechColors.glowCyan.withOpacity(0.4),
           width: 1,
         ),
       ),
@@ -588,34 +587,51 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            zone,
-            style: const TextStyle(
-              color: TechColors.glowGreen,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              fontFamily: 'Roboto Mono',
+          Padding(
+            padding: const EdgeInsets.only(left: 2),
+            child: Text(
+              zone,
+              style: const TextStyle(
+                color: TechColors.glowGreen,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Roboto Mono',
+              ),
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            '温度: $temperature',
-            style: TextStyle(
-              color: tempColor,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              fontFamily: 'Roboto Mono',
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ThermometerIcon(color: tempColor, size: 14),
+              const SizedBox(width: 3),
+              Text(
+                temperature,
+                style: TextStyle(
+                  color: tempColor,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Roboto Mono',
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 2),
-          Text(
-            '能耗: $power',
-            style: const TextStyle(
-              color: TechColors.glowOrange,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              fontFamily: 'Roboto Mono',
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              EnergyIcon(color: TechColors.glowOrange, size: 14),
+              const SizedBox(width: 3),
+              Text(
+                power,
+                style: const TextStyle(
+                  color: TechColors.glowOrange,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Roboto Mono',
+                ),
+              ),
+            ],
           ),
         ],
       ),

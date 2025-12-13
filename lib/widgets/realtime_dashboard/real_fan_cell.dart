@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../data_display/data_tech_line_widgets.dart';
+import '../icons/icons.dart';
 
 /// 风机单元组件
 /// 用于显示单个风机设备
@@ -82,24 +83,38 @@ class FanCell extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '功率: ${power.toStringAsFixed(1)}kW',
-                          style: const TextStyle(
-                            color: TechColors.glowCyan,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Roboto Mono',
-                          ),
+                        Row(
+                          children: [
+                            const PowerIcon(
+                                size: 16, color: TechColors.glowCyan),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${power.toStringAsFixed(1)} kW',
+                              style: const TextStyle(
+                                color: TechColors.glowCyan,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '能耗: ${cumulativeEnergy.toStringAsFixed(1)}kWh',
-                          style: const TextStyle(
-                            color: TechColors.glowOrange,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Roboto Mono',
-                          ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const EnergyIcon(
+                                size: 16, color: TechColors.glowOrange),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${cumulativeEnergy.toStringAsFixed(1)} kWh',
+                              style: const TextStyle(
+                                color: TechColors.glowOrange,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

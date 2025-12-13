@@ -21,7 +21,7 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
   void initState() {
     super.initState();
     _checkHealth();
-    _timer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
       _checkHealth();
     });
   }
@@ -34,7 +34,7 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
 
   Future<void> _checkHealth() async {
     final client = ApiClient();
-    
+
     // Check System Health
     try {
       await client.get(Api.health);
@@ -64,11 +64,11 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _buildStatusIndicator('SYS', _isSystemHealthy),
+        _buildStatusIndicator('服务', _isSystemHealthy),
         const SizedBox(width: 8),
         _buildStatusIndicator('PLC', _isPlcHealthy),
         const SizedBox(width: 8),
-        _buildStatusIndicator('DB', _isDbHealthy),
+        _buildStatusIndicator('数据库', _isDbHealthy),
       ],
     );
   }

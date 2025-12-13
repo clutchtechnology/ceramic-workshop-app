@@ -110,7 +110,7 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
                   colors: [TechColors.glowCyan, TechColors.glowCyanLight],
                 ).createShader(bounds),
                 child: const Text(
-                  'Ceramic Workshop Digital Twin',
+                  '英格瓷磨料车间',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 18,
