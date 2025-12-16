@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 import '../widgets/data_display/data_tech_line_widgets.dart';
 import '../widgets/settings/realtime_data_settings_widget.dart';
 import '../providers/backend_config_provider.dart';
@@ -92,73 +93,168 @@ class _SettingsPageState extends State<SettingsPage> {
         title: '配置菜单',
         accentColor: TechColors.glowCyan,
         child: Column(
-          children: List.generate(sections.length, (index) {
-            final section = sections[index];
-            final isSelected = _selectedSection == index;
+          children: [
+            // 菜单项列表
+            ...List.generate(sections.length, (index) {
+              final section = sections[index];
+              final isSelected = _selectedSection == index;
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    setState(() {
-                      _selectedSection = index;
-                      _connectionTestResult = null;
-                      _connectionTestSuccess = null;
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? TechColors.glowCyan.withOpacity(0.15)
-                          : TechColors.bgMedium.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _selectedSection = index;
+                        _connectionTestResult = null;
+                        _connectionTestSuccess = null;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
                         color: isSelected
-                            ? TechColors.glowCyan.withOpacity(0.5)
-                            : TechColors.borderDark,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          section['icon'] as IconData,
-                          size: 20,
+                            ? TechColors.glowCyan.withOpacity(0.15)
+                            : TechColors.bgMedium.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
                           color: isSelected
-                              ? TechColors.glowCyan
-                              : TechColors.textSecondary,
+                              ? TechColors.glowCyan.withOpacity(0.5)
+                              : TechColors.borderDark,
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            section['label'] as String,
-                            style: TextStyle(
-                              color: isSelected
-                                  ? TechColors.glowCyan
-                                  : TechColors.textPrimary,
-                              fontSize: 13,
-                              fontWeight: isSelected
-                                  ? FontWeight.w500
-                                  : FontWeight.w400,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            section['icon'] as IconData,
+                            size: 20,
+                            color: isSelected
+                                ? TechColors.glowCyan
+                                : TechColors.textSecondary,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              section['label'] as String,
+                              style: TextStyle(
+                                color: isSelected
+                                    ? TechColors.glowCyan
+                                    : TechColors.textPrimary,
+                                fontSize: 13,
+                                fontWeight: isSelected
+                                    ? FontWeight.w500
+                                    : FontWeight.w400,
+                              ),
                             ),
                           ),
-                        ),
-                        if (isSelected)
-                          Icon(
-                            Icons.chevron_right,
-                            size: 18,
-                            color: TechColors.glowCyan,
-                          ),
-                      ],
+                          if (isSelected)
+                            Icon(
+                              Icons.chevron_right,
+                              size: 18,
+                              color: TechColors.glowCyan,
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
+              );
+            }),
+            // 弹性空间
+            const Spacer(),
+            // 分隔线
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              height: 1,
+              color: TechColors.borderDark,
+            ),
+            // 窗口控制按钮
+            _buildWindowControlButtons(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 窗口控制按钮（退出程序）
+  Widget _buildWindowControlButtons() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () async {
+          // 显示确认对话框
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: TechColors.bgDark,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(
+                  color: TechColors.statusAlarm.withOpacity(0.5),
+                ),
               ),
-            );
-          }),
+              title: const Text(
+                '确认关闭',
+                style: TextStyle(color: TechColors.textPrimary),
+              ),
+              content: const Text(
+                '确定要关闭应用程序吗？',
+                style: TextStyle(color: TechColors.textSecondary),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text(
+                    '取消',
+                    style: TextStyle(color: TechColors.textSecondary),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: TechColors.statusAlarm.withOpacity(0.2),
+                    foregroundColor: TechColors.statusAlarm,
+                  ),
+                  child: const Text('确认关闭'),
+                ),
+              ],
+            ),
+          );
+          if (confirmed == true) {
+            await windowManager.close();
+          }
+        },
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: TechColors.statusAlarm.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: TechColors.statusAlarm.withOpacity(0.3),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.close,
+                size: 20,
+                color: TechColors.statusAlarm,
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  '退出程序',
+                  style: TextStyle(
+                    color: TechColors.statusAlarm,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -312,6 +408,7 @@ class _SettingsPageState extends State<SettingsPage> {
             _buildInfoRow('Rack', plcConfig.rack.toString(), Icons.view_module),
             _buildInfoRow('Slot', plcConfig.slot.toString(), Icons.memory),
             _buildInfoRow('超时时间', '${plcConfig.timeoutMs} ms', Icons.timer),
+            _buildInfoRow('轮询间隔', '${plcConfig.pollInterval} 秒', Icons.update),
           ],
         ),
         const SizedBox(height: 24),
@@ -332,14 +429,6 @@ class _SettingsPageState extends State<SettingsPage> {
           controller: _plcIpController,
           icon: Icons.router,
           hint: '例: 192.168.50.223',
-        ),
-        const SizedBox(height: 16),
-        _buildConfigField(
-          label: '轮询间隔 (秒)',
-          controller: _plcPollIntervalController,
-          icon: Icons.update,
-          hint: '例: 5',
-          isNumber: true,
         ),
         const SizedBox(height: 24),
 

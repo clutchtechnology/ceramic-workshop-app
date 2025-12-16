@@ -53,37 +53,132 @@ class HistoryDataService {
   // 动态聚合间隔计算
   // ============================================================
 
+  /// 目标数据点数（保持图表显示效果一致）
+  static const int _targetPoints = 120;
+
+  /// 可接受的数据点范围
+  static const int _minPoints = 60;
+  static const int _maxPoints = 200;
+
+  /// 有效的聚合间隔选项（秒）
+  /// InfluxDB 支持的常用间隔值
+  static const List<int> _validIntervals = [
+    5, // 5s - 原始精度
+    10, // 10s
+    15, // 15s
+    30, // 30s
+    60, // 1m
+    120, // 2m
+    180, // 3m
+    300, // 5m
+    600, // 10m
+    900, // 15m
+    1800, // 30m
+    3600, // 1h
+    7200, // 2h
+    14400, // 4h
+    21600, // 6h
+    43200, // 12h
+    86400, // 1d
+    172800, // 2d
+    259200, // 3d
+    604800, // 7d (1周)
+    1209600, // 14d (2周)
+    2592000, // 30d (1月)
+  ];
+
   /// 根据时间范围计算最佳聚合间隔
   ///
-  /// 规则：
-  /// - < 2分钟：5s（原始精度）
-  /// - 2-10分钟：10s
-  /// - 10-30分钟：30s
-  /// - 30分钟-2小时：1m
-  /// - 2-6小时：5m
-  /// - 6-24小时：15m
-  /// - 1-7天：1h
-  /// - > 7天：6h
+  /// 核心逻辑：选择能让数据点数最接近目标值(120)的聚合间隔
+  /// 这样无论时间范围多大，返回的数据点数都相对一致
+  ///
+  /// 示例：
+  /// - 2分钟 → 5s → ~24点 (短时间保持原始精度)
+  /// - 10分钟 → 5s → 120点
+  /// - 1小时 → 30s → 120点
+  /// - 6小时 → 3m → 120点
+  /// - 24小时 → 12m (720s) → ~120点 → 取10m → 144点
+  /// - 7天 → 1h → 168点
   static String calculateAggregateInterval(DateTime start, DateTime end) {
     final duration = end.difference(start);
-    final minutes = duration.inMinutes;
+    final totalSeconds = duration.inSeconds;
 
-    if (minutes < 2) {
-      return '5s'; // 原始数据
-    } else if (minutes < 10) {
-      return '10s';
-    } else if (minutes < 30) {
-      return '30s';
-    } else if (minutes < 120) {
-      return '1m';
-    } else if (minutes < 360) {
-      return '5m';
-    } else if (minutes < 1440) {
-      return '15m';
-    } else if (minutes < 10080) {
-      return '1h';
+    // 特殊情况：时间范围太短，直接返回原始精度
+    if (totalSeconds <= 0) {
+      return '5s';
+    }
+
+    // 计算理想的聚合间隔（秒）
+    final idealIntervalSeconds = totalSeconds / _targetPoints;
+
+    // 找到最佳的有效间隔
+    int bestInterval = _validIntervals[0];
+    double minDiff = double.infinity;
+
+    for (final interval in _validIntervals) {
+      final estimatedPoints = totalSeconds / interval;
+
+      // 优先选择在合理范围内且最接近目标的间隔
+      if (estimatedPoints >= _minPoints && estimatedPoints <= _maxPoints) {
+        final diff = (estimatedPoints - _targetPoints).abs();
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestInterval = interval;
+        }
+      }
+    }
+
+    // 如果没有找到合理范围内的，选择最接近理想值的间隔
+    if (minDiff == double.infinity) {
+      minDiff = double.infinity;
+      for (final interval in _validIntervals) {
+        final diff = (interval - idealIntervalSeconds).abs();
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestInterval = interval;
+        }
+      }
+    }
+
+    return _formatInterval(bestInterval);
+  }
+
+  /// 将秒数格式化为 InfluxDB 支持的间隔字符串
+  static String _formatInterval(int seconds) {
+    if (seconds < 60) {
+      return '${seconds}s';
+    } else if (seconds < 3600) {
+      return '${seconds ~/ 60}m';
+    } else if (seconds < 86400) {
+      return '${seconds ~/ 3600}h';
     } else {
-      return '6h';
+      return '${seconds ~/ 86400}d';
+    }
+  }
+
+  /// 获取聚合间隔的预估数据点数（用于调试或UI显示）
+  static int getEstimatedPoints(DateTime start, DateTime end) {
+    final totalSeconds = end.difference(start).inSeconds;
+    final interval = calculateAggregateInterval(start, end);
+    final intervalSeconds = _parseIntervalToSeconds(interval);
+    return (totalSeconds / intervalSeconds).round();
+  }
+
+  /// 将间隔字符串解析为秒数
+  static int _parseIntervalToSeconds(String interval) {
+    final value = int.tryParse(interval.substring(0, interval.length - 1)) ?? 1;
+    final unit = interval[interval.length - 1];
+    switch (unit) {
+      case 's':
+        return value;
+      case 'm':
+        return value * 60;
+      case 'h':
+        return value * 3600;
+      case 'd':
+        return value * 86400;
+      default:
+        return value;
     }
   }
 

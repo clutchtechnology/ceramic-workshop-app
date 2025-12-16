@@ -214,73 +214,58 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
         title: '回转窑监控',
         accentColor: TechColors.glowOrange,
         // 添加刷新按钮到标题栏
-        titleAction: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '已获取: ${_hopperData.length}/9',
-              style: TextStyle(
-                color: TechColors.textSecondary,
-                fontSize: 12,
-                fontFamily: 'Roboto Mono',
+        titleAction: InkWell(
+          onTap: _isRefreshing ? null : _fetchData,
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: _isRefreshing
+                  ? TechColors.bgMedium
+                  : TechColors.glowOrange.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: _isRefreshing
+                    ? TechColors.borderDark
+                    : TechColors.glowOrange,
+                width: 1,
               ),
             ),
-            const SizedBox(width: 12),
-            InkWell(
-              onTap: _isRefreshing ? null : _fetchData,
-              borderRadius: BorderRadius.circular(4),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: _isRefreshing
-                      ? TechColors.bgMedium
-                      : TechColors.glowOrange.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: _isRefreshing
-                        ? TechColors.borderDark
-                        : TechColors.glowOrange,
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_isRefreshing)
-                      SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            TechColors.glowOrange,
-                          ),
-                        ),
-                      )
-                    else
-                      Icon(
-                        Icons.refresh,
-                        size: 16,
-                        color: TechColors.glowOrange,
-                      ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _isRefreshing ? '刷新中...' : '刷新数据',
-                      style: TextStyle(
-                        color: _isRefreshing
-                            ? TechColors.textSecondary
-                            : TechColors.glowOrange,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'Roboto Mono',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_isRefreshing)
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        TechColors.glowOrange,
                       ),
                     ),
-                  ],
+                  )
+                else
+                  Icon(
+                    Icons.refresh,
+                    size: 16,
+                    color: TechColors.glowOrange,
+                  ),
+                const SizedBox(width: 6),
+                Text(
+                  _isRefreshing ? '刷新中...' : '刷新数据',
+                  style: TextStyle(
+                    color: _isRefreshing
+                        ? TechColors.textSecondary
+                        : TechColors.glowOrange,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Roboto Mono',
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.all(8.0),
@@ -504,9 +489,10 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                             ),
                             child: _buildRollerKilnDataCard(
                               '区域 ${index + 1}',
-                              '--°C',
-                              '--kW',
+                              '0°C',
+                              '0kWh',
                               zoneIndex: index + 1,
+                              temperatureValue: 0.0,
                             ),
                           ),
                         ),
@@ -537,7 +523,7 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                     Text(
                       _rollerKilnData != null
                           ? '${totalEnergy.toStringAsFixed(1)}kWh'
-                          : '--kWh',
+                          : '0.0kWh',
                       style: TextStyle(
                         color: TechColors.glowOrange,
                         fontSize: 14,

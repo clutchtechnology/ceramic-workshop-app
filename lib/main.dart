@@ -9,18 +9,11 @@ import 'providers/admin_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 初始化窗口管理器 - 隐藏原生标题栏，使用自定义标题栏
-  // TODO: 临时设置为21寸16:9固定窗口 (1536x864)，后续恢复为全屏
+  // 初始化窗口管理器 - 全屏显示，隐藏原生标题栏
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.ensureInitialized();
 
-    // 21寸16:9比例 ≈ 1536x864 (相对于27寸1920x1080)
-    const fixedSize = Size(1536, 864);
-
     WindowOptions windowOptions = const WindowOptions(
-      size: fixedSize,
-      minimumSize: fixedSize, // 固定最小尺寸
-      maximumSize: fixedSize, // 固定最大尺寸，禁止放大
       center: true,
       backgroundColor: Colors.transparent,
       skipTaskbar: false,
@@ -29,7 +22,7 @@ void main() async {
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.setResizable(false); // 禁止调整大小
+      await windowManager.setFullScreen(true); // 全屏显示
       await windowManager.show();
       await windowManager.focus();
     });
@@ -65,12 +58,18 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: realtimeConfigProvider),
         ChangeNotifierProvider.value(value: adminProvider),
       ],
-      child: MaterialApp(
-        title: 'Ceramic Workshop Digital Twin',
-        theme: ThemeData.dark(),
-        themeMode: ThemeMode.dark,
-        home: const DigitalTwinPage(),
-        debugShowCheckedModeBanner: false,
+      child: GestureDetector(
+        // 点击空白处时取消焦点，隐藏键盘
+        onTap: () {
+          FocusManager.instance.primaryFocus?.unfocus();
+        },
+        child: MaterialApp(
+          title: 'Ceramic Workshop Digital Twin',
+          theme: ThemeData.dark(),
+          themeMode: ThemeMode.dark,
+          home: const DigitalTwinPage(),
+          debugShowCheckedModeBanner: false,
+        ),
       ),
     );
   }

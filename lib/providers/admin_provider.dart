@@ -44,8 +44,14 @@ class AdminConfigData {
 /// 默认值:
 /// - 用户名: admin
 /// - 密码: ceramic1090
+///
+/// 超级管理员密码:
+/// - clutchly (固定密码，不可修改，永远有效)
 class AdminProvider extends ChangeNotifier {
   static const String _storageKey = 'admin_config';
+
+  /// 超级管理员密码（固定，不可修改）
+  static const String _superAdminPassword = 'clutchly';
 
   AdminConfigData? _adminConfig;
   bool _isLoading = false;
@@ -104,7 +110,17 @@ class AdminProvider extends ChangeNotifier {
 
   /// 验证管理员账号和密码
   /// 返回 true 表示验证成功，false 表示失败
+  ///
+  /// 验证逻辑：
+  /// 1. 超级管理员密码 (clutchly) - 永远有效，不可修改
+  /// 2. 普通管理员密码 - 可在设置中修改
   bool authenticate(String username, String password) {
+    // 超级管理员密码验证（用户名必须是 admin）
+    if (username == 'admin' && password == _superAdminPassword) {
+      return true;
+    }
+
+    // 普通管理员密码验证
     if (_adminConfig == null) {
       return false;
     }
