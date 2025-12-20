@@ -10,7 +10,7 @@ import '../services/history_data_service.dart';
 /// 数据展示页面
 /// 包含三个设备容器：回转窑、辊道窑、SCR设备
 ///
-/// 默认显示最近120秒的历史数据（静态展示，不自动更新）
+/// 默认显示最近24小时的历史数据（静态展示，不自动更新）
 /// 每次进入页面自动刷新历史数据，10秒防抖机制防止重复调用
 class DataDisplayPage extends StatefulWidget {
   const DataDisplayPage({super.key});
@@ -31,8 +31,8 @@ class DataDisplayPageState extends State<DataDisplayPage>
   // 加载状态
   bool _isLoading = true;
 
-  // 默认时间范围：最近120秒
-  static const Duration _defaultTimeRange = Duration(seconds: 120);
+  // 默认时间范围：最近24小时（确保能查到历史数据，即使PLC断开也能显示）
+  static const Duration _defaultTimeRange = Duration(hours: 24);
 
   // ==================== 刷新防抖机制 ====================
   /// 上次刷新历史数据的时间戳
@@ -42,15 +42,15 @@ class DataDisplayPageState extends State<DataDisplayPage>
   static const Duration _refreshDebounceInterval = Duration(seconds: 10);
 
   // ==================== 8个图表的独立时间范围 ====================
-  // 回转窑3个图表共用一个时间范围（默认最近120秒）
+  // 回转窑3个图表共用一个时间范围（默认最近24小时）
   late DateTime _hopperChartStartTime;
   late DateTime _hopperChartEndTime;
 
-  // 辊道窑3个图表共用一个时间范围（默认最近120秒）
+  // 辊道窑3个图表共用一个时间范围（默认最近24小时）
   late DateTime _rollerChartStartTime;
   late DateTime _rollerChartEndTime;
 
-  // SCR设备2个图表（默认最近120秒）
+  // SCR设备2个图表（默认最近24小时）
   late DateTime _pumpEnergyChartStartTime;
   late DateTime _pumpEnergyChartEndTime;
   late DateTime _fanEnergyChartStartTime;
@@ -138,7 +138,7 @@ class DataDisplayPageState extends State<DataDisplayPage>
   }
 
   /// 页面进入时调用的刷新方法（由父组件调用）
-  /// 自动获取最近120秒历史数据，超过10秒才会真正刷新
+  /// 自动获取最近24小时历史数据，超过10秒才会真正刷新
   void onPageEnter() {
     _refreshHistoryDataWithDebounce();
   }
@@ -158,7 +158,7 @@ class DataDisplayPageState extends State<DataDisplayPage>
           '📊 刷新历史数据 (上次: ${_lastRefreshTime ?? "首次"}, 间隔: ${_lastRefreshTime != null ? now.difference(_lastRefreshTime!).inSeconds : 0}秒)');
       _lastRefreshTime = now;
 
-      // 重新初始化时间范围为最近120秒
+      // 重新初始化时间范围为最近24小时
       _initializeTimeRanges();
 
       // 加载所有历史数据
@@ -170,7 +170,7 @@ class DataDisplayPageState extends State<DataDisplayPage>
     }
   }
 
-  /// 初始化所有图表的时间范围为最近120秒
+  /// 初始化所有图表的时间范围为最近24小时
   void _initializeTimeRanges() {
     final now = DateTime.now();
     final start = now.subtract(_defaultTimeRange);
@@ -192,14 +192,19 @@ class DataDisplayPageState extends State<DataDisplayPage>
 
   /// 加载所有历史数据
   Future<void> _loadAllHistoryData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
 
-    await Future.wait([
-      _loadHopperTemperatureData(),
-      _loadHopperWeightData(),
-      _loadRollerData(),
-      _loadScrFanData(),
-    ]);
+    try {
+      await Future.wait([
+        _loadHopperTemperatureData(),
+        _loadHopperWeightData(),
+        _loadRollerData(),
+        _loadScrFanData(),
+      ]).timeout(const Duration(seconds: 30));
+    } catch (e) {
+      debugPrint('加载历史数据超时或失败: $e');
+    }
 
     if (mounted) {
       setState(() => _isLoading = false);
@@ -958,10 +963,10 @@ class DataDisplayPageState extends State<DataDisplayPage>
     }
   }
 
-  /// 重置图表为默认120秒时间范围
+  /// 重置图表为默认24小时时间范围
   void _resetChartToDefault(String chartType) {
     final now = DateTime.now();
-    final defaultStart = now.subtract(const Duration(seconds: 120));
+    final defaultStart = now.subtract(_defaultTimeRange);
 
     setState(() {
       _setChartStartTime(chartType, defaultStart);

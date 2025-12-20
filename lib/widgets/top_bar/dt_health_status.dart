@@ -22,7 +22,11 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
     super.initState();
     _checkHealth();
     _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
-      _checkHealth();
+      try {
+        _checkHealth();
+      } catch (e) {
+        // 忽略异常，保持定时器运行
+      }
     });
   }
 

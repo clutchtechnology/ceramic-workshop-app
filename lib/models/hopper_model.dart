@@ -99,33 +99,27 @@ class TemperatureSensor {
   }
 }
 
+/// 电表数据模型 (精简版 - 只保留4个关键字段)
+/// 后端只存储: Pt, ImpEp, Ua_0, I_0 (都除以10)
 class ElectricityMeter {
-  final double pt; // Active Power
-  final double impEp; // Active Energy
-  final List<double> ua; // Voltages
-  final List<double> i; // Currents
+  final double pt; // 总有功功率 (kW)
+  final double impEp; // 正向有功总电能 (kWh)
+  final double voltage; // A相电压 (V) - 只保留A相
+  final double current; // A相电流 (A) - 只保留A相
 
   ElectricityMeter({
     required this.pt,
     required this.impEp,
-    required this.ua,
-    required this.i,
+    required this.voltage,
+    required this.current,
   });
 
   factory ElectricityMeter.fromJson(Map<String, dynamic> json) {
     return ElectricityMeter(
       pt: (json['Pt'] as num?)?.toDouble() ?? 0.0,
       impEp: (json['ImpEp'] as num?)?.toDouble() ?? 0.0,
-      ua: [
-        (json['Ua_0'] as num?)?.toDouble() ?? 0.0,
-        (json['Ua_1'] as num?)?.toDouble() ?? 0.0,
-        (json['Ua_2'] as num?)?.toDouble() ?? 0.0,
-      ],
-      i: [
-        (json['I_0'] as num?)?.toDouble() ?? 0.0,
-        (json['I_1'] as num?)?.toDouble() ?? 0.0,
-        (json['I_2'] as num?)?.toDouble() ?? 0.0,
-      ],
+      voltage: (json['Ua_0'] as num?)?.toDouble() ?? 0.0,
+      current: (json['I_0'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }

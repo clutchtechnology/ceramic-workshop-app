@@ -89,12 +89,12 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                   alignment: const Alignment(0.1, -0.7), // 下移20px
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 6,
+                      horizontal: 12, // 8 -> 12
+                      vertical: 9, // 6 -> 9
                     ),
                     decoration: BoxDecoration(
                       color: TechColors.bgDeep.withOpacity(0.85),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(6), // 4 -> 6
                       border: Border.all(
                         color: TechColors.glowCyan.withOpacity(0.4),
                         width: 1,
@@ -103,13 +103,13 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        EnergyIcon(color: TechColors.glowOrange, size: 16),
+                        EnergyIcon(color: TechColors.glowOrange, size: 24),
                         const SizedBox(width: 4),
                         Text(
                           '${energy.toStringAsFixed(1)}kWh',
                           style: const TextStyle(
                             color: TechColors.glowOrange,
-                            fontSize: 13,
+                            fontSize: 19.5,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -128,26 +128,26 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                      horizontal: 12, // 8 -> 12
+                      vertical: 6, // 4 -> 6
                     ),
                     decoration: BoxDecoration(
                       color: TechColors.bgDeep.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(6), // 4 -> 6
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         ThermometerIcon(
                           color: tempColor,
-                          size: 16,
+                          size: 24,
                         ),
                         const SizedBox(width: 2),
                         Text(
                           '${temperature.toStringAsFixed(1)}°C',
                           style: TextStyle(
                             color: tempColor,
-                            fontSize: 13,
+                            fontSize: 19.5,
                             fontWeight: FontWeight.w700,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -178,7 +178,7 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                     '窑 $index',
                     style: const TextStyle(
                       color: TechColors.glowOrange,
-                      fontSize: 10,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                     ),
                   ),

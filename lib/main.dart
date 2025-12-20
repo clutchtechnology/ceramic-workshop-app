@@ -1,16 +1,52 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'pages/top_bar.dart';
 import 'providers/realtime_config_provider.dart';
 import 'providers/admin_provider.dart';
+import 'utils/app_logger.dart';
+import 'api/index.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  // 捕获所有未处理的异步错误
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
+    // 初始化日志系统
+    await logger.initialize();
+    await logger.info('应用程序启动中...');
+
+    // 捕获 Flutter 框架错误
+    FlutterError.onError = (FlutterErrorDetails details) async {
+      await logger.fatal(
+        'Flutter框架错误',
+        details.exception,
+        details.stack,
+      );
+      // 在 Release 模式下也显示错误（避免静默崩溃）
+      FlutterError.presentError(details);
+    };
+
+    // 捕获平台错误
+    PlatformDispatcher.instance.onError = (error, stack) {
+      logger.fatal('平台错误', error, stack);
+      return true; // 返回 true 表示已处理
+    };
+
+    await _initializeApp();
+  }, (error, stack) async {
+    // 捕获 Zone 外的异步错误
+    await logger.fatal('未捕获的异步错误', error, stack);
+  });
+}
+
+Future<void> _initializeApp() async {
   // 初始化窗口管理器 - 全屏显示，隐藏原生标题栏
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    await logger.info('初始化窗口管理器...');
     await windowManager.ensureInitialized();
 
     WindowOptions windowOptions = const WindowOptions(
@@ -25,15 +61,19 @@ void main() async {
       await windowManager.setFullScreen(true); // 全屏显示
       await windowManager.show();
       await windowManager.focus();
+      await logger.info('窗口已全屏显示');
     });
   }
 
   // 创建并初始化 Provider
+  await logger.info('初始化配置提供者...');
   final realtimeConfigProvider = RealtimeConfigProvider();
   await realtimeConfigProvider.loadConfig();
 
   final adminProvider = AdminProvider();
   await adminProvider.initialize();
+
+  await logger.info('应用程序初始化完成');
 
   runApp(MyApp(
     realtimeConfigProvider: realtimeConfigProvider,
@@ -41,7 +81,7 @@ void main() async {
   ));
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   final RealtimeConfigProvider realtimeConfigProvider;
   final AdminProvider adminProvider;
 
@@ -52,11 +92,56 @@ class MyApp extends StatelessWidget {
   });
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    // 监听应用生命周期
+    WidgetsBinding.instance.addObserver(this);
+    logger.lifecycle('应用进入前台');
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // 🔧 关闭 HTTP Client
+    ApiClient.dispose();
+    logger.close();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        logger.lifecycle('应用进入前台 (resumed)');
+        break;
+      case AppLifecycleState.inactive:
+        logger.lifecycle('应用失去焦点 (inactive)');
+        break;
+      case AppLifecycleState.paused:
+        logger.lifecycle('应用进入后台 (paused)');
+        break;
+      case AppLifecycleState.detached:
+        logger.lifecycle('应用即将退出 (detached)');
+        break;
+      case AppLifecycleState.hidden:
+        logger.lifecycle('应用被隐藏 (hidden)');
+        break;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider.value(value: realtimeConfigProvider),
-        ChangeNotifierProvider.value(value: adminProvider),
+        ChangeNotifierProvider.value(value: widget.realtimeConfigProvider),
+        ChangeNotifierProvider.value(value: widget.adminProvider),
       ],
       child: GestureDetector(
         // 点击空白处时取消焦点，隐藏键盘

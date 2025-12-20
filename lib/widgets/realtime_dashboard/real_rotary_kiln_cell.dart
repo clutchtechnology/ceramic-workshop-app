@@ -133,7 +133,7 @@ class RotaryKilnCell extends StatelessWidget {
                             '$weightPercentageInt',
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 9,
+                              fontSize: 13.5,
                               fontWeight: FontWeight.w700,
                               fontFamily: 'Roboto Mono',
                               shadows: [
@@ -158,15 +158,15 @@ class RotaryKilnCell extends StatelessWidget {
                 top: 0,
                 bottom: 0,
                 child: Align(
-                  alignment: const Alignment(0.3, -1.1), //
+                  alignment: const Alignment(0.1, -1.1), // 左移20px
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 6,
+                      horizontal: 12, // 8 -> 12
+                      vertical: 9, // 6 -> 9
                     ),
                     decoration: BoxDecoration(
                       color: TechColors.bgDeep.withOpacity(0.85),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(6), // 4 -> 6
                       border: Border.all(
                         color: hopperColor.withOpacity(0.4),
                         width: 1,
@@ -179,13 +179,13 @@ class RotaryKilnCell extends StatelessWidget {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            WeightIcon(color: hopperColor, size: 16),
+                            WeightIcon(color: hopperColor, size: 24),
                             const SizedBox(width: 4),
                             Text(
                               '${weight.toStringAsFixed(1)}kg ($weightPercentageInt%)',
                               style: TextStyle(
                                 color: hopperColor,
-                                fontSize: 13,
+                                fontSize: 19.5,
                                 fontWeight: FontWeight.w500,
                                 fontFamily: 'Roboto Mono',
                               ),
@@ -196,13 +196,13 @@ class RotaryKilnCell extends StatelessWidget {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            FeedRateIcon(color: TechColors.glowGreen, size: 16),
+                            FeedRateIcon(color: TechColors.glowGreen, size: 24),
                             const SizedBox(width: 4),
                             Text(
                               '${feedRate.toStringAsFixed(1)}kg/h',
                               style: const TextStyle(
                                 color: TechColors.glowGreen,
-                                fontSize: 13,
+                                fontSize: 19.5,
                                 fontWeight: FontWeight.w500,
                                 fontFamily: 'Roboto Mono',
                               ),
@@ -213,13 +213,13 @@ class RotaryKilnCell extends StatelessWidget {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            EnergyIcon(color: TechColors.glowOrange, size: 16),
+                            EnergyIcon(color: TechColors.glowOrange, size: 24),
                             const SizedBox(width: 4),
                             Text(
                               '${energy.toStringAsFixed(1)}kWh',
                               style: const TextStyle(
                                 color: TechColors.glowOrange,
-                                fontSize: 13,
+                                fontSize: 19.5,
                                 fontWeight: FontWeight.w500,
                                 fontFamily: 'Roboto Mono',
                               ),
@@ -240,26 +240,26 @@ class RotaryKilnCell extends StatelessWidget {
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                      horizontal: 12, // 8 -> 12
+                      vertical: 6, // 4 -> 6
                     ),
                     decoration: BoxDecoration(
                       color: TechColors.bgDeep.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(6), // 4 -> 6
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         ThermometerIcon(
                           color: tempColor,
-                          size: 16,
+                          size: 24,
                         ),
                         const SizedBox(width: 2),
                         Text(
                           '${temperature.toStringAsFixed(1)}°C',
                           style: TextStyle(
                             color: tempColor,
-                            fontSize: 13,
+                            fontSize: 19.5,
                             fontWeight: FontWeight.w700,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -290,7 +290,7 @@ class RotaryKilnCell extends StatelessWidget {
                     '窑 $index',
                     style: const TextStyle(
                       color: TechColors.glowOrange,
-                      fontSize: 10,
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                     ),
                   ),

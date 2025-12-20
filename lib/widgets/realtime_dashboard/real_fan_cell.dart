@@ -86,13 +86,13 @@ class FanCell extends StatelessWidget {
                         Row(
                           children: [
                             const PowerIcon(
-                                size: 16, color: TechColors.glowCyan),
+                                size: 24, color: TechColors.glowCyan),
                             const SizedBox(width: 4),
                             Text(
                               '${power.toStringAsFixed(1)} kW',
                               style: const TextStyle(
                                 color: TechColors.glowCyan,
-                                fontSize: 13,
+                                fontSize: 19.5,
                                 fontWeight: FontWeight.w500,
                                 fontFamily: 'Roboto Mono',
                               ),
@@ -103,13 +103,13 @@ class FanCell extends StatelessWidget {
                         Row(
                           children: [
                             const EnergyIcon(
-                                size: 16, color: TechColors.glowOrange),
+                                size: 24, color: TechColors.glowOrange),
                             const SizedBox(width: 4),
                             Text(
                               '${cumulativeEnergy.toStringAsFixed(1)} kWh',
                               style: const TextStyle(
                                 color: TechColors.glowOrange,
-                                fontSize: 13,
+                                fontSize: 19.5,
                                 fontWeight: FontWeight.w500,
                                 fontFamily: 'Roboto Mono',
                               ),
@@ -156,7 +156,7 @@ class FanCell extends StatelessWidget {
                     color: isRunning
                         ? TechColors.statusNormal
                         : TechColors.statusOffline,
-                    fontSize: 11,
+                    fontSize: 16.5,
                     fontWeight: FontWeight.w600,
                     fontFamily: 'Roboto Mono',
                   ),

@@ -126,47 +126,47 @@ class RealtimeConfigProvider extends ChangeNotifier {
   final List<ThresholdConfig> rotaryKilnConfigs = [
     ThresholdConfig(
         key: 'short_hopper_1_temp',
-        displayName: '1号短料仓回转窑',
+        displayName: '7号回转窑 (短料仓)',
         normalMax: 800.0,
         warningMax: 1000.0),
     ThresholdConfig(
         key: 'short_hopper_2_temp',
-        displayName: '2号短料仓回转窑',
+        displayName: '6号回转窑 (短料仓)',
         normalMax: 800.0,
         warningMax: 1000.0),
     ThresholdConfig(
         key: 'short_hopper_3_temp',
-        displayName: '3号短料仓回转窑',
+        displayName: '5号回转窑 (短料仓)',
         normalMax: 800.0,
         warningMax: 1000.0),
     ThresholdConfig(
         key: 'short_hopper_4_temp',
-        displayName: '4号短料仓回转窑',
+        displayName: '4号回转窑 (短料仓)',
         normalMax: 800.0,
         warningMax: 1000.0),
     ThresholdConfig(
         key: 'no_hopper_1_temp',
-        displayName: '1号无料仓回转窑',
+        displayName: '2号回转窑 (无料仓)',
         normalMax: 800.0,
         warningMax: 1000.0),
     ThresholdConfig(
         key: 'no_hopper_2_temp',
-        displayName: '2号无料仓回转窑',
+        displayName: '1号回转窑 (无料仓)',
         normalMax: 800.0,
         warningMax: 1000.0),
     ThresholdConfig(
         key: 'long_hopper_1_temp',
-        displayName: '1号长料仓回转窑',
+        displayName: '8号回转窑 (长料仓)',
         normalMax: 800.0,
         warningMax: 1000.0),
     ThresholdConfig(
         key: 'long_hopper_2_temp',
-        displayName: '2号长料仓回转窑',
+        displayName: '3号回转窑 (长料仓)',
         normalMax: 800.0,
         warningMax: 1000.0),
     ThresholdConfig(
         key: 'long_hopper_3_temp',
-        displayName: '3号长料仓回转窑',
+        displayName: '9号回转窑 (长料仓)',
         normalMax: 800.0,
         warningMax: 1000.0),
   ];
@@ -266,31 +266,31 @@ class RealtimeConfigProvider extends ChangeNotifier {
   final List<HopperCapacityConfig> hopperCapacityConfigs = [
     HopperCapacityConfig(
         key: 'short_hopper_1_capacity',
-        displayName: '1号短料仓',
+        displayName: '7号窑料仓 (短)',
         maxCapacity: 1000.0),
     HopperCapacityConfig(
         key: 'short_hopper_2_capacity',
-        displayName: '2号短料仓',
+        displayName: '6号窑料仓 (短)',
         maxCapacity: 1000.0),
     HopperCapacityConfig(
         key: 'short_hopper_3_capacity',
-        displayName: '3号短料仓',
+        displayName: '5号窑料仓 (短)',
         maxCapacity: 1000.0),
     HopperCapacityConfig(
         key: 'short_hopper_4_capacity',
-        displayName: '4号短料仓',
+        displayName: '4号窑料仓 (短)',
         maxCapacity: 1000.0),
     HopperCapacityConfig(
         key: 'long_hopper_1_capacity',
-        displayName: '1号长料仓',
+        displayName: '8号窑料仓 (长)',
         maxCapacity: 1500.0),
     HopperCapacityConfig(
         key: 'long_hopper_2_capacity',
-        displayName: '2号长料仓',
+        displayName: '3号窑料仓 (长)',
         maxCapacity: 1500.0),
     HopperCapacityConfig(
         key: 'long_hopper_3_capacity',
-        displayName: '3号长料仓',
+        displayName: '9号窑料仓 (长)',
         maxCapacity: 1500.0),
   ];
 

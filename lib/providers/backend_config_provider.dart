@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api.dart';
+import '../api/index.dart';
 
 /// 后端配置 Provider
 /// 用于持久化存储服务器配置和PLC配置
@@ -191,25 +191,19 @@ class BackendConfigProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
 
+    final client = ApiClient();
+
     try {
       // 获取服务器配置
-      final serverResponse =
-          await http.get(Uri.parse('${Api.baseUrl}${Api.configServer}'));
-      if (serverResponse.statusCode == 200) {
-        final data = jsonDecode(serverResponse.body);
-        if (data['success'] == true && data['data'] != null) {
-          _serverConfig = ServerConfigData.fromJson(data['data']);
-        }
+      final serverData = await client.get(Api.configServer);
+      if (serverData['success'] == true && serverData['data'] != null) {
+        _serverConfig = ServerConfigData.fromJson(serverData['data']);
       }
 
       // 获取PLC配置
-      final plcResponse =
-          await http.get(Uri.parse('${Api.baseUrl}${Api.configPlc}'));
-      if (plcResponse.statusCode == 200) {
-        final data = jsonDecode(plcResponse.body);
-        if (data['success'] == true && data['data'] != null) {
-          _plcConfig = PlcConfigData.fromJson(data['data']);
-        }
+      final plcData = await client.get(Api.configPlc);
+      if (plcData['success'] == true && plcData['data'] != null) {
+        _plcConfig = PlcConfigData.fromJson(plcData['data']);
       }
 
       // 保存到本地
@@ -230,28 +224,24 @@ class BackendConfigProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
 
+    final client = ApiClient();
+
     try {
-      final response = await http.put(
-        Uri.parse('${Api.baseUrl}${Api.configPlc}'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(newConfig.toUpdateJson()),
+      final data = await client.put(
+        Api.configPlc,
+        body: newConfig.toUpdateJson(),
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          // 更新本地配置
-          _plcConfig = newConfig;
-          await _saveToLocal();
+      if (data['success'] == true) {
+        // 更新本地配置
+        _plcConfig = newConfig;
+        await _saveToLocal();
 
-          // 从后端刷新确认
-          await refreshFromBackend();
-          return true;
-        } else {
-          _error = data['error'] ?? '更新失败';
-        }
+        // 从后端刷新确认
+        await refreshFromBackend();
+        return true;
       } else {
-        _error = '更新失败: HTTP ${response.statusCode}';
+        _error = data['error'] ?? '更新失败';
       }
 
       _isLoading = false;
@@ -267,26 +257,16 @@ class BackendConfigProvider extends ChangeNotifier {
 
   /// 测试PLC连接
   Future<Map<String, dynamic>> testPlcConnection() async {
-    try {
-      final response = await http.post(
-        Uri.parse('${Api.baseUrl}${Api.configPlcTest}'),
-        headers: {'Content-Type': 'application/json'},
-      );
+    final client = ApiClient();
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return {
-          'success': data['success'] == true,
-          'message': data['data']?['message'] ?? data['error'] ?? '未知结果',
-          'connected': data['data']?['connected'] ?? false,
-        };
-      } else {
-        return {
-          'success': false,
-          'message': 'HTTP ${response.statusCode}',
-          'connected': false,
-        };
-      }
+    try {
+      final data = await client.post(Api.configPlcTest);
+
+      return {
+        'success': data['success'] == true,
+        'message': data['data']?['message'] ?? data['error'] ?? '未知结果',
+        'connected': data['data']?['connected'] ?? false,
+      };
     } catch (e) {
       return {
         'success': false,

@@ -122,12 +122,12 @@ class TechLineChart extends StatelessWidget {
           ],
           // Y轴标签（水平放置在左上角）
           Padding(
-            padding: const EdgeInsets.only(left: 28, bottom: 4),
+            padding: const EdgeInsets.only(left: 32, bottom: 4),
             child: Text(
               yAxisLabel,
               style: const TextStyle(
-                color: TechColors.textSecondary,
-                fontSize: 10,
+                color: Color(0xFFD0D0D0),
+                fontSize: 12,
               ),
             ),
           ),
@@ -269,7 +269,7 @@ class TechLineChart extends StatelessWidget {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 32,
+              reservedSize: 36,
               interval: effectiveYInterval,
               getTitlesWidget: (value, meta) {
                 // 只显示在范围内的标签
@@ -279,8 +279,8 @@ class TechLineChart extends StatelessWidget {
                 return Text(
                   value.toStringAsFixed(value == value.roundToDouble() ? 0 : 1),
                   style: const TextStyle(
-                    color: TechColors.textSecondary,
-                    fontSize: 9,
+                    color: Color(0xFFD0D0D0),
+                    fontSize: 12,
                   ),
                 );
               },

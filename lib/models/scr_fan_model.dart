@@ -112,38 +112,26 @@ class FanDevice {
   }
 }
 
-/// 电表模块
+/// 电表模块 (精简版 - 只保留4个字段)
 class ElectricityModule {
-  final double pt;
-  final double impEp;
-  final double ua0;
-  final double ua1;
-  final double ua2;
-  final double i0;
-  final double i1;
-  final double i2;
+  final double pt; // 总功率 (kW)
+  final double impEp; // 总能耗 (kWh)
+  final double voltage; // A相电压 (V)
+  final double current; // A相电流 (A)
 
   ElectricityModule({
     required this.pt,
     required this.impEp,
-    required this.ua0,
-    required this.ua1,
-    required this.ua2,
-    required this.i0,
-    required this.i1,
-    required this.i2,
+    required this.voltage,
+    required this.current,
   });
 
   factory ElectricityModule.fromJson(Map<String, dynamic> json) {
     return ElectricityModule(
       pt: (json['Pt'] as num?)?.toDouble() ?? 0.0,
       impEp: (json['ImpEp'] as num?)?.toDouble() ?? 0.0,
-      ua0: (json['Ua_0'] as num?)?.toDouble() ?? 0.0,
-      ua1: (json['Ua_1'] as num?)?.toDouble() ?? 0.0,
-      ua2: (json['Ua_2'] as num?)?.toDouble() ?? 0.0,
-      i0: (json['I_0'] as num?)?.toDouble() ?? 0.0,
-      i1: (json['I_1'] as num?)?.toDouble() ?? 0.0,
-      i2: (json['I_2'] as num?)?.toDouble() ?? 0.0,
+      voltage: (json['Ua_0'] as num?)?.toDouble() ?? 0.0,
+      current: (json['I_0'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }

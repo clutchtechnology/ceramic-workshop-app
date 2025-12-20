@@ -138,7 +138,7 @@ class RotaryKilnLongCell extends StatelessWidget {
                             '$percentageInt',
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 9,
+                              fontSize: 13.5,
                               fontWeight: FontWeight.w700,
                               fontFamily: 'Roboto Mono',
                               shadows: [
@@ -166,12 +166,12 @@ class RotaryKilnLongCell extends StatelessWidget {
                   alignment: const Alignment(0.1, -1.1),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 6,
+                      horizontal: 12, // 8 -> 12
+                      vertical: 9, // 6 -> 9
                     ),
                     decoration: BoxDecoration(
                       color: TechColors.bgDeep.withOpacity(0.85),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(6), // 4 -> 6
                       border: Border.all(
                         color: hopperColor.withOpacity(0.4),
                         width: 1,
@@ -184,13 +184,13 @@ class RotaryKilnLongCell extends StatelessWidget {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            WeightIcon(color: hopperColor, size: 16),
+                            WeightIcon(color: hopperColor, size: 24),
                             const SizedBox(width: 4),
                             Text(
                               '${weight.toStringAsFixed(0)}kg',
                               style: TextStyle(
                                 color: hopperColor,
-                                fontSize: 13,
+                                fontSize: 19.5,
                                 fontWeight: FontWeight.w500,
                                 fontFamily: 'Roboto Mono',
                               ),
@@ -201,13 +201,13 @@ class RotaryKilnLongCell extends StatelessWidget {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            FeedRateIcon(color: TechColors.glowGreen, size: 16),
+                            FeedRateIcon(color: TechColors.glowGreen, size: 24),
                             const SizedBox(width: 4),
                             Text(
                               '${feedRate.toStringAsFixed(1)}kg/h',
                               style: const TextStyle(
                                 color: TechColors.glowGreen,
-                                fontSize: 13,
+                                fontSize: 19.5,
                                 fontWeight: FontWeight.w500,
                                 fontFamily: 'Roboto Mono',
                               ),
@@ -218,13 +218,13 @@ class RotaryKilnLongCell extends StatelessWidget {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            EnergyIcon(color: TechColors.glowOrange, size: 16),
+                            EnergyIcon(color: TechColors.glowOrange, size: 24),
                             const SizedBox(width: 4),
                             Text(
                               '${energy.toStringAsFixed(1)}kWh',
                               style: const TextStyle(
                                 color: TechColors.glowOrange,
-                                fontSize: 13,
+                                fontSize: 19.5,
                                 fontWeight: FontWeight.w500,
                                 fontFamily: 'Roboto Mono',
                               ),
@@ -238,38 +238,37 @@ class RotaryKilnLongCell extends StatelessWidget {
               ),
               // 中间温度显示 - 左右两边显示两个温度
               Positioned(
-                left: 36,
-                right: 32,
+                left: 0,
+                right: 0,
                 top: 24,
                 bottom: 0,
                 child: Center(
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    mainAxisSize: MainAxisSize.max,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       // 温度1 - 左侧
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 3,
+                          horizontal: 9, // 6 -> 9
+                          vertical: 4.5, // 3 -> 4.5
                         ),
                         decoration: BoxDecoration(
                           color: TechColors.bgDeep.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(6), // 4 -> 6
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             ThermometerIcon(
                               color: tempColor1,
-                              size: 16,
+                              size: 24,
                             ),
                             const SizedBox(width: 2),
                             Text(
                               '${temperature1.toStringAsFixed(1)}°C',
                               style: TextStyle(
                                 color: tempColor1,
-                                fontSize: 13,
+                                fontSize: 19.5,
                                 fontWeight: FontWeight.w700,
                                 fontFamily: 'Roboto Mono',
                               ),
@@ -277,29 +276,30 @@ class RotaryKilnLongCell extends StatelessWidget {
                           ],
                         ),
                       ),
+                      const SizedBox(width: 20),
                       // 温度2 - 右侧
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 3,
+                          horizontal: 9, // 6 -> 9
+                          vertical: 4.5, // 3 -> 4.5
                         ),
                         decoration: BoxDecoration(
                           color: TechColors.bgDeep.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(6), // 4 -> 6
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             ThermometerIcon(
                               color: tempColor2,
-                              size: 16,
+                              size: 24,
                             ),
                             const SizedBox(width: 2),
                             Text(
                               '${temperature2.toStringAsFixed(1)}°C',
                               style: TextStyle(
                                 color: tempColor2,
-                                fontSize: 13,
+                                fontSize: 19.5,
                                 fontWeight: FontWeight.w700,
                                 fontFamily: 'Roboto Mono',
                               ),
@@ -332,7 +332,7 @@ class RotaryKilnLongCell extends StatelessWidget {
                     '窑 $index',
                     style: const TextStyle(
                       color: TechColors.glowOrange,
-                      fontSize: 10,
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                     ),
                   ),

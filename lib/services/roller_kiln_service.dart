@@ -1,6 +1,7 @@
 import '../api/index.dart';
 import '../api/api.dart';
 import '../models/roller_kiln_model.dart';
+import 'package:flutter/foundation.dart';
 
 class RollerKilnService {
   final ApiClient _client = ApiClient();
@@ -15,7 +16,7 @@ class RollerKilnService {
       }
       return null;
     } catch (e) {
-      print('Error fetching roller kiln data: $e');
+      if (kDebugMode) debugPrint('Error fetching roller kiln data: $e');
       return null;
     }
   }

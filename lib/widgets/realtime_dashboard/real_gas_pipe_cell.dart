@@ -59,7 +59,7 @@ class GasPipeCell extends StatelessWidget {
             right: 8,
             bottom: 8,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15),
               decoration: BoxDecoration(
                 color: TechColors.bgDeep.withOpacity(0.92),
                 borderRadius: BorderRadius.circular(4),
@@ -74,13 +74,13 @@ class GasPipeCell extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      const FlowRateIcon(size: 16, color: TechColors.glowCyan),
+                      const FlowRateIcon(size: 24, color: TechColors.glowCyan),
                       const SizedBox(width: 4),
                       Text(
                         '${flowRate.toStringAsFixed(1)} m³/h',
                         style: const TextStyle(
                           color: TechColors.glowCyan,
-                          fontSize: 13,
+                          fontSize: 19.5,
                           fontWeight: FontWeight.w500,
                           fontFamily: 'Roboto Mono',
                         ),
@@ -91,13 +91,13 @@ class GasPipeCell extends StatelessWidget {
                   Row(
                     children: [
                       const TotalFlowIcon(
-                          size: 16, color: TechColors.glowGreen),
+                          size: 24, color: TechColors.glowGreen),
                       const SizedBox(width: 4),
                       Text(
                         '${energyConsumption.toStringAsFixed(1)} m³',
                         style: const TextStyle(
                           color: TechColors.glowGreen,
-                          fontSize: 13,
+                          fontSize: 19.5,
                           fontWeight: FontWeight.w500,
                           fontFamily: 'Roboto Mono',
                         ),
@@ -121,7 +121,7 @@ class GasPipeCell extends StatelessWidget {
                     color: isRunning
                         ? TechColors.statusNormal
                         : TechColors.statusOffline,
-                    fontSize: 11,
+                    fontSize: 16.5,
                     fontWeight: FontWeight.w600,
                     fontFamily: 'Roboto Mono',
                   ),

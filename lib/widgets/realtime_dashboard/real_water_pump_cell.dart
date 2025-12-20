@@ -69,7 +69,7 @@ class WaterPumpCell extends StatelessWidget {
             right: 8,
             bottom: 8,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15),
               decoration: BoxDecoration(
                 color: TechColors.bgDeep.withOpacity(0.92),
                 borderRadius: BorderRadius.circular(4),
@@ -84,13 +84,13 @@ class WaterPumpCell extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      const PowerIcon(size: 16, color: TechColors.glowCyan),
+                      const PowerIcon(size: 24, color: TechColors.glowCyan),
                       const SizedBox(width: 4),
                       Text(
                         '${power.toStringAsFixed(1)} kW',
                         style: const TextStyle(
                           color: TechColors.glowCyan,
-                          fontSize: 13,
+                          fontSize: 19.5,
                           fontWeight: FontWeight.w500,
                           fontFamily: 'Roboto Mono',
                         ),
@@ -100,13 +100,13 @@ class WaterPumpCell extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const EnergyIcon(size: 16, color: TechColors.glowOrange),
+                      const EnergyIcon(size: 24, color: TechColors.glowOrange),
                       const SizedBox(width: 4),
                       Text(
                         '${energyConsumption.toStringAsFixed(1)} kWh',
                         style: const TextStyle(
                           color: TechColors.glowOrange,
-                          fontSize: 13,
+                          fontSize: 19.5,
                           fontWeight: FontWeight.w500,
                           fontFamily: 'Roboto Mono',
                         ),
@@ -151,7 +151,7 @@ class WaterPumpCell extends StatelessWidget {
                     color: isRunning
                         ? TechColors.statusNormal
                         : TechColors.statusOffline,
-                    fontSize: 11,
+                    fontSize: 16.5,
                     fontWeight: FontWeight.w600,
                     fontFamily: 'Roboto Mono',
                   ),

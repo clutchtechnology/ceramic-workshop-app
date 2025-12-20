@@ -191,7 +191,7 @@ class AdminProvider extends ChangeNotifier {
     } catch (e) {
       _error = 'Failed to save admin config: $e';
       debugPrint(_error);
-      throw e;
+      rethrow;
     }
   }
 }

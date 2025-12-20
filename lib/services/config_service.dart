@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/config_models.dart';
 
@@ -16,7 +17,7 @@ class ConfigService {
       await file.writeAsString(jsonString);
       return true;
     } catch (e) {
-      print('保存配置失败: $e');
+      debugPrint('保存配置失败: $e');
       return false;
     }
   }
@@ -33,7 +34,7 @@ class ConfigService {
       final jsonData = jsonDecode(jsonString) as Map<String, dynamic>;
       return SystemConfig.fromJson(jsonData);
     } catch (e) {
-      print('加载配置失败: $e');
+      debugPrint('加载配置失败: $e');
       return null;
     }
   }
@@ -47,7 +48,7 @@ class ConfigService {
       }
       return true;
     } catch (e) {
-      print('删除配置失败: $e');
+      debugPrint('删除配置失败: $e');
       return false;
     }
   }

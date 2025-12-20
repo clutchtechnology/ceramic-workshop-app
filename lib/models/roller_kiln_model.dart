@@ -25,15 +25,15 @@ class RollerKilnData {
   }
 }
 
-/// 辊道窑温区数据
+/// 辊道窑温区数据 (精简版 - 只保留4个电表字段)
 class RollerKilnZone {
   final String zoneId;
   final String zoneName;
   final double temperature;
-  final double power;
-  final double energy;
-  final Map<String, double> voltage;
-  final Map<String, double> current;
+  final double power; // 总功率 Pt
+  final double energy; // 总能耗 ImpEp
+  final double voltage; // A相电压 Ua_0
+  final double current; // A相电流 I_0
 
   RollerKilnZone({
     required this.zoneId,
@@ -46,35 +46,24 @@ class RollerKilnZone {
   });
 
   factory RollerKilnZone.fromJson(Map<String, dynamic> json) {
-    final voltageData = json['voltage'] as Map<String, dynamic>? ?? {};
-    final currentData = json['current'] as Map<String, dynamic>? ?? {};
-
     return RollerKilnZone(
       zoneId: json['zone_id'] ?? '',
       zoneName: json['zone_name'] ?? '',
       temperature: (json['temperature'] as num?)?.toDouble() ?? 0.0,
       power: (json['power'] as num?)?.toDouble() ?? 0.0,
       energy: (json['energy'] as num?)?.toDouble() ?? 0.0,
-      voltage: {
-        'Ua_0': (voltageData['Ua_0'] as num?)?.toDouble() ?? 0.0,
-        'Ua_1': (voltageData['Ua_1'] as num?)?.toDouble() ?? 0.0,
-        'Ua_2': (voltageData['Ua_2'] as num?)?.toDouble() ?? 0.0,
-      },
-      current: {
-        'I_0': (currentData['I_0'] as num?)?.toDouble() ?? 0.0,
-        'I_1': (currentData['I_1'] as num?)?.toDouble() ?? 0.0,
-        'I_2': (currentData['I_2'] as num?)?.toDouble() ?? 0.0,
-      },
+      voltage: (json['voltage'] as num?)?.toDouble() ?? 0.0,
+      current: (json['current'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }
 
-/// 辊道窑主电表数据
+/// 辊道窑主电表数据 (精简版 - 只保留4个字段)
 class RollerKilnMeter {
-  final double power;
-  final double energy;
-  final Map<String, double> voltage;
-  final Map<String, double> current;
+  final double power; // 总功率 Pt
+  final double energy; // 总能耗 ImpEp
+  final double voltage; // A相电压 Ua_0
+  final double current; // A相电流 I_0
 
   RollerKilnMeter({
     required this.power,
@@ -84,22 +73,11 @@ class RollerKilnMeter {
   });
 
   factory RollerKilnMeter.fromJson(Map<String, dynamic> json) {
-    final voltageData = json['voltage'] as Map<String, dynamic>? ?? {};
-    final currentData = json['current'] as Map<String, dynamic>? ?? {};
-
     return RollerKilnMeter(
       power: (json['power'] as num?)?.toDouble() ?? 0.0,
       energy: (json['energy'] as num?)?.toDouble() ?? 0.0,
-      voltage: {
-        'Ua_0': (voltageData['Ua_0'] as num?)?.toDouble() ?? 0.0,
-        'Ua_1': (voltageData['Ua_1'] as num?)?.toDouble() ?? 0.0,
-        'Ua_2': (voltageData['Ua_2'] as num?)?.toDouble() ?? 0.0,
-      },
-      current: {
-        'I_0': (currentData['I_0'] as num?)?.toDouble() ?? 0.0,
-        'I_1': (currentData['I_1'] as num?)?.toDouble() ?? 0.0,
-        'I_2': (currentData['I_2'] as num?)?.toDouble() ?? 0.0,
-      },
+      voltage: (json['voltage'] as num?)?.toDouble() ?? 0.0,
+      current: (json['current'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }

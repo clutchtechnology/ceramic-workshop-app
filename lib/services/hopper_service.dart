@@ -1,6 +1,7 @@
 import '../api/index.dart';
 import '../api/api.dart';
 import '../models/hopper_model.dart';
+import 'package:flutter/foundation.dart';
 
 class HopperService {
   final ApiClient _client = ApiClient();
@@ -24,7 +25,8 @@ class HopperService {
       }
       return [];
     } catch (e) {
-      print('Error fetching hopper list: $e');
+      // 🔧 仅在 debug 模式打印
+      if (kDebugMode) debugPrint('Error fetching hopper list: $e');
       return [];
     }
   }
@@ -38,26 +40,20 @@ class HopperService {
         params: hopperType != null ? {'hopper_type': hopperType} : null,
       );
 
-      print('🔍 料仓批量接口返回: $response');
-
       if (response['success'] == true) {
         final data = response['data'];
         if (data != null && data['devices'] is List) {
-          print('📦 接收到 ${data['devices'].length} 个料仓数据');
           final Map<String, HopperData> result = {};
           for (var deviceData in data['devices']) {
             final hopperData = HopperData.fromJson(deviceData);
             result[hopperData.deviceId] = hopperData;
-            print('  ✓ ${hopperData.deviceId}');
           }
-          print('📊 最终解析出 ${result.length} 个料仓');
           return result;
         }
       }
-      print('⚠️  批量接口返回数据格式错误');
       return {};
     } catch (e) {
-      print('❌ Error fetching hopper batch data: $e');
+      if (kDebugMode) debugPrint('Error fetching hopper batch data: $e');
       return {};
     }
   }
@@ -71,7 +67,8 @@ class HopperService {
       }
       return null;
     } catch (e) {
-      print('Error fetching hopper data for $deviceId: $e');
+      if (kDebugMode)
+        debugPrint('Error fetching hopper data for $deviceId: $e');
       return null;
     }
   }

@@ -16,6 +16,7 @@ import '../widgets/realtime_dashboard/real_rotary_kiln_long_cell.dart';
 import '../widgets/realtime_dashboard/real_fan_cell.dart';
 import '../widgets/realtime_dashboard/real_water_pump_cell.dart';
 import '../widgets/realtime_dashboard/real_gas_pipe_cell.dart';
+import '../utils/app_logger.dart';
 
 /// 实时大屏页面
 /// 用于展示实时生产数据和监控信息
@@ -37,17 +38,22 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   ScrFanBatchData? _scrFanData;
   bool _isRefreshing = false;
 
+  // 🔧 新增: 请求统计
+  int _successCount = 0;
+  int _failCount = 0;
+  DateTime? _lastSuccessTime;
+
   // 映射 UI 索引到设备 ID
-  // 短窑: 1-4, 无料仓: 5-6, 长窑: 7-9
+  // 短窑: 7,6,5,4, 无料仓: 2,1, 长窑: 8,3,9
   final Map<int, String> _deviceMapping = {
-    1: 'short_hopper_1',
-    2: 'short_hopper_2',
-    3: 'short_hopper_3',
+    7: 'short_hopper_1',
+    6: 'short_hopper_2',
+    5: 'short_hopper_3',
     4: 'short_hopper_4',
-    5: 'no_hopper_1',
-    6: 'no_hopper_2',
-    7: 'long_hopper_1',
-    8: 'long_hopper_2',
+    2: 'no_hopper_1',
+    1: 'no_hopper_2',
+    8: 'long_hopper_1',
+    3: 'long_hopper_2',
     9: 'long_hopper_3',
   };
 
@@ -60,70 +66,60 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   @override
   void dispose() {
     _timer?.cancel();
+    _timer = null;
+    logger.info('RealtimeDashboardPage disposed, timer cancelled');
     super.dispose();
   }
 
   Future<void> _initData() async {
     await _fetchData();
-    // 每5秒轮询一次数据
-    _timer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      _fetchData();
+    // 🔧 修复: Timer 回调添加异常保护
+    _timer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      try {
+        await _fetchData();
+      } catch (e, stack) {
+        logger.error('定时器回调异常', e, stack);
+        // 异常不会导致定时器停止
+      }
     });
+    logger.info('数据轮询定时器已启动 (间隔: 5秒)');
   }
 
   Future<void> _fetchData() async {
     if (_isRefreshing) return;
+    if (!mounted) return; // 🔧 检查组件是否已挂载
 
     setState(() {
       _isRefreshing = true;
     });
 
     try {
-      debugPrint('=== 开始批量获取实时数据 ===');
-
-      // 方案1: 按设备类型分别调用批量接口
+      // 🔧 修复: Future.wait 添加超时控制
       final results = await Future.wait([
-        // 1. 获取9个料仓数据
         _hopperService.getHopperBatchData(),
-        // 2. 获取辊道窑数据
         _rollerKilnService.getRollerKilnRealtimeFormatted(),
-        // 3. 获取SCR+风机数据
         _scrFanService.getScrFanBatchData(),
-      ]);
+      ]).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          logger.warning('批量数据请求超时 (15秒)');
+          throw TimeoutException('批量数据请求超时');
+        },
+      );
 
       final hopperData = results[0] as Map<String, HopperData>;
       final rollerData = results[1] as RollerKilnData?;
       final scrFanData = results[2] as ScrFanBatchData?;
 
-      debugPrint('✓ 料仓数据: ${hopperData.length} 个');
-      debugPrint(
-          '✓ 辊道窑数据: ${rollerData != null ? rollerData.zones.length : 0} 个温区');
-      debugPrint('✓ SCR设备: ${scrFanData?.scr.total ?? 0} 个');
-      debugPrint('✓ 风机设备: ${scrFanData?.fan.total ?? 0} 个');
+      // 🔧 更新统计
+      _successCount++;
+      _lastSuccessTime = DateTime.now();
 
-      // 调试: 打印风机和SCR的具体数值
-      if (scrFanData != null) {
-        for (var i = 0; i < scrFanData.fan.devices.length; i++) {
-          final fan = scrFanData.fan.devices[i];
-          debugPrint(
-              '  📊 风机${i + 1}: Pt=${fan.elec?.pt.toStringAsFixed(2)}, ImpEp=${fan.elec?.impEp.toStringAsFixed(2)}');
-        }
-        for (var i = 0; i < scrFanData.scr.devices.length; i++) {
-          final scr = scrFanData.scr.devices[i];
-          debugPrint(
-              '  📊 SCR${i + 1}: Pt=${scr.elec?.pt.toStringAsFixed(2)}, flow=${scr.gas?.flowRate.toStringAsFixed(2)}');
-        }
+      // 每100次成功记录一次日志
+      if (_successCount % 100 == 0) {
+        logger.info(
+            '数据轮询统计: 成功=$_successCount, 失败=$_failCount, 最后成功时间=$_lastSuccessTime');
       }
-
-      // 调试: 打印辊道窑的温度数据
-      if (rollerData != null) {
-        final temps = rollerData.zones
-            .map((z) => '${z.zoneName}:${z.temperature.toStringAsFixed(0)}°C')
-            .join(', ');
-        debugPrint('  🌡️ 辊道窑温度: $temps');
-      }
-
-      debugPrint('=== 数据获取完成 ===');
 
       if (mounted) {
         setState(() {
@@ -132,8 +128,13 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
           _scrFanData = scrFanData;
         });
       }
-    } catch (e) {
-      debugPrint('Error fetching batch data: $e');
+    } catch (e, stack) {
+      _failCount++;
+
+      // 🔧 失败时记录日志（每10次失败记录一次，避免日志过多）
+      if (_failCount <= 3 || _failCount % 10 == 0) {
+        logger.error('数据获取失败 (第$_failCount次)', e, stack);
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -151,19 +152,19 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
 
     // 回转窑容器尺寸
     final rotaryKilnWidth = screenWidth * 0.77;
-    final rotaryKilnHeight = screenHeight * 0.5;
+    final rotaryKilnHeight = screenHeight * 0.54; // 增加高度 (0.5 -> 0.54)
 
     // SCR容器尺寸
     final scrWidth = screenWidth * 0.2;
-    final scrHeight = screenHeight * 0.5;
+    final scrHeight = screenHeight * 0.54; // 增加高度 (0.5 -> 0.54)
 
     // 辊道窑容器尺寸
     final rollerKilnWidth = screenWidth * 0.72;
-    final rollerKilnHeight = screenHeight * 0.39;
+    final rollerKilnHeight = screenHeight * 0.35; // 减小高度 (0.39 -> 0.35)
 
     // 风机容器尺寸
     final fanWidth = screenWidth * 0.25;
-    final fanHeight = screenHeight * 0.39;
+    final fanHeight = screenHeight * 0.35; // 减小高度 (0.39 -> 0.35)
 
     return Scaffold(
       backgroundColor: TechColors.bgDeep,
@@ -271,36 +272,43 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
           padding: const EdgeInsets.all(8.0),
           child: Column(
             children: [
-              // 第一行 - 短窑1-2 + 无料仓5 + 长窑7-8
+              // 第一行 - 短窑7-6 + 无料仓2 + 长窑8-3
               Expanded(
                 child: Row(
                   children: [
-                    Expanded(child: _buildRotaryKilnCell(1)),
+                    Expanded(flex: 6, child: _buildRotaryKilnCell(7)), // 1.5
                     const SizedBox(width: 8),
-                    Expanded(child: _buildRotaryKilnCell(2)),
+                    Expanded(flex: 6, child: _buildRotaryKilnCell(6)), // 1.5
                     const SizedBox(width: 8),
-                    Expanded(child: _buildRotaryKilnNoHopperCell(5)),
+                    Expanded(
+                        flex: 5,
+                        child: _buildRotaryKilnNoHopperCell(2)), // 1.25
                     const SizedBox(width: 8),
-                    Expanded(child: _buildRotaryKilnLongCell(7)),
+                    Expanded(
+                        flex: 6, child: _buildRotaryKilnLongCell(8)), // 1.5
                     const SizedBox(width: 8),
-                    Expanded(child: _buildRotaryKilnLongCell(8)),
+                    Expanded(
+                        flex: 6, child: _buildRotaryKilnLongCell(3)), // 1.5
                   ],
                 ),
               ),
               const SizedBox(height: 8),
-              // 第二行 - 短窑3-4 + 无料仓6 + 长窑9 + 空白
+              // 第二行 - 短窑5-4 + 无料仓1 + 长窑9 + 空白
               Expanded(
                 child: Row(
                   children: [
-                    Expanded(child: _buildRotaryKilnCell(3)),
+                    Expanded(flex: 6, child: _buildRotaryKilnCell(5)), // 1.5
                     const SizedBox(width: 8),
-                    Expanded(child: _buildRotaryKilnCell(4)),
+                    Expanded(flex: 6, child: _buildRotaryKilnCell(4)), // 1.5
                     const SizedBox(width: 8),
-                    Expanded(child: _buildRotaryKilnNoHopperCell(6)),
+                    Expanded(
+                        flex: 5,
+                        child: _buildRotaryKilnNoHopperCell(1)), // 1.25
                     const SizedBox(width: 8),
-                    Expanded(child: _buildRotaryKilnLongCell(9)),
+                    Expanded(
+                        flex: 6, child: _buildRotaryKilnLongCell(9)), // 1.5
                     const SizedBox(width: 8),
-                    const Expanded(child: SizedBox.shrink()),
+                    const Expanded(flex: 6, child: SizedBox.shrink()), // 1.5
                   ],
                 ),
               ),
@@ -455,7 +463,7 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
               left: 0,
               right: 0,
               child: SizedBox(
-                height: 80,
+                height: 120,
                 child: Row(
                   children: _rollerKilnData?.zones.asMap().entries.map((entry) {
                         final index = entry.key;
@@ -518,7 +526,7 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    EnergyIcon(color: TechColors.glowOrange, size: 16),
+                    EnergyIcon(color: TechColors.glowOrange, size: 24),
                     const SizedBox(width: 4),
                     Text(
                       _rollerKilnData != null
@@ -526,7 +534,7 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                           : '0.0kWh',
                       style: TextStyle(
                         color: TechColors.glowOrange,
-                        fontSize: 14,
+                        fontSize: 21,
                         fontWeight: FontWeight.w700,
                         fontFamily: 'Roboto Mono',
                         shadows: [
@@ -560,10 +568,10 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
         : TechColors.glowRed;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
       decoration: BoxDecoration(
         color: TechColors.bgDeep.withOpacity(0.85),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: TechColors.glowCyan.withOpacity(0.4),
           width: 1,
@@ -579,7 +587,7 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
               zone,
               style: const TextStyle(
                 color: TechColors.glowGreen,
-                fontSize: 13,
+                fontSize: 19.5,
                 fontWeight: FontWeight.w600,
                 fontFamily: 'Roboto Mono',
               ),
@@ -589,13 +597,13 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ThermometerIcon(color: tempColor, size: 14),
+              ThermometerIcon(color: tempColor, size: 21),
               const SizedBox(width: 3),
               Text(
                 temperature,
                 style: TextStyle(
                   color: tempColor,
-                  fontSize: 13,
+                  fontSize: 19.5,
                   fontWeight: FontWeight.w500,
                   fontFamily: 'Roboto Mono',
                 ),
@@ -606,13 +614,13 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              EnergyIcon(color: TechColors.glowOrange, size: 14),
+              EnergyIcon(color: TechColors.glowOrange, size: 21),
               const SizedBox(width: 3),
               Text(
                 power,
                 style: const TextStyle(
                   color: TechColors.glowOrange,
-                  fontSize: 13,
+                  fontSize: 19.5,
                   fontWeight: FontWeight.w500,
                   fontFamily: 'Roboto Mono',
                 ),

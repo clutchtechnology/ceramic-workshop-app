@@ -1,7 +1,7 @@
-import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import '../api/api.dart';
+import '../api/index.dart';
 
 /// 历史数据服务
 /// 用于查询后端历史数据API，支持动态聚合间隔
@@ -9,6 +9,22 @@ class HistoryDataService {
   static final HistoryDataService _instance = HistoryDataService._internal();
   factory HistoryDataService() => _instance;
   HistoryDataService._internal();
+
+  // ============================================================
+  // 时间格式化辅助方法
+  // ============================================================
+
+  /// 将DateTime转换为UTC时间字符串（去掉Z后缀，后端Flux不支持Z）
+  /// 例如: "2025-12-20T08:30:00" 而不是 "2025-12-20T08:30:00.000Z"
+  static String _formatUtcTime(DateTime dateTime) {
+    final utc = dateTime.toUtc();
+    return '${utc.year.toString().padLeft(4, '0')}-'
+        '${utc.month.toString().padLeft(2, '0')}-'
+        '${utc.day.toString().padLeft(2, '0')}T'
+        '${utc.hour.toString().padLeft(2, '0')}:'
+        '${utc.minute.toString().padLeft(2, '0')}:'
+        '${utc.second.toString().padLeft(2, '0')}';
+  }
 
   // ============================================================
   // 设备ID映射常量
@@ -202,9 +218,10 @@ class HistoryDataService {
   }) async {
     final interval = calculateAggregateInterval(start, end);
 
+    // 转换为UTC时间发送（后端InfluxDB使用UTC时区，去掉Z后缀）
     final queryParams = <String, String>{
-      'start': start.toIso8601String(),
-      'end': end.toIso8601String(),
+      'start': _formatUtcTime(start),
+      'end': _formatUtcTime(end),
       'interval': interval,
     };
 
@@ -280,9 +297,10 @@ class HistoryDataService {
   }) async {
     final interval = calculateAggregateInterval(start, end);
 
+    // 转换为UTC时间发送（后端InfluxDB使用UTC时区，去掉Z后缀）
     final queryParams = <String, String>{
-      'start': start.toIso8601String(),
-      'end': end.toIso8601String(),
+      'start': _formatUtcTime(start),
+      'end': _formatUtcTime(end),
       'interval': interval,
     };
 
@@ -346,9 +364,10 @@ class HistoryDataService {
   }) async {
     final interval = calculateAggregateInterval(start, end);
 
+    // 转换为UTC时间发送（后端InfluxDB使用UTC时区，去掉Z后缀）
     final queryParams = <String, String>{
-      'start': start.toIso8601String(),
-      'end': end.toIso8601String(),
+      'start': _formatUtcTime(start),
+      'end': _formatUtcTime(end),
       'interval': interval,
     };
 
@@ -409,9 +428,10 @@ class HistoryDataService {
   }) async {
     final interval = calculateAggregateInterval(start, end);
 
+    // 转换为UTC时间发送（后端InfluxDB使用UTC时区，去掉Z后缀）
     final queryParams = <String, String>{
-      'start': start.toIso8601String(),
-      'end': end.toIso8601String(),
+      'start': _formatUtcTime(start),
+      'end': _formatUtcTime(end),
       'interval': interval,
     };
 
@@ -448,42 +468,50 @@ class HistoryDataService {
   // ============================================================
 
   /// 通用历史数据请求方法
+  /// 🔧 修复: 使用 ApiClient 统一管理 HTTP 请求
   Future<HistoryDataResult> _fetchHistoryData(Uri uri, String deviceId) async {
+    final client = ApiClient();
+
     try {
-      debugPrint('📊 请求历史数据: $uri');
-      final response = await http.get(uri);
+      // 🔧 构建查询参数 Map
+      final params = <String, String>{};
+      uri.queryParameters.forEach((key, value) {
+        params[key] = value;
+      });
 
-      if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        if (json['success'] == true) {
-          final data = json['data'];
-          final dataList = data['data'] as List<dynamic>? ?? [];
+      debugPrint('📊 请求历史数据: ${uri.path}');
+      final json =
+          await client.get(uri.path, params: params.isNotEmpty ? params : null);
 
-          return HistoryDataResult(
-            success: true,
-            deviceId: deviceId,
-            timeRange: TimeRange(
-              start: DateTime.parse(data['time_range']['start']),
-              end: DateTime.parse(data['time_range']['end']),
-            ),
-            interval: data['interval'] ?? '5m',
-            dataPoints:
-                dataList.map((e) => HistoryDataPoint.fromJson(e)).toList(),
-          );
-        } else {
-          return HistoryDataResult(
-            success: false,
-            deviceId: deviceId,
-            error: json['error'] ?? '查询失败',
-          );
-        }
+      if (json['success'] == true) {
+        final data = json['data'];
+        final dataList = data['data'] as List<dynamic>? ?? [];
+
+        return HistoryDataResult(
+          success: true,
+          deviceId: deviceId,
+          timeRange: TimeRange(
+            start: DateTime.parse(data['time_range']['start']),
+            end: DateTime.parse(data['time_range']['end']),
+          ),
+          interval: data['interval'] ?? '5m',
+          dataPoints:
+              dataList.map((e) => HistoryDataPoint.fromJson(e)).toList(),
+        );
       } else {
         return HistoryDataResult(
           success: false,
           deviceId: deviceId,
-          error: 'HTTP ${response.statusCode}',
+          error: json['error'] ?? '查询失败',
         );
       }
+    } on TimeoutException {
+      debugPrint('❌ 历史数据请求超时');
+      return HistoryDataResult(
+        success: false,
+        deviceId: deviceId,
+        error: '请求超时，请检查网络连接',
+      );
     } catch (e) {
       debugPrint('❌ 历史数据请求失败: $e');
       return HistoryDataResult(
