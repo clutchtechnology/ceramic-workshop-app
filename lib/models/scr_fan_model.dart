@@ -112,18 +112,22 @@ class FanDevice {
   }
 }
 
-/// 电表模块 (精简版 - 只保留4个字段)
+/// 电表模块 (支持三相电流)
 class ElectricityModule {
   final double pt; // 总功率 (kW)
   final double impEp; // 总能耗 (kWh)
   final double voltage; // A相电压 (V)
-  final double current; // A相电流 (A)
+  final double currentA; // A相电流 (A)
+  final double currentB; // B相电流 (A)
+  final double currentC; // C相电流 (A)
 
   ElectricityModule({
     required this.pt,
     required this.impEp,
     required this.voltage,
-    required this.current,
+    required this.currentA,
+    required this.currentB,
+    required this.currentC,
   });
 
   factory ElectricityModule.fromJson(Map<String, dynamic> json) {
@@ -131,7 +135,9 @@ class ElectricityModule {
       pt: (json['Pt'] as num?)?.toDouble() ?? 0.0,
       impEp: (json['ImpEp'] as num?)?.toDouble() ?? 0.0,
       voltage: (json['Ua_0'] as num?)?.toDouble() ?? 0.0,
-      current: (json['I_0'] as num?)?.toDouble() ?? 0.0,
+      currentA: (json['I_0'] as num?)?.toDouble() ?? 0.0,
+      currentB: (json['I_1'] as num?)?.toDouble() ?? 0.0,
+      currentC: (json['I_2'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }

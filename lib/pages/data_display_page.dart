@@ -10,7 +10,12 @@ import '../services/history_data_service.dart';
 /// 数据展示页面
 /// 包含三个设备容器：回转窑、辊道窑、SCR设备
 ///
-/// 默认显示最近24小时的历史数据（静态展示，不自动更新）
+/// 默认显示数据库中最新数据时间戳往前50秒的历史数据
+/// 逻辑：先查询数据库最新时间戳作为 end，然后 start = end - 50s
+///
+/// 回退逻辑（无法获取时间戳时）：200秒前 到 150秒前
+/// 原因：后端采用批量写入（30次轮询 × 5秒 = 150秒延迟）
+///
 /// 每次进入页面自动刷新历史数据，10秒防抖机制防止重复调用
 class DataDisplayPage extends StatefulWidget {
   const DataDisplayPage({super.key});
@@ -31,7 +36,17 @@ class DataDisplayPageState extends State<DataDisplayPage>
   // 加载状态
   bool _isLoading = true;
 
-  // 默认时间范围：最近24小时（确保能查到历史数据，即使PLC断开也能显示）
+  // ==================== 批量写入延迟补偿 ====================
+  // 由于后端采用批量写入（30次轮询 × 6秒 = 180秒后才写入），
+  // 最近180秒的数据可能还未写入数据库，因此需要跳过这段时间
+
+  /// 批量写入延迟：最近180秒的数据可能还未写入
+  static const Duration _batchWriteDelay = Duration(seconds: 180);
+
+  /// 查询时间窗口：查询50秒的历史数据（200秒前 到 150秒前）
+  static const Duration _queryWindow = Duration(seconds: 50);
+
+  /// 默认时间范围：24小时（用于历史查询）
   static const Duration _defaultTimeRange = Duration(hours: 24);
 
   // ==================== 刷新防抖机制 ====================
@@ -127,8 +142,7 @@ class DataDisplayPageState extends State<DataDisplayPage>
   @override
   void initState() {
     super.initState();
-    _initializeTimeRanges();
-    // 首次加载时强制刷新
+    // 首次加载时强制刷新（异步初始化时间范围后加载数据）
     _refreshHistoryDataWithDebounce(forceRefresh: true);
   }
 
@@ -158,11 +172,8 @@ class DataDisplayPageState extends State<DataDisplayPage>
           '📊 刷新历史数据 (上次: ${_lastRefreshTime ?? "首次"}, 间隔: ${_lastRefreshTime != null ? now.difference(_lastRefreshTime!).inSeconds : 0}秒)');
       _lastRefreshTime = now;
 
-      // 重新初始化时间范围为最近24小时
-      _initializeTimeRanges();
-
-      // 加载所有历史数据
-      _loadAllHistoryData();
+      // 异步初始化时间范围后加载历史数据
+      _initializeTimeRangesAndLoadData();
     } else {
       final elapsed = now.difference(_lastRefreshTime!).inSeconds;
       debugPrint(
@@ -170,24 +181,55 @@ class DataDisplayPageState extends State<DataDisplayPage>
     }
   }
 
-  /// 初始化所有图表的时间范围为最近24小时
-  void _initializeTimeRanges() {
-    final now = DateTime.now();
-    final start = now.subtract(_defaultTimeRange);
+  /// 初始化所有图表的时间范围
+  ///
+  /// 优先从数据库获取最新数据时间戳作为结束时间，
+  /// 开始时间 = 结束时间 - 查询窗口（50秒）
+  ///
+  /// 如果无法获取数据库时间戳，则回退到旧逻辑：
+  /// - 结束时间：150秒前（跳过未写入的数据）
+  /// - 开始时间：200秒前（查询50秒的时间窗口）
+  Future<void> _initializeTimeRanges() async {
+    DateTime end;
+    DateTime start;
+
+    // 尝试从数据库获取最新时间戳
+    final latestTimestamp = await _historyService.getLatestDbTimestamp();
+
+    if (latestTimestamp != null) {
+      // 使用数据库最新时间戳作为结束时间
+      end = latestTimestamp;
+      start = end.subtract(_queryWindow); // 往前50秒
+      debugPrint(
+          '📊 使用数据库最新时间戳: ${end.toString()}, 查询范围: ${start.toString()} ~ ${end.toString()}');
+    } else {
+      // 回退到旧逻辑：200秒前 到 150秒前
+      final now = DateTime.now();
+      end = now.subtract(_batchWriteDelay); // 150秒前
+      start = end.subtract(_queryWindow); // 200秒前
+      debugPrint(
+          '📊 无法获取数据库时间戳，使用回退逻辑: ${start.toString()} ~ ${end.toString()} (跳过最近150秒)');
+    }
 
     // 回转窑（3个图表共用一个时间范围）
     _hopperChartStartTime = start;
-    _hopperChartEndTime = now;
+    _hopperChartEndTime = end;
 
     // 辊道窑（3个图表共用一个时间范围）
     _rollerChartStartTime = start;
-    _rollerChartEndTime = now;
+    _rollerChartEndTime = end;
 
     // SCR/风机
     _pumpEnergyChartStartTime = start;
-    _pumpEnergyChartEndTime = now;
+    _pumpEnergyChartEndTime = end;
     _fanEnergyChartStartTime = start;
-    _fanEnergyChartEndTime = now;
+    _fanEnergyChartEndTime = end;
+  }
+
+  /// 初始化时间范围并加载数据（组合方法）
+  Future<void> _initializeTimeRangesAndLoadData() async {
+    await _initializeTimeRanges();
+    await _loadAllHistoryData();
   }
 
   /// 加载所有历史数据
@@ -963,14 +1005,15 @@ class DataDisplayPageState extends State<DataDisplayPage>
     }
   }
 
-  /// 重置图表为默认24小时时间范围
+  /// 重置图表为默认时间范围（200秒前 到 150秒前）
   void _resetChartToDefault(String chartType) {
     final now = DateTime.now();
-    final defaultStart = now.subtract(_defaultTimeRange);
+    final defaultEnd = now.subtract(_batchWriteDelay); // 150秒前
+    final defaultStart = defaultEnd.subtract(_queryWindow); // 200秒前
 
     setState(() {
       _setChartStartTime(chartType, defaultStart);
-      _setChartEndTime(chartType, now);
+      _setChartEndTime(chartType, defaultEnd);
     });
 
     _refreshChartData(chartType);

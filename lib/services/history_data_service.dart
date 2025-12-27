@@ -14,16 +14,18 @@ class HistoryDataService {
   // 时间格式化辅助方法
   // ============================================================
 
-  /// 将DateTime转换为UTC时间字符串（去掉Z后缀，后端Flux不支持Z）
-  /// 例如: "2025-12-20T08:30:00" 而不是 "2025-12-20T08:30:00.000Z"
-  static String _formatUtcTime(DateTime dateTime) {
-    final utc = dateTime.toUtc();
-    return '${utc.year.toString().padLeft(4, '0')}-'
-        '${utc.month.toString().padLeft(2, '0')}-'
-        '${utc.day.toString().padLeft(2, '0')}T'
-        '${utc.hour.toString().padLeft(2, '0')}:'
-        '${utc.minute.toString().padLeft(2, '0')}:'
-        '${utc.second.toString().padLeft(2, '0')}';
+  /// 将DateTime转换为本地时间字符串（不转UTC，因为后端存储的是北京时间）
+  /// 例如: "2025-12-20T10:30:00" (用户选择的北京时间)
+  ///
+  /// 注意：后端 polling_service.py 使用 now_beijing() 存储时间戳，
+  /// 因此查询时应发送本地时间（北京时间），而不是 UTC 时间
+  static String _formatLocalTime(DateTime dateTime) {
+    return '${dateTime.year.toString().padLeft(4, '0')}-'
+        '${dateTime.month.toString().padLeft(2, '0')}-'
+        '${dateTime.day.toString().padLeft(2, '0')}T'
+        '${dateTime.hour.toString().padLeft(2, '0')}:'
+        '${dateTime.minute.toString().padLeft(2, '0')}:'
+        '${dateTime.second.toString().padLeft(2, '0')}';
   }
 
   // ============================================================
@@ -199,6 +201,37 @@ class HistoryDataService {
   }
 
   // ============================================================
+  // 数据库时间戳查询
+  // ============================================================
+
+  /// 获取数据库中最新数据的时间戳
+  ///
+  /// 用于确定历史数据查询的时间范围基准点。
+  /// 返回 null 表示数据库中暂无数据或查询失败。
+  Future<DateTime?> getLatestDbTimestamp() async {
+    try {
+      final client = ApiClient();
+      final response = await client
+          .get(Api.healthLatestTimestamp)
+          .timeout(const Duration(seconds: 5));
+
+      if (response != null && response['success'] == true) {
+        final data = response['data'];
+        if (data != null &&
+            data['has_data'] == true &&
+            data['timestamp'] != null) {
+          // 解析 ISO 格式时间戳 - 转换为本地时间
+          return DateTime.parse(data['timestamp']).toLocal();
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('获取数据库最新时间戳失败: $e');
+      return null;
+    }
+  }
+
+  // ============================================================
   // 料仓历史数据查询
   // ============================================================
 
@@ -218,10 +251,10 @@ class HistoryDataService {
   }) async {
     final interval = calculateAggregateInterval(start, end);
 
-    // 转换为UTC时间发送（后端InfluxDB使用UTC时区，去掉Z后缀）
+    // 发送本地时间（后端使用北京时间存储）
     final queryParams = <String, String>{
-      'start': _formatUtcTime(start),
-      'end': _formatUtcTime(end),
+      'start': _formatLocalTime(start),
+      'end': _formatLocalTime(end),
       'interval': interval,
     };
 
@@ -297,10 +330,10 @@ class HistoryDataService {
   }) async {
     final interval = calculateAggregateInterval(start, end);
 
-    // 转换为UTC时间发送（后端InfluxDB使用UTC时区，去掉Z后缀）
+    // 发送本地时间（后端使用北京时间存储）
     final queryParams = <String, String>{
-      'start': _formatUtcTime(start),
-      'end': _formatUtcTime(end),
+      'start': _formatLocalTime(start),
+      'end': _formatLocalTime(end),
       'interval': interval,
     };
 
@@ -364,10 +397,10 @@ class HistoryDataService {
   }) async {
     final interval = calculateAggregateInterval(start, end);
 
-    // 转换为UTC时间发送（后端InfluxDB使用UTC时区，去掉Z后缀）
+    // 发送本地时间（后端使用北京时间存储）
     final queryParams = <String, String>{
-      'start': _formatUtcTime(start),
-      'end': _formatUtcTime(end),
+      'start': _formatLocalTime(start),
+      'end': _formatLocalTime(end),
       'interval': interval,
     };
 
@@ -428,10 +461,10 @@ class HistoryDataService {
   }) async {
     final interval = calculateAggregateInterval(start, end);
 
-    // 转换为UTC时间发送（后端InfluxDB使用UTC时区，去掉Z后缀）
+    // 发送本地时间（后端使用北京时间存储）
     final queryParams = <String, String>{
-      'start': _formatUtcTime(start),
-      'end': _formatUtcTime(end),
+      'start': _formatLocalTime(start),
+      'end': _formatLocalTime(end),
       'interval': interval,
     };
 
@@ -491,8 +524,8 @@ class HistoryDataService {
           success: true,
           deviceId: deviceId,
           timeRange: TimeRange(
-            start: DateTime.parse(data['time_range']['start']),
-            end: DateTime.parse(data['time_range']['end']),
+            start: DateTime.parse(data['time_range']['start']).toLocal(),
+            end: DateTime.parse(data['time_range']['end']).toLocal(),
           ),
           interval: data['interval'] ?? '5m',
           dataPoints:
@@ -577,9 +610,9 @@ class HistoryDataPoint {
   });
 
   factory HistoryDataPoint.fromJson(Map<String, dynamic> json) {
-    // 提取时间
+    // 提取时间 - 转换为本地时间
     final timeStr = json['time'] as String;
-    final time = DateTime.parse(timeStr);
+    final time = DateTime.parse(timeStr).toLocal();
 
     // 提取字段值
     final fields = <String, dynamic>{};

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'pages/top_bar.dart';
@@ -44,13 +45,12 @@ void main() async {
 }
 
 Future<void> _initializeApp() async {
-  // 初始化窗口管理器 - 全屏显示，隐藏原生标题栏
+  // 初始化窗口管理器 - 全屏显示（工控机部署）
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await logger.info('初始化窗口管理器...');
     await windowManager.ensureInitialized();
 
     WindowOptions windowOptions = const WindowOptions(
-      center: true,
       backgroundColor: Colors.transparent,
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.hidden, // 隐藏原生标题栏
@@ -58,6 +58,7 @@ Future<void> _initializeApp() async {
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.setResizable(false); // 全屏模式禁止调整大小
       await windowManager.setFullScreen(true); // 全屏显示
       await windowManager.show();
       await windowManager.focus();
@@ -152,6 +153,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           title: 'Ceramic Workshop Digital Twin',
           theme: ThemeData.dark(),
           themeMode: ThemeMode.dark,
+          // 中文本地化支持
+          locale: const Locale('zh', 'CN'),
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('zh', 'CN'), // 中文简体
+            Locale('en', 'US'), // 英文
+          ],
           home: const DigitalTwinPage(),
           debugShowCheckedModeBanner: false,
         ),

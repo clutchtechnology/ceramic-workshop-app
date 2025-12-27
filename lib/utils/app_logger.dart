@@ -61,11 +61,10 @@ class AppLogger {
     }
   }
 
-  /// 🔧 新增: 启动心跳监控
+  /// 🔧 心跳监控：每12小时记录一次，减少日志噪音
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer =
-        Timer.periodic(const Duration(seconds: 60), (timer) async {
+    _heartbeatTimer = Timer.periodic(const Duration(hours: 12), (timer) async {
       try {
         _heartbeatCount++;
         final uptime = DateTime.now().difference(_startTime!);
@@ -74,13 +73,6 @@ class AppLogger {
 
         await _writeLog(
             'HEARTBEAT', '应用运行中 #$_heartbeatCount | 已运行: ${hours}h${minutes}m');
-
-        // 每小时记录一次详细状态
-        if (_heartbeatCount % 60 == 0) {
-          await _writeLog('INFO', '=== 小时状态报告 ===');
-          await _writeLog('INFO', '运行时长: ${hours}小时${minutes}分钟');
-          await _writeLog('INFO', '心跳次数: $_heartbeatCount');
-        }
       } catch (e) {
         // 心跳异常不应该中断定时器
         debugPrint('[AppLogger] 心跳记录异常: $e');
@@ -137,9 +129,13 @@ class AppLogger {
   Future<void> _writeLog(String level, String message) async {
     if (!_initialized || _logFile == null) return;
 
-    // 🔧 发行版本只记录 ERROR 和 FATAL 级别
-    if (!kDebugMode && level != 'ERROR' && level != 'FATAL') {
-      return;
+    // 🔧 发行版本只记录错误级别：ERROR, FATAL
+    // 排除所有其他日志：INFO, NETWORK, MEMORY, ACTION, LIFECYCLE, WARNING, HEARTBEAT
+    if (!kDebugMode) {
+      const allowedLevels = {'ERROR', 'FATAL'};
+      if (!allowedLevels.contains(level)) {
+        return;
+      }
     }
 
     try {

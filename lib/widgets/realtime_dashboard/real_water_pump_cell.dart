@@ -20,6 +20,11 @@ class WaterPumpCell extends StatelessWidget {
   /// 能耗 (kW)
   final double energyConsumption;
 
+  /// 三相电流 (A)
+  final double currentA;
+  final double currentB;
+  final double currentC;
+
   const WaterPumpCell({
     super.key,
     required this.index,
@@ -27,6 +32,9 @@ class WaterPumpCell extends StatelessWidget {
     this.power = 0.0,
     this.cumulativeEnergy = 0.0,
     this.energyConsumption = 0.0,
+    this.currentA = 0.0,
+    this.currentB = 0.0,
+    this.currentC = 0.0,
   });
 
   @override
@@ -36,7 +44,7 @@ class WaterPumpCell extends StatelessWidget {
         color: TechColors.bgMedium.withOpacity(0.3),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(
-          color: TechColors.borderDark,
+          color: TechColors.glowCyan.withOpacity(0.3),
           width: 1,
         ),
       ),
@@ -65,53 +73,129 @@ class WaterPumpCell extends StatelessWidget {
           ),
           // 数据显示区域 - 绝对定位在底部
           Positioned(
-            left: 8,
-            right: 8,
+            left: 4,
+            right: 4,
             bottom: 8,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
               decoration: BoxDecoration(
-                color: TechColors.bgDeep.withOpacity(0.92),
+                color: TechColors.bgDeep.withOpacity(0.85),
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
                   color: TechColors.glowCyan.withOpacity(0.4),
                   width: 1,
                 ),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      const PowerIcon(size: 24, color: TechColors.glowCyan),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${power.toStringAsFixed(1)} kW',
-                        style: const TextStyle(
-                          color: TechColors.glowCyan,
-                          fontSize: 19.5,
-                          fontWeight: FontWeight.w500,
-                          fontFamily: 'Roboto Mono',
+                  // 左侧列：功率和能耗
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const PowerIcon(
+                                size: 18, color: TechColors.glowCyan),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${power.toStringAsFixed(1)}kW',
+                              style: const TextStyle(
+                                color: TechColors.glowCyan,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              softWrap: false,
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 2),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const EnergyIcon(
+                                size: 18, color: TechColors.glowOrange),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${energyConsumption.toStringAsFixed(1)}kWh',
+                              style: const TextStyle(
+                                color: TechColors.glowOrange,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              softWrap: false,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const EnergyIcon(size: 24, color: TechColors.glowOrange),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${energyConsumption.toStringAsFixed(1)} kWh',
-                        style: const TextStyle(
-                          color: TechColors.glowOrange,
-                          fontSize: 19.5,
-                          fontWeight: FontWeight.w500,
-                          fontFamily: 'Roboto Mono',
+                  // 右侧列：三相电流
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CurrentIcon(color: TechColors.glowCyan, size: 18),
+                            Text(
+                              'A:${currentA.toStringAsFixed(1)}A',
+                              style: const TextStyle(
+                                color: TechColors.glowCyan,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              softWrap: false,
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CurrentIcon(color: TechColors.glowCyan, size: 18),
+                            Text(
+                              'B:${currentB.toStringAsFixed(1)}A',
+                              style: const TextStyle(
+                                color: TechColors.glowCyan,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              softWrap: false,
+                            ),
+                          ],
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CurrentIcon(color: TechColors.glowCyan, size: 18),
+                            Text(
+                              'C:${currentC.toStringAsFixed(1)}A',
+                              style: const TextStyle(
+                                color: TechColors.glowCyan,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              softWrap: false,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),

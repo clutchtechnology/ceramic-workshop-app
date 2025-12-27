@@ -6,32 +6,7 @@ import 'package:flutter/foundation.dart';
 class HopperService {
   final ApiClient _client = ApiClient();
 
-  // 获取所有料仓列表（可选类型筛选）
-  Future<List<HopperDevice>> getHopperList({String? hopperType}) async {
-    try {
-      final response = await _client.get(
-        Api.hopperList,
-        params: hopperType != null ? {'hopper_type': hopperType} : null,
-      );
-
-      if (response['success'] == true) {
-        final data = response['data'];
-        if (data is List) {
-          return data
-              .whereType<Map<String, dynamic>>()
-              .map(HopperDevice.fromJson)
-              .toList();
-        }
-      }
-      return [];
-    } catch (e) {
-      // 🔧 仅在 debug 模式打印
-      if (kDebugMode) debugPrint('Error fetching hopper list: $e');
-      return [];
-    }
-  }
-
-  // 批量获取所有料仓实时数据 (新增)
+  // 批量获取所有料仓实时数据
   Future<Map<String, HopperData>> getHopperBatchData(
       {String? hopperType}) async {
     try {

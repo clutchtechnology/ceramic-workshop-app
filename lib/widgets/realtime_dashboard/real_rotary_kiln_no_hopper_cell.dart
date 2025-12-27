@@ -27,6 +27,9 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
     final power = data?.electricityMeter?.pt ?? 0.0;
     final energy = data?.electricityMeter?.impEp ?? 0.0;
     final temperature = data?.temperatureSensor?.temperature ?? 0.0;
+    final currentA = data?.electricityMeter?.currentA ?? 0.0;
+    final currentB = data?.electricityMeter?.currentB ?? 0.0;
+    final currentC = data?.electricityMeter?.currentC ?? 0.0;
 
     // 获取温度颜色配置
     final configProvider = context.watch<RealtimeConfigProvider>();
@@ -45,12 +48,13 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
       ),
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.only(
+              left: 4.0, right: 4.0, top: 4.0, bottom: 0.0),
           child: Stack(
             children: [
-              // 主图片（右移20px，上移8px）
+              // 主图片（右移20px，下移10px）
               Transform.translate(
-                offset: const Offset(20, -8),
+                offset: const Offset(20, 10),
                 child: Image.asset(
                   'assets/images/rotary_kiln2.png',
                   fit: BoxFit.contain,
@@ -86,68 +90,132 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                 top: 0,
                 bottom: 0,
                 child: Align(
-                  alignment: const Alignment(0.1, -0.7), // 下移20px
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12, // 8 -> 12
-                      vertical: 9, // 6 -> 9
-                    ),
-                    decoration: BoxDecoration(
-                      color: TechColors.bgDeep.withOpacity(0.85),
-                      borderRadius: BorderRadius.circular(6), // 4 -> 6
-                      border: Border.all(
-                        color: TechColors.glowCyan.withOpacity(0.4),
-                        width: 1,
+                  alignment: const Alignment(0.4, -1.1),
+                  child: Transform.translate(
+                    offset: const Offset(-22, 20), // 左移40px，上移20px
+                    child: Container(
+                      padding: const EdgeInsets.only(
+                        left: 4,
+                        right: 10, // 右边加长6px
+                        top: 6,
+                        bottom: 6,
                       ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        EnergyIcon(color: TechColors.glowOrange, size: 24),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${energy.toStringAsFixed(1)}kWh',
-                          style: const TextStyle(
-                            color: TechColors.glowOrange,
-                            fontSize: 19.5,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Roboto Mono',
-                          ),
+                      decoration: BoxDecoration(
+                        color: TechColors.bgDeep.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: TechColors.glowCyan.withOpacity(0.4),
+                          width: 1,
                         ),
-                      ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 第一行：能量
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              EnergyIcon(
+                                  color: TechColors.glowOrange, size: 20),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${energy.toStringAsFixed(1)}kWh',
+                                style: const TextStyle(
+                                  color: TechColors.glowOrange,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Roboto Mono',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          // 第二行：A相电流
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CurrentIcon(color: TechColors.glowCyan, size: 20),
+                              Text(
+                                'A:${currentA.toStringAsFixed(1)}A',
+                                style: const TextStyle(
+                                  color: TechColors.glowCyan,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Roboto Mono',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          // 第三行：B相电流
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CurrentIcon(color: TechColors.glowCyan, size: 20),
+                              Text(
+                                'B:${currentB.toStringAsFixed(1)}A',
+                                style: const TextStyle(
+                                  color: TechColors.glowCyan,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Roboto Mono',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          // 第四行：C相电流
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CurrentIcon(color: TechColors.glowCyan, size: 20),
+                              Text(
+                                'C:${currentC.toStringAsFixed(1)}A',
+                                style: const TextStyle(
+                                  color: TechColors.glowCyan,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Roboto Mono',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
               // 中间温度显示
               Positioned(
-                left: -1,
+                left: -11,
                 right: 0,
-                top: 20,
+                top: 70,
                 bottom: 0,
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12, // 8 -> 12
-                      vertical: 6, // 4 -> 6
+                      horizontal: 6,
+                      vertical: 4,
                     ),
                     decoration: BoxDecoration(
                       color: TechColors.bgDeep.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(6), // 4 -> 6
+                      borderRadius: BorderRadius.circular(4),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         ThermometerIcon(
                           color: tempColor,
-                          size: 24,
+                          size: 18,
                         ),
                         const SizedBox(width: 2),
                         Text(
                           '${temperature.toStringAsFixed(1)}°C',
                           style: TextStyle(
                             color: tempColor,
-                            fontSize: 19.5,
+                            fontSize: 16,
                             fontWeight: FontWeight.w700,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -157,20 +225,20 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                   ),
                 ),
               ),
-              // 窑编号标签（左下角）
+              // 右下角窑编号标签
               Positioned(
+                right: 4,
                 bottom: 4,
-                left: 4,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 6,
-                    vertical: 2,
+                    vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: TechColors.bgDeep.withOpacity(0.8),
-                    borderRadius: BorderRadius.circular(2),
+                    color: TechColors.bgDeep.withOpacity(0.85),
+                    borderRadius: BorderRadius.circular(4),
                     border: Border.all(
-                      color: TechColors.glowOrange.withOpacity(0.3),
+                      color: TechColors.glowOrange.withOpacity(0.6),
                       width: 1,
                     ),
                   ),
@@ -178,8 +246,9 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                     '窑 $index',
                     style: const TextStyle(
                       color: TechColors.glowOrange,
-                      fontSize: 12.5,
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
+                      fontFamily: 'Roboto Mono',
                     ),
                   ),
                 ),

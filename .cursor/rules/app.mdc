@@ -2,293 +2,207 @@
 alwaysApply: true
 ---
 
+# Flutter 工业监控应用模板
 
-# Ceramic Workshop App - AI Coding Instructions
-
-## Project Overview
-
-Windows desktop industrial monitoring app (Flutter/Dart) for ceramic grinding workshop. Communicates with Siemens S7-1200 PLCs to monitor kiln temperatures, energy consumption, and material feed systems. Target: 1920x1080 industrial touch panels.
+> **使用说明**: 复制此模板，修改 `[占位符]` 内容即可快速生成新项目的 AI 提示词。
 
 ---
 
-## 设备配置
+## 1. 项目定义 (必填)
 
-| 设备类型     | 数量      | 分段/分区                  | 说明                                  |
-| ------------ | --------- | -------------------------- | ------------------------------------- |
-| **辊道窑**   | 1 台 (长) | 3 段                       | 因窑体较长，分 3 段分别显示温度、能耗 |
-| **回转窑**   | 3 台      | 每台 8 温区                | 独立监控，支持切换查看                |
-| **SCR 设备** | 2 套      | 每套含风机+氨水泵+燃气管路 | 两套独立显示，支持对比                |
-
----
-
-## 页面设计规范
-
-### 核心原则：单页面整合
-
-> **所有功能在一个页面内完成**，无多页面导航，通过区域划分展示实时数据 + 历史数据图表。
-
-### 页面布局 (1920×1080)
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  Header (48px): 系统标题 | 当前时间 | 通讯状态 | 报警摘要                     │
-├───────────────────────────────────┬─────────────────────────────────────────┤
-│                                   │                                         │
-│   左侧实时数据区 (60%)            │   右侧历史数据区 (40%)                   │
-│                                   │                                         │
-│  ┌─────────────────────────────┐  │  ┌─────────────────────────────────┐   │
-│  │ 辊道窑 (3段)                │  │  │ 时间选择器                       │   │
-│  │ ├ 段1: 温度 | 能耗          │  │  │ [起始时间] ─ [结束时间] [查询]   │   │
-│  │ ├ 段2: 温度 | 能耗          │  │  └─────────────────────────────────┘   │
-│  │ └ 段3: 温度 | 能耗          │  │                                         │
-│  └─────────────────────────────┘  │  ┌─────────────────────────────────┐   │
-│                                   │  │ 历史趋势图表                     │   │
-│  ┌─────────────────────────────┐  │  │                                 │   │
-│  │ 回转窑 (3台)                │  │  │   [温度曲线 / 能耗曲线 / ...]   │   │
-│  │ ├ 窑1: 8区温度 | 能耗 | ... │  │  │                                 │   │
-│  │ ├ 窑2: 8区温度 | 能耗 | ... │  │  │                                 │   │
-│  │ └ 窑3: 8区温度 | 能耗 | ... │  │  │                                 │   │
-│  └─────────────────────────────┘  │  └─────────────────────────────────┘   │
-│                                   │                                         │
-│  ┌─────────────────────────────┐  │  ┌─────────────────────────────────┐   │
-│  │ SCR设备 (2套)               │  │  │ 数据选择                         │   │
-│  │ ├ 套1: 风机|氨水泵|燃气     │  │  │ ☑辊道窑 ☑回转窑 ☑SCR设备        │   │
-│  │ └ 套2: 风机|氨水泵|燃气     │  │  │ 具体参数: [下拉选择]             │   │
-│  └─────────────────────────────┘  │  └─────────────────────────────────────┘   │
-│                                   │                                         │
-├───────────────────────────────────┴─────────────────────────────────────────┤
-│  Footer (32px): PLC连接状态 | 最后刷新时间 | 版本号                          │
-└─────────────────────────────────────────────────────────────────────────────┘
+```yaml
+项目名称: [ceramic-workshop-app]
+应用类型: Windows 桌面工业监控
+目标分辨率: [1920×1080] 触摸屏
+数据源: [Siemens S7-1200 PLC / REST API / MQTT]
 ```
 
-### 功能区域说明
+---
 
-| 区域           | 功能                                       | 刷新频率 |
-| -------------- | ------------------------------------------ | -------- |
-| **左侧实时区** | 显示所有设备当前数据 (温度/能耗/速度/重量) | 1 秒     |
-| **右侧历史区** | 实时趋势图表 + 历史数据查询                | 1 秒     |
-| **Header**     | 系统状态、时间、报警                       | 1 秒     |
-| **Footer**     | 连接状态、刷新时间                         | 实时     |
+## 2. 监控设备清单 (按需修改)
 
-### 数据采集与刷新规范
-
-| 数据类型       | 采集周期 | 说明                                           |
-| -------------- | -------- | ---------------------------------------------- |
-| **温度数据**   | 1 秒     | 所有窑炉温区温度，高频采集确保实时性           |
-| **能耗数据**   | 1 秒     | 电压/电流/功率，与温度同步采集                 |
-| **下料速度**   | 1 秒     | 回转窑下料速度，实时监控                       |
-| **料仓重量**   | 1 秒     | 料仓重量变化，用于计算消耗速率                 |
-| **燃气流速**   | 1 秒     | SCR设备燃气管路流速                            |
-| **累计量统计** | 1 秒     | 累计电量、累计气量等，每秒累加                 |
-
-### 实时趋势图表规范
-
-| 配置项           | 默认值   | 说明                                       |
-| ---------------- | -------- | ------------------------------------------ |
-| **默认时间窗口** | 60 秒    | 图表默认显示最近 60 秒的数据               |
-| **数据点数量**   | 60 个    | 每秒 1 个数据点，共 60 个点                |
-| **刷新方式**     | 滚动更新 | 每次刷新添加新点，移除最旧点，保持窗口大小 |
-| **Y 轴范围**     | 自适应   | 根据数据范围动态调整                       |
-
-### 历史数据查询功能
-
-| 功能点         | 详细描述                                                             |
-| -------------- | -------------------------------------------------------------------- |
-| **时间选择器** | 日期时间范围选择器，支持快捷选项 (最近 1 小时/今日/昨日/本周/自定义) |
-| **设备选择**   | 多选框选择要查询的设备类型                                           |
-| **参数选择**   | 下拉菜单选择具体参数 (温度/电压/电流/功率/流速等)                    |
-| **图表绘制**   | fl_chart 折线图展示历史趋势，支持多曲线对比                          |
-| **数据导出**   | (可选) 导出 CSV/Excel                                                |
+| 设备名称 | 数量 | 分区/参数 | 数据块 |
+|---------|------|----------|--------|
+| [辊道窑] | [1台] | [3段: 温度+能耗] | [DB10] |
+| [回转窑] | [3台] | [每台8温区+下料+料仓] | [DB20] |
+| [SCR设备] | [2套] | [风机+氨水泵+燃气×2] | [DB30] |
 
 ---
 
-## 功能模块
+## 3. 架构规范
 
-| 模块         | 功能项             | 描述                                            |
-| ------------ | ------------------ | ----------------------------------------------- |
-| **辊道窑**   | 温度采集、分区显示 | **3 段分别显示**，实时更新 ≤3 秒，历史曲线      |
-|              | 能耗采集、显示     | **3 段独立能耗** (V/A/kW)，趋势图表，汇总统计   |
-| **回转窑**   | 温度采集、分区显示 | **3 台窑炉**，每台 8 温区监控，支持切换/对比    |
-|              | 能耗采集、显示     | 电压/电流/功率实时显示                          |
-|              | 下料速度显示       | 实时速度(kg/h)，速度曲线，刷新 ≤5 秒            |
-|              | 料仓重量显示       | 实时重量，容量百分比，重量告警                  |
-| **SCR 设备** | 风机能耗           | **2 套独立显示**，多风机功率/累计电量，启停状态 |
-|              | 氨水泵能耗         | **2 套独立显示**，实时功率，运行状态            |
-|              | 燃气用量           | **2 套 × 2 管路**，流速监控，日/月/年消耗统计   |
-| **历史查询** | 时间范围选择       | 起止时间选择器，快捷时间段                      |
-|              | 多设备对比         | 支持选择多设备/多参数同图对比                   |
-| **系统配置** | 地址配置           | 服务器/PLC/数据库/传感器地址配置 (独立弹窗)     |
+### 目录结构
+```
+lib/
+├── main.dart                 # 入口, 窗口初始化
+├── api/                      # HTTP/PLC 通信接口
+├── models/                   # 数据模型
+├── services/                 # 业务逻辑, 数据采集
+├── providers/                # 状态管理 (Provider)
+├── pages/                    # 页面
+├── widgets/                  # 可复用组件
+└── utils/                    # 工具类
+```
 
-## UI 设计规范 - 工业 HMI/SCADA 风格
+### 数据流
+```
+数据源 → api/ → services/ → providers/ → pages/widgets/
+              ↓
+        MockClient (开发模式)
+```
 
-**设计理念**: 功能性 > 清晰性 > 可靠性 > 美学
+### 核心依赖
+```yaml
+dependencies:
+  flutter_riverpod: ^2.0.0    # 状态管理
+  fl_chart: ^0.65.0           # 图表
+  window_manager: ^0.3.0      # 窗口控制
+  dio: ^5.0.0                 # HTTP (如需)
+  # dart_snap7: ^x.x.x        # PLC通信 (如需)
+```
 
-### 核心原则
+---
 
-高对比度深色主题 | 扁平化设计 | 状态即颜色 | 网格化布局 | 大字体数值
+## 4. UI 设计规范 (工业 HMI 风格)
 
-### 配色系统
-
+### 配色 (深色主题)
 ```dart
-// 背景: bgPrimary #0a0e14, bgSecondary #111820, bgTertiary #1a2332, bgElevated #242d3a
-// 边框: borderDark #2a3444, borderLight #3d4a5c, gridLine #1e2836
-// 文字: textPrimary #e8eaed, textSecondary #9aa0a6, textDisabled #5f6368
-// 状态: statusNormal #00e676, statusWarning #ffea00, statusAlarm #ff1744, statusOff #616161
-// 数据: dataBlue #2196f3, dataCyan #00bcd4, dataOrange #ff9800, dataPurple #9c27b0
-// 交互: accentPrimary #00b0ff, accentHover #29b6f6, focusRing #448aff
+// 背景
+bgPrimary: #0a0e14, bgSecondary: #111820, bgCard: #1a2332
+
+// 状态 (ISA-101标准)
+normal: #00e676 (绿), warning: #ffea00 (黄), alarm: #ff1744 (红), off: #616161 (灰)
+
+// 文字
+textPrimary: #e8eaed, textSecondary: #9aa0a6
+
+// 数据曲线
+blue: #2196f3, cyan: #00bcd4, orange: #ff9800, purple: #9c27b0
 ```
 
-### 组件与字体规范
-
-| 组件           | 规格         | 字体规范                      |
-| -------------- | ------------ | ----------------------------- |
-| **KPI 卡片**   | 160×80px     | Roboto Mono/Consolas, 24-48px |
-| **数值显示**   | 32-48px 字号 | fontWeight 500-700            |
-| **状态指示器** | 12-16px 圆点 | 纯色填充，可带脉冲动画        |
-| **数据表格**   | 28-32px 行高 | 标签: 12-14px, fontWeight 400 |
-| **按钮**       | 36-44px 高度 | 标题: 16-20px, fontWeight 500 |
-
-### 状态编码 (ISA-101)
-
-正常运行 `#00e676` 绿 | 警告 `#ffea00` 黄 | 报警 `#ff1744` 红 (闪烁) | 停机 `#616161` 灰
-
-### 布局与窗口
-
-**布局**: Header(48px) → 左侧实时数据(60%) + 右侧历史图表(40%) → Footer(32px)  
-**导航**: **无多页面导航**，单页面整合所有功能  
-**窗口**: `window_manager` 全屏显示，启动时 `setFullScreen(true)`
-
-## Architecture
-
-### Data Flow
-
+### 布局模板 (单页面整合)
 ```
-PLC (S7-1200) → dart_snap7 → IPlcClient → KilnDataCollector → Pages (UI)
-                    ↓
-           MockPlcClient (开发模式)
+┌─────────────────────────────────────────────────────┐
+│ Header (48px): 标题 | 时间 | 连接状态 | 报警        │
+├─────────────────────────┬───────────────────────────┤
+│ 左侧实时数据 (60%)      │ 右侧历史图表 (40%)        │
+│ - 设备1 卡片组          │ - 时间选择器              │
+│ - 设备2 卡片组          │ - 趋势图表                │
+│ - 设备N 卡片组          │ - 参数选择                │
+├─────────────────────────┴───────────────────────────┤
+│ Footer (32px): 连接状态 | 刷新时间 | 版本           │
+└──────────────────────────────────────────────────���──┘
 ```
 
-### 模拟场景说明
+### 组件规范
+| 组件 | 尺寸 | 字体 |
+|-----|------|-----|
+| KPI卡片 | 160×80px | Roboto Mono, 32-48px |
+| 状态指示 | 12-16px圆点 | - |
+| 按钮 | 高36-44px | 16px, weight 500 |
 
-开发模式下 (`useMock: true`)，`MockPlcClient` 模拟 PLC 的持续数据输出：
+---
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Mock Data Generation (模拟 PLC 持续输出)                           │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  每 1 秒周期:                                                       │
-│  ├─ 温度数据: 基准值 ± 小幅随机波动 (模拟热工波动)                  │
-│  ├─ 能耗数据: 电压380V±10V, 电流基准±波动, 功率=V*I/1000           │
-│  ├─ 速度/重量: 平滑变化 (模拟工艺过程)                              │
-│  └─ 累计量: 根据瞬时值累加                                          │
-│                                                                     │
-│  数据特性:                                                          │
-│  ├─ 连续性: 数据基于上一次值变化，不会跳变                          │
-│  ├─ 合理性: 数值在工业正常范围内                                    │
-│  └─ 趋势性: 可模拟升温/降温/稳定等工艺阶段                          │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+## 5. 数据采集规范
 
-### 历史数据缓存
+### 刷新周期
+| 数据类型 | 周期 | 说明 |
+|---------|------|-----|
+| 温度/能耗/流速 | 1秒 | 实时监控 |
+| 累计量 | 1秒 | 持续累加 |
+| 历史查询 | 按需 | 用户触发 |
 
+### 趋势图表
+- 默认窗口: 60秒 (60个数据点)
+- 刷新方式: 滚动更新 (FIFO)
+- Y轴: 自适应范围
+
+### Mock 数据 (开发模式)
 ```dart
-// 实时数据缓存结构 (用于趋势图表)
-class DataPointBuffer {
-  final int maxPoints = 60;           // 默认保留 60 秒数据
-  final List<TimedDataPoint> points;  // 带时间戳的数据点
+// 模拟工业数据特性
+- 连续性: 基于上一值 ± 小幅波动
+- 合理性: 温度 800-1200°C, 电压 380V±10V
+- 趋势性: 可模拟升温/降温/稳定阶段
+```
+
+---
+
+## 6. 代码模式
+
+### Service 模式
+```dart
+class DeviceService {
+  final String baseUrl;
+  DeviceService(this.baseUrl);
   
-  void add(double value) {
-    points.add(TimedDataPoint(DateTime.now(), value));
-    if (points.length > maxPoints) points.removeAt(0);  // 滚动窗口
+  Future<DeviceData> fetchData() async {
+    // 实现数据获取
   }
 }
 ```
 
-### Key Layers
-
-- **`lib/data/datasources/plc_client.dart`** - `IPlcClient` 接口, `RealPlcClient`/`MockPlcClient` 实现, `PlcClientFactory`
-- **`lib/data/datasources/plc_data_service.dart`** - `S7DataParser` (Big Endian), `S7DataBuilder`, `PlcDataService`
-- **`lib/data/services/kiln_data_collector.dart`** - `KilnDataCollector`, 数据模型 (`RollerKilnData`, `RotaryKilnData`, `ScrEquipmentData`)
-- **`lib/presentation/pages/`** - UI 页面: 辊道窑, 回转窑, SCR 设备, 磨料车间, 系统配置
-- **`lib/presentation/widgets/hmi_widgets.dart`** - HMI 组件库 (`HmiColors`, `KpiCard`, `StatusIndicator` 等)
-
-### PLC Data Blocks
-
-| DB   | Purpose              | Key Data                                |
-| ---- | -------------------- | --------------------------------------- |
-| DB10 | 辊道窑 (Roller Kiln) | 10 zone temps, voltage, current, power  |
-| DB20 | 回转窑 (Rotary Kiln) | 8 zone temps, feed speed, hopper weight |
-| DB30 | SCR Equipment        | Fan power, pump power, gas flow         |
-| DB40 | 磨料车间 (Grinding)  | 外部数据源 URL 配置，实时数据展示       |
-
-## Code Patterns
-
-### 数据采集器 (推荐)
-
+### Provider 模式
 ```dart
-// 开发/生产模式切换
-final collector = KilnDataCollector(useMock: true);  // false for production
-await collector.connect('192.168.0.1', rack: 0, slot: 1);
-final data = await collector.readRollerKilnData();
+final deviceProvider = StateNotifierProvider<DeviceNotifier, DeviceState>((ref) {
+  return DeviceNotifier(ref.read(deviceServiceProvider));
+});
 ```
 
-### UI 页面模式
-
+### 页面模式
 ```dart
-class RollerKilnPage extends StatefulWidget {
-  final bool useMock;
-  final String plcIp;
+class MonitorPage extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<MonitorPage> createState() => _MonitorPageState();
 }
 
-class _RollerKilnPageState extends State<RollerKilnPage> {
-  late final KilnDataCollector _collector;
-
+class _MonitorPageState extends ConsumerState<MonitorPage> {
+  Timer? _refreshTimer;
+  
   @override
   void initState() {
     super.initState();
-    _collector = KilnDataCollector(useMock: widget.useMock);
-    _initConnection();
+    _startAutoRefresh();
   }
-
-  Future<void> _refreshData() async {
-    final data = await _collector.readRollerKilnData();
-    setState(() => _currentData = data);
+  
+  void _startAutoRefresh() {
+    _refreshTimer = Timer.periodic(Duration(seconds: 1), (_) {
+      ref.read(deviceProvider.notifier).refresh();
+    });
+  }
+  
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 }
 ```
 
-## Project Conventions
+---
 
-- **Charts**: `fl_chart` for trends
-- **State**: `StatefulWidget`
-- **Database**: `sqflite_common_ffi` for Windows SQLite
-- **Mock Data**: `MockPlcClient` 生成工业数据范围 (温度 800-1200°C, 电压 380V±10V)
-- **S7 Data Types**: BOOL, BYTE, WORD, DWORD, INT, DINT, REAL - all Big Endian
-
-## Critical Files
-
-| File                                         | Purpose                   |
-| -------------------------------------------- | ------------------------- |
-| `lib/main.dart`                              | App entry, 窗口全屏初始化 |
-| `lib/presentation/pages/home_page.dart`      | 主导航 (左侧边栏布局)     |
-| `lib/presentation/widgets/hmi_widgets.dart`  | HMI/SCADA 标准组件库      |
-| `lib/data/datasources/plc_client.dart`       | PLC 客户端接口 (唯一)     |
-| `lib/data/datasources/plc_data_service.dart` | S7 数据解析工具           |
-| `lib/data/services/kiln_data_collector.dart` | 窑炉数据采集服务          |
-
-## Development
+## 7. 开发命令
 
 ```powershell
-flutter run -d windows          # 开发模式 (MockPlcClient)
-flutter build windows           # 构建
-# 生产模式: 页面中设置 useMock: false, plcIp: '192.168.0.1'
+flutter run -d windows          # 开发运行
+flutter build windows           # 生产构建
 ```
 
-## Common Issues
+---
 
-- **VS 2019 required**: Flutter 3.22.x needs VS 2019 Build Tools
-- **libsnap7.dll missing**: Place 64-bit DLL in `build\windows\x64\runner\Debug\`
-- **连接失败**: 检查 IP 和 rack/slot (S7-1200: rack=0, slot=1)
-- **数据解析错误**: 确保使用 Big Endian 字节序
+## 8. 常见问题
+
+| 问题 | 解决方案 |
+|-----|---------|
+| VS 2019 required | Flutter 3.22.x 需要 VS 2019 Build Tools |
+| DLL missing | 将依赖 DLL 放入 `build/windows/x64/runner/Debug/` |
+| 窗口不全屏 | 检查 `window_manager` 初始化顺序 |
+
+---
+
+## 快速开始新项目
+
+1. **复制此模板**到新项目 `.cursor/rules/app.mdc`
+2. **修改第1节**: 项目名称、数据源类型
+3. **修改第2节**: 设备清单、参数配置
+4. **保留第3-8节**: 通用架构和规范
+5. **开始开发**: AI 将按此规范生成代码

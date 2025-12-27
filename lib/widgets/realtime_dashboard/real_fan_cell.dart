@@ -17,12 +17,20 @@ class FanCell extends StatelessWidget {
   /// 累计能耗 (kWh)
   final double cumulativeEnergy;
 
+  /// 三相电流 (A)
+  final double currentA;
+  final double currentB;
+  final double currentC;
+
   const FanCell({
     super.key,
     required this.index,
     this.isRunning = false,
     this.power = 0.0,
     this.cumulativeEnergy = 0.0,
+    this.currentA = 0.0,
+    this.currentB = 0.0,
+    this.currentC = 0.0,
   });
 
   @override
@@ -40,84 +48,156 @@ class FanCell extends StatelessWidget {
         children: [
           Column(
             children: [
-              // 上方 - 风机图片（缩小尺寸）
-              Expanded(
-                flex: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: FractionallySizedBox(
-                    widthFactor: 0.9, // 图片宽度为容器的90%
-                    heightFactor: 0.9, // 图片高度为容器的90%
-                    child: Image.asset(
-                      'assets/images/fan.png',
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Icon(
-                          Icons.image_not_supported,
-                          color: TechColors.textSecondary.withOpacity(0.5),
-                          size: 32,
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ),
-              // 下方 - 数据显示区域
+              // 上方 - 风机图片
               Expanded(
                 flex: 1,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8.0, vertical: 4.0),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: TechColors.bgDeep.withOpacity(0.85),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: TechColors.glowCyan.withOpacity(0.4),
-                        width: 1,
+                  padding: const EdgeInsets.only(
+                      top: 28.0, left: 4.0, right: 4.0, bottom: 4.0),
+                  child: Image.asset(
+                    'assets/images/fan.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Icon(
+                        Icons.image_not_supported,
+                        color: TechColors.textSecondary.withOpacity(0.5),
+                        size: 32,
+                      );
+                    },
+                  ),
+                ),
+              ),
+              // 下方 - 数据显示区域（两列显示：左列功率+能耗，右列三相电流）
+              Padding(
+                padding:
+                    const EdgeInsets.only(left: 4.0, right: 4.0, bottom: 8.0),
+                child: Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: TechColors.bgDeep.withOpacity(0.85),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: TechColors.glowCyan.withOpacity(0.4),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // 左侧列：功率和能耗
+                      Flexible(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const PowerIcon(
+                                    size: 18, color: TechColors.glowCyan),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '${power.toStringAsFixed(1)}kW',
+                                  style: const TextStyle(
+                                    color: TechColors.glowCyan,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Roboto Mono',
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const EnergyIcon(
+                                    size: 18, color: TechColors.glowOrange),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '${cumulativeEnergy.toStringAsFixed(1)}kWh',
+                                  style: const TextStyle(
+                                    color: TechColors.glowOrange,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Roboto Mono',
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                      // 右侧列：三相电流
+                      Flexible(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const PowerIcon(
-                                size: 24, color: TechColors.glowCyan),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${power.toStringAsFixed(1)} kW',
-                              style: const TextStyle(
-                                color: TechColors.glowCyan,
-                                fontSize: 19.5,
-                                fontWeight: FontWeight.w500,
-                                fontFamily: 'Roboto Mono',
-                              ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CurrentIcon(
+                                    color: TechColors.glowCyan, size: 18),
+                                Text(
+                                  'A:${currentA.toStringAsFixed(1)}A',
+                                  style: const TextStyle(
+                                    color: TechColors.glowCyan,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Roboto Mono',
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CurrentIcon(
+                                    color: TechColors.glowCyan, size: 18),
+                                Text(
+                                  'B:${currentB.toStringAsFixed(1)}A',
+                                  style: const TextStyle(
+                                    color: TechColors.glowCyan,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Roboto Mono',
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CurrentIcon(
+                                    color: TechColors.glowCyan, size: 18),
+                                Text(
+                                  'C:${currentC.toStringAsFixed(1)}A',
+                                  style: const TextStyle(
+                                    color: TechColors.glowCyan,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Roboto Mono',
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const EnergyIcon(
-                                size: 24, color: TechColors.glowOrange),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${cumulativeEnergy.toStringAsFixed(1)} kWh',
-                              style: const TextStyle(
-                                color: TechColors.glowOrange,
-                                fontSize: 19.5,
-                                fontWeight: FontWeight.w500,
-                                fontFamily: 'Roboto Mono',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),

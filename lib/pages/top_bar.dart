@@ -7,6 +7,8 @@ import '../providers/admin_provider.dart';
 import 'realtime_dashboard_page.dart';
 import 'data_display_page.dart';
 import 'settings_page.dart';
+import 'sensor_status_page.dart';
+import 'sensor_health_page.dart';
 
 /// 顶部导航栏目
 class DigitalTwinPage extends StatefulWidget {
@@ -23,14 +25,23 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
   final GlobalKey<DataDisplayPageState> _dataDisplayPageKey =
       GlobalKey<DataDisplayPageState>();
 
+  // RealtimeDashboardPage 的 GlobalKey，用于调用刷新方法
+  final GlobalKey<RealtimeDashboardPageState> _realtimeDashboardPageKey =
+      GlobalKey<RealtimeDashboardPageState>();
+
   // 页面实例缓存 - 保持页面状态
-  late final Widget _realtimeDashboardPage = const RealtimeDashboardPage();
+  late final Widget _realtimeDashboardPage;
   late final Widget _dataDisplayPage;
   late final Widget _settingsPage = const SettingsPage();
+  late final Widget _sensorStatusPage = const SensorStatusPage();
+  late final Widget _sensorHealthPage = const SensorHealthPage();
 
   @override
   void initState() {
     super.initState();
+    // 初始化 RealtimeDashboardPage 并传入 GlobalKey
+    _realtimeDashboardPage =
+        RealtimeDashboardPage(key: _realtimeDashboardPageKey);
     // 初始化 DataDisplayPage 并传入 GlobalKey
     _dataDisplayPage = DataDisplayPage(key: _dataDisplayPageKey);
     // TODO: 接入PLC数据后，在此处初始化数据连接
@@ -85,6 +96,8 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
       children: [
         _realtimeDashboardPage, // 实时大屏
         _dataDisplayPage, // 数据展示
+        _sensorStatusPage, // 状态监控
+        _sensorHealthPage, // 传感器健康
         _settingsPage, // 系统配置
       ],
     );
@@ -92,7 +105,7 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
 
   /// 顶部导航栏
   Widget _buildTopNavBar() {
-    final navItems = ['实时大屏', '数据展示'];
+    final navItems = ['实时大屏', '数据展示', '状态监控', '传感器健康'];
 
     return Container(
       height: 50,
@@ -185,14 +198,14 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _selectedNavIndex == 2
+                color: _selectedNavIndex == 3
                     ? TechColors.glowCyan.withOpacity(0.15)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Icon(
                 Icons.settings,
-                color: _selectedNavIndex == 2
+                color: _selectedNavIndex == 3
                     ? TechColors.glowCyan
                     : TechColors.textSecondary,
                 size: 20,
@@ -207,6 +220,11 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
   Widget _buildClockDisplay() {
     return Row(
       children: [
+        // 刷新数据按钮（仅在实时大屏页面显示）
+        if (_selectedNavIndex == 0) ...[
+          _buildRefreshButton(),
+          const SizedBox(width: 12),
+        ],
         const HealthStatusWidget(),
         const SizedBox(width: 12),
         StreamBuilder(
@@ -244,6 +262,72 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
           },
         ),
       ],
+    );
+  }
+
+  /// 构建刷新按钮
+  Widget _buildRefreshButton() {
+    final isRefreshing =
+        _realtimeDashboardPageKey.currentState?.isRefreshing ?? false;
+
+    return InkWell(
+      onTap: isRefreshing
+          ? null
+          : () {
+              _realtimeDashboardPageKey.currentState?.refreshData();
+              // 触发UI更新
+              setState(() {});
+            },
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isRefreshing
+              ? TechColors.bgMedium
+              : TechColors.glowOrange.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: isRefreshing
+                ? TechColors.borderDark
+                : TechColors.glowOrange.withOpacity(0.6),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isRefreshing)
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    TechColors.glowOrange,
+                  ),
+                ),
+              )
+            else
+              Icon(
+                Icons.refresh,
+                size: 16,
+                color: TechColors.glowOrange,
+              ),
+            const SizedBox(width: 6),
+            Text(
+              isRefreshing ? '刷新中...' : '刷新数据',
+              style: TextStyle(
+                color: isRefreshing
+                    ? TechColors.textSecondary
+                    : TechColors.glowOrange,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Roboto Mono',
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -31,6 +31,10 @@ class GasPipeCell extends StatelessWidget {
       decoration: BoxDecoration(
         color: TechColors.bgMedium.withOpacity(0.3),
         borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: TechColors.glowCyan.withOpacity(0.3),
+          width: 1,
+        ),
       ),
       child: Stack(
         children: [
@@ -55,13 +59,13 @@ class GasPipeCell extends StatelessWidget {
           ),
           // 数据显示区域 - 绝对定位在底部
           Positioned(
-            left: 8,
-            right: 8,
+            left: 4,
+            right: 4,
             bottom: 8,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
               decoration: BoxDecoration(
-                color: TechColors.bgDeep.withOpacity(0.92),
+                color: TechColors.bgDeep.withOpacity(0.85),
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
                   color: TechColors.glowCyan.withOpacity(0.4),
@@ -73,33 +77,43 @@ class GasPipeCell extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const FlowRateIcon(size: 24, color: TechColors.glowCyan),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${flowRate.toStringAsFixed(1)} m³/h',
-                        style: const TextStyle(
-                          color: TechColors.glowCyan,
-                          fontSize: 19.5,
-                          fontWeight: FontWeight.w500,
-                          fontFamily: 'Roboto Mono',
+                      const FlowRateIcon(size: 18, color: TechColors.glowCyan),
+                      const SizedBox(width: 2),
+                      Flexible(
+                        child: Text(
+                          '${flowRate.toStringAsFixed(1)}m³/h',
+                          style: const TextStyle(
+                            color: TechColors.glowCyan,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: 'Roboto Mono',
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       const TotalFlowIcon(
-                          size: 24, color: TechColors.glowGreen),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${energyConsumption.toStringAsFixed(1)} m³',
-                        style: const TextStyle(
-                          color: TechColors.glowGreen,
-                          fontSize: 19.5,
-                          fontWeight: FontWeight.w500,
-                          fontFamily: 'Roboto Mono',
+                          size: 18, color: TechColors.glowGreen),
+                      const SizedBox(width: 2),
+                      Flexible(
+                        child: Text(
+                          '${energyConsumption.toStringAsFixed(1)}m³',
+                          style: const TextStyle(
+                            color: TechColors.glowGreen,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: 'Roboto Mono',
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
                         ),
                       ),
                     ],

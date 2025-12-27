@@ -24,10 +24,10 @@ class RealtimeDashboardPage extends StatefulWidget {
   const RealtimeDashboardPage({super.key});
 
   @override
-  State<RealtimeDashboardPage> createState() => _RealtimeDashboardPageState();
+  State<RealtimeDashboardPage> createState() => RealtimeDashboardPageState();
 }
 
-class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
+class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   final HopperService _hopperService = HopperService();
   final RollerKilnService _rollerKilnService = RollerKilnService();
   final ScrFanService _scrFanService = ScrFanService();
@@ -42,6 +42,16 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   int _successCount = 0;
   int _failCount = 0;
   DateTime? _lastSuccessTime;
+  DateTime? _lastUIRefreshTime; // 🔧 UI刷新时间追踪
+  int _consecutiveSkips = 0; // 🔧 连续跳过刷新次数
+
+  // 🔧 公开方法供顶部bar调用
+  bool get isRefreshing => _isRefreshing;
+
+  /// 手动刷新数据
+  Future<void> refreshData() async {
+    await _fetchData();
+  }
 
   // 映射 UI 索引到设备 ID
   // 短窑: 7,6,5,4, 无料仓: 2,1, 长窑: 8,3,9
@@ -76,18 +86,39 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     // 🔧 修复: Timer 回调添加异常保护
     _timer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       try {
+        // 🔧 检测UI长时间未刷新
+        if (_lastUIRefreshTime != null) {
+          final sinceLastRefresh =
+              DateTime.now().difference(_lastUIRefreshTime!);
+          if (sinceLastRefresh.inSeconds > 60) {
+            logger.warning(
+                'UI超过60秒未刷新！上次刷新: $_lastUIRefreshTime, isRefreshing=$_isRefreshing, mounted=$mounted');
+          }
+        }
         await _fetchData();
       } catch (e, stack) {
         logger.error('定时器回调异常', e, stack);
         // 异常不会导致定时器停止
       }
     });
-    logger.info('数据轮询定时器已启动 (间隔: 5秒)');
+    logger.lifecycle('数据轮询定时器已启动 (间隔: 5秒)');
   }
 
   Future<void> _fetchData() async {
-    if (_isRefreshing) return;
-    if (!mounted) return; // 🔧 检查组件是否已挂载
+    // 🔧 检测是否被跳过
+    if (_isRefreshing) {
+      _consecutiveSkips++;
+      if (_consecutiveSkips >= 10) {
+        logger.warning('UI刷新被跳过 $_consecutiveSkips 次（_isRefreshing持续为true）');
+      }
+      return;
+    }
+    if (!mounted) {
+      logger.warning('组件未挂载，跳过刷新');
+      return;
+    }
+
+    _consecutiveSkips = 0; // 重置跳过计数
 
     setState(() {
       _isRefreshing = true;
@@ -115,8 +146,8 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
       _successCount++;
       _lastSuccessTime = DateTime.now();
 
-      // 每100次成功记录一次日志
-      if (_successCount % 100 == 0) {
+      // 每500次成功记录一次日志（约 42 分钟），减少日志噪音
+      if (_successCount % 500 == 0) {
         logger.info(
             '数据轮询统计: 成功=$_successCount, 失败=$_failCount, 最后成功时间=$_lastSuccessTime');
       }
@@ -127,6 +158,9 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
           _rollerKilnData = rollerData;
           _scrFanData = scrFanData;
         });
+        _lastUIRefreshTime = DateTime.now(); // 🔧 记录UI刷新时间
+      } else {
+        logger.warning('数据获取成功但组件已卸载，无法刷新UI');
       }
     } catch (e, stack) {
       _failCount++;
@@ -212,64 +246,9 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
       width: width,
       height: height,
       child: TechPanel(
-        title: '回转窑监控',
         accentColor: TechColors.glowOrange,
-        // 添加刷新按钮到标题栏
-        titleAction: InkWell(
-          onTap: _isRefreshing ? null : _fetchData,
-          borderRadius: BorderRadius.circular(4),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: _isRefreshing
-                  ? TechColors.bgMedium
-                  : TechColors.glowOrange.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: _isRefreshing
-                    ? TechColors.borderDark
-                    : TechColors.glowOrange,
-                width: 1,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_isRefreshing)
-                  SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        TechColors.glowOrange,
-                      ),
-                    ),
-                  )
-                else
-                  Icon(
-                    Icons.refresh,
-                    size: 16,
-                    color: TechColors.glowOrange,
-                  ),
-                const SizedBox(width: 6),
-                Text(
-                  _isRefreshing ? '刷新中...' : '刷新数据',
-                  style: TextStyle(
-                    color: _isRefreshing
-                        ? TechColors.textSecondary
-                        : TechColors.glowOrange,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'Roboto Mono',
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
         child: Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.all(4.0),
           child: Column(
             children: [
               // 第一行 - 短窑7-6 + 无料仓2 + 长窑8-3
@@ -277,37 +256,37 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                 child: Row(
                   children: [
                     Expanded(flex: 6, child: _buildRotaryKilnCell(7)), // 1.5
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     Expanded(flex: 6, child: _buildRotaryKilnCell(6)), // 1.5
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     Expanded(
                         flex: 5,
                         child: _buildRotaryKilnNoHopperCell(2)), // 1.25
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     Expanded(
                         flex: 6, child: _buildRotaryKilnLongCell(8)), // 1.5
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     Expanded(
                         flex: 6, child: _buildRotaryKilnLongCell(3)), // 1.5
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               // 第二行 - 短窑5-4 + 无料仓1 + 长窑9 + 空白
               Expanded(
                 child: Row(
                   children: [
                     Expanded(flex: 6, child: _buildRotaryKilnCell(5)), // 1.5
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     Expanded(flex: 6, child: _buildRotaryKilnCell(4)), // 1.5
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     Expanded(
                         flex: 5,
                         child: _buildRotaryKilnNoHopperCell(1)), // 1.25
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     Expanded(
                         flex: 6, child: _buildRotaryKilnLongCell(9)), // 1.5
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     const Expanded(flex: 6, child: SizedBox.shrink()), // 1.5
                   ],
                 ),
@@ -346,7 +325,6 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
       width: width,
       height: height,
       child: TechPanel(
-        title: 'SCR 设备',
         accentColor: TechColors.glowBlue,
         child: Padding(
           padding: const EdgeInsets.all(8.0),
@@ -378,6 +356,9 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     final power = scrDevice?.elec?.pt ?? 0.0;
     final energy = scrDevice?.elec?.impEp ?? 0.0;
     final flowRate = scrDevice?.gas?.flowRate ?? 0.0;
+    final currentA = scrDevice?.elec?.currentA ?? 0.0;
+    final currentB = scrDevice?.elec?.currentB ?? 0.0;
+    final currentC = scrDevice?.elec?.currentC ?? 0.0;
 
     // 使用配置的阈值判断运行状态
     final configProvider = context.read<RealtimeConfigProvider>();
@@ -386,18 +367,23 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
 
     return Row(
       children: [
-        // 左侧 - 水泵组件
+        // 左侧 - 水泵组件 (占5份)
         Expanded(
+          flex: 5,
           child: WaterPumpCell(
             index: index,
             isRunning: isPumpRunning,
             power: power,
             cumulativeEnergy: energy,
             energyConsumption: energy,
+            currentA: currentA,
+            currentB: currentB,
+            currentC: currentC,
           ),
         ),
-        // 右侧 - 燃气管组件（紧贴水泵）
+        // 右侧 - 燃气管组件 (占3份)
         Expanded(
+          flex: 3,
           child: GasPipeCell(
             index: index,
             isRunning: isGasRunning,
@@ -418,11 +404,27 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
         ) ??
         0.0;
 
+    // 计算总电流（6个温区电流的总和）
+    final totalCurrentA = _rollerKilnData?.zones.fold<double>(
+          0.0,
+          (sum, zone) => sum + zone.currentA,
+        ) ??
+        0.0;
+    final totalCurrentB = _rollerKilnData?.zones.fold<double>(
+          0.0,
+          (sum, zone) => sum + zone.currentB,
+        ) ??
+        0.0;
+    final totalCurrentC = _rollerKilnData?.zones.fold<double>(
+          0.0,
+          (sum, zone) => sum + zone.currentC,
+        ) ??
+        0.0;
+
     return SizedBox(
       width: width,
       height: height,
       child: TechPanel(
-        title: '辊道窑监控',
         accentColor: TechColors.glowGreen,
         child: Stack(
           children: [
@@ -483,6 +485,9 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                               '${zone.energy.toStringAsFixed(0)}kWh',
                               zoneIndex: index + 1, // 温区索引 1-6
                               temperatureValue: zone.temperature,
+                              currentA: zone.currentA,
+                              currentB: zone.currentB,
+                              currentC: zone.currentC,
                             ),
                           ),
                         );
@@ -501,6 +506,9 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                               '0kWh',
                               zoneIndex: index + 1,
                               temperatureValue: 0.0,
+                              currentA: 0.0,
+                              currentB: 0.0,
+                              currentC: 0.0,
                             ),
                           ),
                         ),
@@ -508,13 +516,12 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                 ),
               ),
             ),
-            // 左下角功率总和标签
+            // 左下角功率总和标签 + 三相电流（单列4行显示）
             Positioned(
               left: 0,
               bottom: 0,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
                   color: TechColors.bgDeep.withOpacity(0.85),
                   borderRadius: BorderRadius.circular(4),
@@ -523,27 +530,79 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                     width: 1,
                   ),
                 ),
-                child: Row(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    EnergyIcon(color: TechColors.glowOrange, size: 24),
-                    const SizedBox(width: 4),
-                    Text(
-                      _rollerKilnData != null
-                          ? '${totalEnergy.toStringAsFixed(1)}kWh'
-                          : '0.0kWh',
-                      style: TextStyle(
-                        color: TechColors.glowOrange,
-                        fontSize: 21,
-                        fontWeight: FontWeight.w700,
-                        fontFamily: 'Roboto Mono',
-                        shadows: [
-                          Shadow(
-                            color: TechColors.glowOrange.withOpacity(0.5),
-                            blurRadius: 6,
+                    // 第一行：总能耗
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        EnergyIcon(color: TechColors.glowOrange, size: 18),
+                        const SizedBox(width: 2),
+                        Text(
+                          _rollerKilnData != null
+                              ? '${totalEnergy.toStringAsFixed(1)}kWh'
+                              : '0.0kWh',
+                          style: const TextStyle(
+                            color: TechColors.glowOrange,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: 'Roboto Mono',
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    // 第二行：A相电流
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CurrentIcon(color: TechColors.glowCyan, size: 18),
+                        Text(
+                          'A:${totalCurrentA.toStringAsFixed(1)}A',
+                          style: const TextStyle(
+                            color: TechColors.glowCyan,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: 'Roboto Mono',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    // 第三行：B相电流
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CurrentIcon(color: TechColors.glowCyan, size: 18),
+                        Text(
+                          'B:${totalCurrentB.toStringAsFixed(1)}A',
+                          style: const TextStyle(
+                            color: TechColors.glowCyan,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: 'Roboto Mono',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    // 第四行：C相电流
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CurrentIcon(color: TechColors.glowCyan, size: 18),
+                        Text(
+                          'C:${totalCurrentC.toStringAsFixed(1)}A',
+                          style: const TextStyle(
+                            color: TechColors.glowCyan,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: 'Roboto Mono',
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -558,8 +617,13 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   /// 辊道窑数据卡片
   /// [zoneIndex] 温区索引 (1-6)
   /// [temperatureValue] 温度数值，用于计算颜色
+  /// [currentA], [currentB], [currentC] 三相电流值
   Widget _buildRollerKilnDataCard(String zone, String temperature, String power,
-      {int? zoneIndex, double? temperatureValue}) {
+      {int? zoneIndex,
+      double? temperatureValue,
+      double? currentA,
+      double? currentB,
+      double? currentC}) {
     // 获取温度颜色配置
     final configProvider = context.read<RealtimeConfigProvider>();
     final tempColor = (zoneIndex != null && temperatureValue != null)
@@ -568,65 +632,140 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
         : TechColors.glowRed;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       decoration: BoxDecoration(
         color: TechColors.bgDeep.withOpacity(0.85),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(4),
         border: Border.all(
           color: TechColors.glowCyan.withOpacity(0.4),
           width: 1,
         ),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 2),
-            child: Text(
-              zone,
-              style: const TextStyle(
-                color: TechColors.glowGreen,
-                fontSize: 19.5,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'Roboto Mono',
-              ),
+          // 左侧列: 温区名称 + 温度 + 能耗
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 2),
+                  child: Text(
+                    zone,
+                    style: const TextStyle(
+                      color: TechColors.glowGreen,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Roboto Mono',
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ThermometerIcon(color: tempColor, size: 18),
+                    const SizedBox(width: 2),
+                    Text(
+                      temperature,
+                      style: TextStyle(
+                        color: tempColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'Roboto Mono',
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    EnergyIcon(color: TechColors.glowOrange, size: 18),
+                    const SizedBox(width: 2),
+                    Text(
+                      power,
+                      style: const TextStyle(
+                        color: TechColors.glowOrange,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'Roboto Mono',
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ThermometerIcon(color: tempColor, size: 21),
-              const SizedBox(width: 3),
-              Text(
-                temperature,
-                style: TextStyle(
-                  color: tempColor,
-                  fontSize: 19.5,
-                  fontWeight: FontWeight.w500,
-                  fontFamily: 'Roboto Mono',
-                ),
+          // 右侧列: 三相电流
+          if (currentA != null && currentB != null && currentC != null)
+            Flexible(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CurrentIcon(color: TechColors.glowCyan, size: 18),
+                      Text(
+                        'A:${currentA.toStringAsFixed(1)}A',
+                        style: const TextStyle(
+                          color: TechColors.glowCyan,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          fontFamily: 'Roboto Mono',
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CurrentIcon(color: TechColors.glowCyan, size: 18),
+                      Text(
+                        'B:${currentB.toStringAsFixed(1)}A',
+                        style: const TextStyle(
+                          color: TechColors.glowCyan,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          fontFamily: 'Roboto Mono',
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CurrentIcon(color: TechColors.glowCyan, size: 18),
+                      Text(
+                        'C:${currentC.toStringAsFixed(1)}A',
+                        style: const TextStyle(
+                          color: TechColors.glowCyan,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          fontFamily: 'Roboto Mono',
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              EnergyIcon(color: TechColors.glowOrange, size: 21),
-              const SizedBox(width: 3),
-              Text(
-                power,
-                style: const TextStyle(
-                  color: TechColors.glowOrange,
-                  fontSize: 19.5,
-                  fontWeight: FontWeight.w500,
-                  fontFamily: 'Roboto Mono',
-                ),
-              ),
-            ],
-          ),
+            ),
         ],
       ),
     );
@@ -653,7 +792,6 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
       width: width,
       height: height,
       child: TechPanel(
-        title: '风机监控',
         accentColor: TechColors.glowCyan,
         child: Padding(
           padding: const EdgeInsets.all(8.0),
@@ -666,6 +804,9 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                   isRunning: isFan1Running,
                   power: fan1Power,
                   cumulativeEnergy: fan1?.elec?.impEp ?? 0.0,
+                  currentA: fan1?.elec?.currentA ?? 0.0,
+                  currentB: fan1?.elec?.currentB ?? 0.0,
+                  currentC: fan1?.elec?.currentC ?? 0.0,
                 ),
               ),
               const SizedBox(width: 12),
@@ -676,6 +817,9 @@ class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                   isRunning: isFan2Running,
                   power: fan2Power,
                   cumulativeEnergy: fan2?.elec?.impEp ?? 0.0,
+                  currentA: fan2?.elec?.currentA ?? 0.0,
+                  currentB: fan2?.elec?.currentB ?? 0.0,
+                  currentC: fan2?.elec?.currentC ?? 0.0,
                 ),
               ),
             ],
