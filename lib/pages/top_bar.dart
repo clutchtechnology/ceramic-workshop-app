@@ -198,14 +198,14 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _selectedNavIndex == 3
+                color: _selectedNavIndex == 4
                     ? TechColors.glowCyan.withOpacity(0.15)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Icon(
                 Icons.settings,
-                color: _selectedNavIndex == 3
+                color: _selectedNavIndex == 4
                     ? TechColors.glowCyan
                     : TechColors.textSecondary,
                 size: 20,
@@ -395,6 +395,22 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
                       controller: passwordController,
                       obscureText: !showPassword,
                       autofocus: true,
+                      onSubmitted: (_) {
+                        final adminProvider = context.read<AdminProvider>();
+                        final password = passwordController.text;
+                        if (adminProvider.authenticate('admin', password)) {
+                          Navigator.of(context).pop(true);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('密码错误'),
+                              backgroundColor: TechColors.statusAlarm,
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                          passwordController.clear();
+                        }
+                      },
                       style: const TextStyle(
                         color: TechColors.textPrimary,
                         fontSize: 14,
@@ -445,8 +461,7 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
                       children: [
                         OutlinedButton(
                           onPressed: () {
-                            passwordController.dispose();
-                            Navigator.of(context).pop();
+                            Navigator.of(context).pop(false);
                           },
                           style: OutlinedButton.styleFrom(
                             foregroundColor: TechColors.textSecondary,
@@ -496,9 +511,9 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> {
       },
     ).then((result) {
       passwordController.dispose();
-      // 验证成功后切换到设置页面
+      // 验证成功后切换到设置页面 (index=4)
       if (result == true) {
-        setState(() => _selectedNavIndex = 2);
+        setState(() => _selectedNavIndex = 4);
       }
     });
   }
