@@ -71,6 +71,23 @@ class HopperData {
                   : null)),
     );
   }
+
+  /// 用于本地缓存的序列化 (简化格式)
+  Map<String, dynamic> toJson() => {
+        'device_id': deviceId,
+        'timestamp': timestamp,
+        'modules': {
+          if (weighSensor != null) 'WeighSensor': weighSensor!.toJson(),
+          if (temperatureSensor != null)
+            'TemperatureSensor': temperatureSensor!.toJson(),
+          if (temperatureSensor1 != null)
+            'temp1': {'fields': temperatureSensor1!.toJson()},
+          if (temperatureSensor2 != null)
+            'temp2': {'fields': temperatureSensor2!.toJson()},
+          if (electricityMeter != null)
+            'ElectricityMeter': electricityMeter!.toJson(),
+        },
+      };
 }
 
 class WeighSensor {
@@ -85,6 +102,11 @@ class WeighSensor {
       feedRate: (json['feed_rate'] as num?)?.toDouble() ?? 0.0,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'weight': weight,
+        'feed_rate': feedRate,
+      };
 }
 
 class TemperatureSensor {
@@ -97,6 +119,10 @@ class TemperatureSensor {
       temperature: (json['temperature'] as num?)?.toDouble() ?? 0.0,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'temperature': temperature,
+      };
 }
 
 /// 电表数据模型 (精简版 - 7个关键字段)
@@ -128,4 +154,13 @@ class ElectricityMeter {
       currentC: (json['I_2'] as num?)?.toDouble() ?? 0.0,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'Pt': pt,
+        'ImpEp': impEp,
+        'Ua_0': voltage,
+        'I_0': currentA,
+        'I_1': currentB,
+        'I_2': currentC,
+      };
 }

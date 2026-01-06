@@ -8,6 +8,7 @@ import '../providers/realtime_config_provider.dart';
 import '../services/hopper_service.dart';
 import '../services/roller_kiln_service.dart';
 import '../services/scr_fan_service.dart';
+import '../services/realtime_data_cache_service.dart';
 import '../widgets/data_display/data_tech_line_widgets.dart';
 import '../widgets/icons/icons.dart';
 import '../widgets/realtime_dashboard/real_rotary_kiln_cell.dart';
@@ -31,29 +32,34 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   final HopperService _hopperService = HopperService();
   final RollerKilnService _rollerKilnService = RollerKilnService();
   final ScrFanService _scrFanService = ScrFanService();
+  final RealtimeDataCacheService _cacheService = RealtimeDataCacheService();
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 核心业务数据 (序号关联注释法)
+  // ═══════════════════════════════════════════════════════════════════════════
 
   Timer? _timer;
+
+  // 1, 料仓数据 - 9台回转窑 (短窑4台 + 无料仓2台 + 长窑3台)
   Map<String, HopperData> _hopperData = {};
+
+  // 2, 辊道窑数据 - 1台辊道窑 (6个温区)
   RollerKilnData? _rollerKilnData;
+
+  // 3, SCR+风机数据 - 2台SCR + 2台风机
   ScrFanBatchData? _scrFanData;
+
+  // 4, 刷新状态标志 - 防止重复请求
   bool _isRefreshing = false;
 
-  // 🔧 新增: 请求统计
+  // 5, 请求统计 - 用于7x24监控诊断
   int _successCount = 0;
   int _failCount = 0;
   DateTime? _lastSuccessTime;
-  DateTime? _lastUIRefreshTime; // 🔧 UI刷新时间追踪
-  int _consecutiveSkips = 0; // 🔧 连续跳过刷新次数
+  DateTime? _lastUIRefreshTime;
+  int _consecutiveSkips = 0;
 
-  // 🔧 公开方法供顶部bar调用
-  bool get isRefreshing => _isRefreshing;
-
-  /// 手动刷新数据
-  Future<void> refreshData() async {
-    await _fetchData();
-  }
-
-  // 映射 UI 索引到设备 ID
+  // 6, UI索引到设备ID的映射 (硬件布局决定)
   // 短窑: 7,6,5,4, 无料仓: 2,1, 长窑: 8,3,9
   final Map<int, String> _deviceMapping = {
     7: 'short_hopper_1',
@@ -66,6 +72,61 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     3: 'long_hopper_2',
     9: 'long_hopper_3',
   };
+
+  // 4, 公开刷新状态供顶部bar调用
+  bool get isRefreshing => _isRefreshing;
+
+  /// 手动刷新数据
+  Future<void> refreshData() async {
+    await _fetchData();
+  }
+
+  /// 🔧 暂停定时器（页面不可见时调用）
+  void pausePolling() {
+    if (_timer != null && _timer!.isActive) {
+      _timer?.cancel();
+      _timer = null;
+      logger.info('RealtimeDashboardPage: 轮询已暂停');
+    }
+  }
+
+  /// 🔧 恢复定时器（页面可见时调用）
+  void resumePolling() {
+    if (_timer == null) {
+      _startPolling();
+      logger.info('RealtimeDashboardPage: 轮询已恢复');
+      // 立即刷新一次数据
+      _fetchData();
+    }
+  }
+
+  /// 🔧 [核心] 启动轮询定时器（提取公共逻辑，消除重复）
+  void _startPolling() {
+    _timer?.cancel(); // 防止重复创建
+    _timer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      // 🔧 [CRITICAL] 必须检查 mounted，防止 Widget 销毁后继续执行
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      try {
+        // 🔧 检测UI长时间未刷新（使用局部变量避免竞态）
+        final lastRefresh = _lastUIRefreshTime;
+        if (lastRefresh != null) {
+          final sinceLastRefresh = DateTime.now().difference(lastRefresh);
+          if (sinceLastRefresh.inSeconds > 60) {
+            logger.warning(
+                'UI超过60秒未刷新！上次刷新: $lastRefresh, isRefreshing=$_isRefreshing');
+          }
+        }
+        await _fetchData();
+      } catch (e, stack) {
+        logger.error('定时器回调异常', e, stack);
+        // 异常不会导致定时器停止
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -82,32 +143,39 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   }
 
   Future<void> _initData() async {
+    // 🔧 先加载本地缓存数据（App 重启后恢复上次数据）
+    await _loadCachedData();
+
+    // 然后尝试获取最新数据
     await _fetchData();
-    // 🔧 修复: Timer 回调添加异常保护
-    _timer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-      try {
-        // 🔧 检测UI长时间未刷新
-        if (_lastUIRefreshTime != null) {
-          final sinceLastRefresh =
-              DateTime.now().difference(_lastUIRefreshTime!);
-          if (sinceLastRefresh.inSeconds > 60) {
-            logger.warning(
-                'UI超过60秒未刷新！上次刷新: $_lastUIRefreshTime, isRefreshing=$_isRefreshing, mounted=$mounted');
-          }
-        }
-        await _fetchData();
-      } catch (e, stack) {
-        logger.error('定时器回调异常', e, stack);
-        // 异常不会导致定时器停止
-      }
-    });
+
+    // 🔧 启动轮询定时器（复用公共方法）
+    _startPolling();
     logger.lifecycle('数据轮询定时器已启动 (间隔: 5秒)');
   }
 
+  /// 加载本地缓存数据
+  Future<void> _loadCachedData() async {
+    try {
+      final cachedData = await _cacheService.loadCache();
+      if (cachedData != null && cachedData.hasData && mounted) {
+        setState(() {
+          _hopperData = cachedData.hopperData;
+          _rollerKilnData = cachedData.rollerKilnData;
+          _scrFanData = cachedData.scrFanData;
+        });
+        logger.info('已从缓存恢复数据显示');
+      }
+    } catch (e, stack) {
+      logger.error('加载缓存数据失败', e, stack);
+    }
+  }
+
   Future<void> _fetchData() async {
-    // 🔧 检测是否被跳过
+    // 4, 检测是否正在刷新，防止重复请求
     if (_isRefreshing) {
       _consecutiveSkips++;
+      // 5, 连续跳过10次则记录警告，用于诊断卡死问题
       if (_consecutiveSkips >= 10) {
         logger.warning('UI刷新被跳过 $_consecutiveSkips 次（_isRefreshing持续为true）');
       }
@@ -118,18 +186,18 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
       return;
     }
 
-    _consecutiveSkips = 0; // 重置跳过计数
+    _consecutiveSkips = 0; // 5, 重置跳过计数
 
     setState(() {
-      _isRefreshing = true;
+      _isRefreshing = true; // 4, 标记开始刷新
     });
 
     try {
-      // 🔧 修复: Future.wait 添加超时控制
+      // 1,2,3, 并行请求三类设备数据，添加15秒超时控制
       final results = await Future.wait([
-        _hopperService.getHopperBatchData(),
-        _rollerKilnService.getRollerKilnRealtimeFormatted(),
-        _scrFanService.getScrFanBatchData(),
+        _hopperService.getHopperBatchData(), // 1, 料仓数据
+        _rollerKilnService.getRollerKilnRealtimeFormatted(), // 2, 辊道窑数据
+        _scrFanService.getScrFanBatchData(), // 3, SCR+风机数据
       ]).timeout(
         const Duration(seconds: 15),
         onTimeout: () {
@@ -138,15 +206,16 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
         },
       );
 
+      // 1,2,3, 解析响应数据
       final hopperData = results[0] as Map<String, HopperData>;
       final rollerData = results[1] as RollerKilnData?;
       final scrFanData = results[2] as ScrFanBatchData?;
 
-      // 🔧 更新统计
+      // 5, 更新请求统计
       _successCount++;
       _lastSuccessTime = DateTime.now();
 
-      // 每500次成功记录一次日志（约 42 分钟），减少日志噪音
+      // 5, 每500次成功记录一次日志（约42分钟），减少日志噪音
       if (_successCount % 500 == 0) {
         logger.info(
             '数据轮询统计: 成功=$_successCount, 失败=$_failCount, 最后成功时间=$_lastSuccessTime');
@@ -154,25 +223,39 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
 
       if (mounted) {
         setState(() {
-          _hopperData = hopperData;
-          _rollerKilnData = rollerData;
-          _scrFanData = scrFanData;
+          _hopperData = hopperData; // 1, 更新料仓数据
+          _rollerKilnData = rollerData; // 2, 更新辊道窑数据
+          _scrFanData = scrFanData; // 3, 更新SCR+风机数据
         });
-        _lastUIRefreshTime = DateTime.now(); // 🔧 记录UI刷新时间
+        _lastUIRefreshTime = DateTime.now(); // 5, 记录UI刷新时间
+
+        // 异步保存到本地缓存（不阻塞UI）
+        _cacheService.saveCache(
+          hopperData: hopperData,
+          rollerKilnData: rollerData,
+          scrFanData: scrFanData,
+        );
       } else {
         logger.warning('数据获取成功但组件已卸载，无法刷新UI');
       }
     } catch (e, stack) {
-      _failCount++;
+      _failCount++; // 5, 记录失败次数
 
-      // 🔧 失败时记录日志（每10次失败记录一次，避免日志过多）
+      // 请求失败时保持上一次成功的数据，不清空也不更新
+      // 这样即使后端服务未启动或网络异常，UI也能显示最后一次成功获取的数据
       if (_failCount <= 3 || _failCount % 10 == 0) {
-        logger.error('数据获取失败 (第$_failCount次)', e, stack);
+        final hasValidData = _hopperData.isNotEmpty ||
+            _rollerKilnData != null ||
+            _scrFanData != null;
+        logger.error(
+            '数据获取失败 (第$_failCount次), 保持上一次数据显示 (hasValidData=$hasValidData)',
+            e,
+            stack);
       }
     } finally {
       if (mounted) {
         setState(() {
-          _isRefreshing = false;
+          _isRefreshing = false; // 4, 标记刷新结束
         });
       }
     }
@@ -300,21 +383,27 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
 
   /// 单个回转窑数据小容器 - 显示设备图片
   Widget _buildRotaryKilnCell(int index) {
+    // 6, 通过UI索引查找设备ID，获取对应料仓数据
     final deviceId = _deviceMapping[index];
+    // 1, 获取该设备的料仓实时数据
     final data = deviceId != null ? _hopperData[deviceId] : null;
     return RotaryKilnCell(index: index, data: data, deviceId: deviceId);
   }
 
   /// 单个无料仓回转窑数据小容器
   Widget _buildRotaryKilnNoHopperCell(int index) {
+    // 6, 通过UI索引查找设备ID
     final deviceId = _deviceMapping[index];
+    // 1, 获取该设备的料仓实时数据
     final data = deviceId != null ? _hopperData[deviceId] : null;
     return RotaryKilnNoHopperCell(index: index, data: data, deviceId: deviceId);
   }
 
   /// 单个长回转窑数据小容器
   Widget _buildRotaryKilnLongCell(int index) {
+    // 6, 通过UI索引查找设备ID
     final deviceId = _deviceMapping[index];
+    // 1, 获取该设备的料仓实时数据
     final data = deviceId != null ? _hopperData[deviceId] : null;
     return RotaryKilnLongCell(index: index, data: data, deviceId: deviceId);
   }
@@ -348,9 +437,10 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
 
   /// 单个SCR设备小容器 - 包含氨泵（水泵）组件 + 燃气管
   Widget _buildScrCell(int index) {
-    // 从批量数据中获取对应的SCR设备 (index从1开始，数组从0开始)
-    final scrDevice = (_scrFanData?.scr.devices.length ?? 0) >= index
-        ? _scrFanData!.scr.devices[index - 1]
+    // 3, 从SCR批量数据中安全获取对应设备 (index从1开始，数组从0开始)
+    final scrDevices = _scrFanData?.scr.devices;
+    final scrDevice = (scrDevices != null && scrDevices.length >= index)
+        ? scrDevices[index - 1]
         : null;
 
     final power = scrDevice?.elec?.pt ?? 0.0;
@@ -360,7 +450,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     final currentB = scrDevice?.elec?.currentB ?? 0.0;
     final currentC = scrDevice?.elec?.currentC ?? 0.0;
 
-    // 使用配置的阈值判断运行状态
+    // 3, 使用配置的阈值判断SCR氨泵和燃气运行状态
     final configProvider = context.read<RealtimeConfigProvider>();
     final isPumpRunning = configProvider.isScrPumpRunning(index, power);
     final isGasRunning = configProvider.isScrGasRunning(index, flowRate);
@@ -397,14 +487,14 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
 
   /// 辊道窑区域 - 显示设备图片
   Widget _buildRollerKilnSection(double width, double height) {
-    // 计算总能耗（6个温区电表能耗的总和）
+    // 2, 计算辊道窑6个温区的总能耗 (kWh)
     final totalEnergy = _rollerKilnData?.zones.fold<double>(
           0.0,
           (sum, zone) => sum + zone.energy,
         ) ??
         0.0;
 
-    // 计算总电流（6个温区电流的总和）
+    // 2, 计算辊道窑6个温区的三相总电流 (A)
     final totalCurrentA = _rollerKilnData?.zones.fold<double>(
           0.0,
           (sum, zone) => sum + zone.currentA,
@@ -420,6 +510,9 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
           (sum, zone) => sum + zone.currentC,
         ) ??
         0.0;
+
+    // 2, 安全获取温区列表，避免强制解包
+    final zones = _rollerKilnData?.zones;
 
     return SizedBox(
       width: width,
@@ -466,18 +559,16 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
               right: 0,
               child: SizedBox(
                 height: 120,
+                // 2, 根据辊道窑温区数据渲染温度卡片
                 child: Row(
-                  children: _rollerKilnData?.zones.asMap().entries.map((entry) {
+                  children: zones?.asMap().entries.map((entry) {
                         final index = entry.key;
                         final zone = entry.value;
                         return Expanded(
                           child: Padding(
                             padding: EdgeInsets.only(
                               left: index == 0 ? 0 : 4,
-                              right:
-                                  index == (_rollerKilnData!.zones.length - 1)
-                                      ? 0
-                                      : 4,
+                              right: index == (zones.length - 1) ? 0 : 4,
                             ),
                             child: _buildRollerKilnDataCard(
                               zone.zoneName,
@@ -773,15 +864,13 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
 
   /// 风机区域 - 包含2个横向排列的小容器
   Widget _buildFanSection(double width, double height) {
-    // 从批量数据中获取风机设备
-    final fan1 = (_scrFanData?.fan.devices.isNotEmpty ?? false)
-        ? _scrFanData!.fan.devices[0]
-        : null;
-    final fan2 = (_scrFanData?.fan.devices.length ?? 0) >= 2
-        ? _scrFanData!.fan.devices[1]
-        : null;
+    // 3, 从风机批量数据中安全获取设备
+    final fanDevices = _scrFanData?.fan.devices;
+    final fan1 = (fanDevices?.isNotEmpty ?? false) ? fanDevices![0] : null;
+    final fan2 =
+        (fanDevices != null && fanDevices.length >= 2) ? fanDevices[1] : null;
 
-    // 使用配置的阈值判断运行状态
+    // 3, 使用配置的阈值判断风机运行状态
     final configProvider = context.read<RealtimeConfigProvider>();
     final fan1Power = fan1?.elec?.pt ?? 0.0;
     final fan2Power = fan2?.elec?.pt ?? 0.0;

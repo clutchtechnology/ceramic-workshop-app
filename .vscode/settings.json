@@ -1,5 +1,14 @@
 {
   "java.compile.nullAnalysis.mode": "automatic",
   "cmake.configureOnOpen": false,
-  "cmake.configureOnEdit": false
+  "cmake.configureOnEdit": false,
+  "java.import.exclusions": [
+    "**/android/**",
+    "**/node_modules/**",
+    "**/.metadata/**",
+    "**/archetype-resources/**",
+    "**/META-INF/maven/**"
+  ],
+  "java.project.sourcePaths": [],
+  "java.configuration.updateBuildConfiguration": "disabled"
 }

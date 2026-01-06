@@ -17,6 +17,12 @@ class ScrFanBatchData {
       fan: FanDevicesData.fromJson(json['fan'] ?? {}),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'total': total,
+        'scr': scr.toJson(),
+        'fan': fan.toJson(),
+      };
 }
 
 /// SCR设备集合
@@ -36,6 +42,11 @@ class ScrDevicesData {
       devices: devicesData.map((d) => ScrDevice.fromJson(d)).toList(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'total': total,
+        'devices': devices.map((d) => d.toJson()).toList(),
+      };
 }
 
 /// 风机设备集合
@@ -55,6 +66,11 @@ class FanDevicesData {
       devices: devicesData.map((d) => FanDevice.fromJson(d)).toList(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'total': total,
+        'devices': devices.map((d) => d.toJson()).toList(),
+      };
 }
 
 /// SCR单个设备
@@ -85,6 +101,15 @@ class ScrDevice {
           : null,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'device_id': deviceId,
+        'timestamp': timestamp,
+        'modules': {
+          if (elec != null) 'meter': {'fields': elec!.toJson()},
+          if (gas != null) 'gas_meter': {'fields': gas!.toJson()},
+        },
+      };
 }
 
 /// 风机单个设备
@@ -110,6 +135,14 @@ class FanDevice {
           : null,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'device_id': deviceId,
+        'timestamp': timestamp,
+        'modules': {
+          if (elec != null) 'meter': {'fields': elec!.toJson()},
+        },
+      };
 }
 
 /// 电表模块 (支持三相电流)
@@ -140,6 +173,15 @@ class ElectricityModule {
       currentC: (json['I_2'] as num?)?.toDouble() ?? 0.0,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'Pt': pt,
+        'ImpEp': impEp,
+        'Ua_0': voltage,
+        'I_0': currentA,
+        'I_1': currentB,
+        'I_2': currentC,
+      };
 }
 
 /// 燃气计模块
@@ -158,4 +200,9 @@ class GasModule {
       totalFlow: (json['total_flow'] as num?)?.toDouble() ?? 0.0,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'flow_rate': flowRate,
+        'total_flow': totalFlow,
+      };
 }

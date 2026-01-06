@@ -17,17 +17,36 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  int _selectedSection = 0; // 0: 服务配置, 1: PLC配置, 2: 实时数据设置, 3: 管理员设置
+  // ============================================================
+  // 状态变量
+  // ============================================================
 
+  // 1, 当前选中的配置区块索引 (0:服务, 1:PLC, 2:实时数据, 3:管理员)
+  int _selectedSection = 0;
+
+  // 2, 后端配置 Provider (管理服务器/PLC配置)
   final BackendConfigProvider _configProvider = BackendConfigProvider();
 
-  // PLC配置表单控制器
+  // 3, PLC IP地址输入控制器
   final _plcIpController = TextEditingController();
+  // 4, PLC轮询间隔输入控制器
   final _plcPollIntervalController = TextEditingController();
 
+  // 5, 密码修改输入控制器 (提升到类级别，避免每次build重建)
+  final _oldPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  // 6, PLC连接测试状态
   bool _isTestingConnection = false;
+  // 7, 连接测试结果消息
   String? _connectionTestResult;
+  // 8, 连接测试是否成功
   bool? _connectionTestSuccess;
+
+  // ============================================================
+  // 生命周期
+  // ============================================================
 
   @override
   void initState() {
@@ -51,8 +70,14 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
+    // 3, 释放PLC IP控制器
     _plcIpController.dispose();
+    // 4, 释放PLC轮询间隔控制器
     _plcPollIntervalController.dispose();
+    // 5, 释放密码输入控制器
+    _oldPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -671,35 +696,39 @@ class _SettingsPageState extends State<SettingsPage> {
   // ============================================================================
 
   Widget _buildAdminSettings() {
-    return Consumer<AdminProvider>(
-      builder: (context, adminProvider, child) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    // 🔧 [CRITICAL] 使用 context.watch 替代 Consumer
+    // 避免在页面切换时 '_dependents.isEmpty' 错误
+    final AdminProvider adminProvider;
+    try {
+      adminProvider = context.watch<AdminProvider>();
+    } catch (e) {
+      // Provider 未就绪时显示加载状态
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(TechColors.glowCyan),
+        ),
+      );
+    }
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildInfoCard(
+          title: '账号信息',
+          icon: Icons.account_circle,
           children: [
-            _buildInfoCard(
-              title: '账号信息',
-              icon: Icons.account_circle,
-              children: [
-                _buildInfoRow('用户名', adminProvider.adminConfig?.username ?? '-',
-                    Icons.person),
-              ],
-            ),
-            const SizedBox(height: 24),
-            _buildChangePasswordSection(adminProvider),
+            _buildInfoRow('用户名', adminProvider.adminConfig?.username ?? '-',
+                Icons.person),
           ],
-        );
-      },
+        ),
+        const SizedBox(height: 24),
+        _buildChangePasswordSection(adminProvider),
+      ],
     );
   }
 
   Widget _buildChangePasswordSection(AdminProvider adminProvider) {
-    final oldPasswordController = TextEditingController();
-    final newPasswordController = TextEditingController();
-    final confirmPasswordController = TextEditingController();
-    bool showOldPassword = false;
-    bool showNewPassword = false;
-    bool showConfirmPassword = false;
-
+    // 5, 使用类级别的密码控制器 (已在 dispose 中释放)
     return StatefulBuilder(
       builder: (context, setState) {
         return Column(
@@ -716,160 +745,119 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 12),
             _buildPasswordField(
               label: '旧密码',
-              controller: oldPasswordController,
-              showPassword: showOldPassword,
-              onVisibilityToggle: () {
-                setState(() => showOldPassword = !showOldPassword);
-              },
+              controller: _oldPasswordController,
             ),
             const SizedBox(height: 16),
             _buildPasswordField(
               label: '新密码',
-              controller: newPasswordController,
-              showPassword: showNewPassword,
-              onVisibilityToggle: () {
-                setState(() => showNewPassword = !showNewPassword);
-              },
+              controller: _newPasswordController,
             ),
             const SizedBox(height: 16),
             _buildPasswordField(
               label: '确认新密码',
-              controller: confirmPasswordController,
-              showPassword: showConfirmPassword,
-              onVisibilityToggle: () {
-                setState(() => showConfirmPassword = !showConfirmPassword);
-              },
+              controller: _confirmPasswordController,
             ),
             const SizedBox(height: 24),
-            Row(
-              children: [
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    final oldPassword = oldPasswordController.text;
-                    final newPassword = newPasswordController.text;
-                    final confirmPassword = confirmPasswordController.text;
-
-                    // 验证输入
-                    if (oldPassword.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('请输入旧密码'),
-                          backgroundColor: TechColors.statusAlarm,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                      return;
-                    }
-
-                    if (newPassword.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('请输入新密码'),
-                          backgroundColor: TechColors.statusAlarm,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                      return;
-                    }
-
-                    if (newPassword != confirmPassword) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('两次输入的新密码不一致'),
-                          backgroundColor: TechColors.statusAlarm,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                      return;
-                    }
-
-                    if (newPassword.length < 6) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('新密码长度至少6位'),
-                          backgroundColor: TechColors.statusAlarm,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                      return;
-                    }
-
-                    // 修改密码
-                    final success = await adminProvider.updatePassword(
-                      oldPassword,
-                      newPassword,
-                    );
-
-                    if (!mounted) return;
-
-                    if (success) {
-                      oldPasswordController.clear();
-                      newPasswordController.clear();
-                      confirmPasswordController.clear();
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('密码修改成功'),
-                          backgroundColor: TechColors.glowGreen,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            adminProvider.error ?? '密码修改失败',
-                          ),
-                          backgroundColor: TechColors.statusAlarm,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.check, size: 18),
-                  label: const Text('确认修改'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: TechColors.glowCyan.withOpacity(0.2),
-                    foregroundColor: TechColors.glowCyan,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      side: BorderSide(
-                        color: TechColors.glowCyan.withOpacity(0.5),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    oldPasswordController.clear();
-                    newPasswordController.clear();
-                    confirmPasswordController.clear();
-                  },
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('重置'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: TechColors.textSecondary,
-                    side: const BorderSide(color: TechColors.borderDark),
-                  ),
-                ),
-              ],
-            ),
+            _buildPasswordActionButtons(adminProvider),
           ],
         );
       },
     );
   }
 
+  /// 密码操作按钮
+  Widget _buildPasswordActionButtons(AdminProvider adminProvider) {
+    return Row(
+      children: [
+        ElevatedButton.icon(
+          onPressed: () => _handleChangePassword(adminProvider),
+          icon: const Icon(Icons.check, size: 18),
+          label: const Text('确认修改'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: TechColors.glowCyan.withOpacity(0.2),
+            foregroundColor: TechColors.glowCyan,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+              side: BorderSide(color: TechColors.glowCyan.withOpacity(0.5)),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        OutlinedButton.icon(
+          onPressed: _clearPasswordFields,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('重置'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: TechColors.textSecondary,
+            side: const BorderSide(color: TechColors.borderDark),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 处理密码修改
+  Future<void> _handleChangePassword(AdminProvider adminProvider) async {
+    // 5, 获取密码输入值
+    final oldPassword = _oldPasswordController.text;
+    final newPassword = _newPasswordController.text;
+    final confirmPassword = _confirmPasswordController.text;
+
+    // 验证输入
+    if (oldPassword.isEmpty) {
+      _showSnackBar('请输入旧密码', isError: true);
+      return;
+    }
+    if (newPassword.isEmpty) {
+      _showSnackBar('请输入新密码', isError: true);
+      return;
+    }
+    if (newPassword != confirmPassword) {
+      _showSnackBar('两次输入的新密码不一致', isError: true);
+      return;
+    }
+    if (newPassword.length < 6) {
+      _showSnackBar('新密码长度至少6位', isError: true);
+      return;
+    }
+
+    // 修改密码
+    final success =
+        await adminProvider.updatePassword(oldPassword, newPassword);
+    if (!mounted) return;
+
+    if (success) {
+      _clearPasswordFields();
+      _showSnackBar('密码修改成功', isError: false);
+    } else {
+      _showSnackBar(adminProvider.error ?? '密码修改失败', isError: true);
+    }
+  }
+
+  /// 清空密码输入框
+  void _clearPasswordFields() {
+    // 5, 清空密码控制器
+    _oldPasswordController.clear();
+    _newPasswordController.clear();
+    _confirmPasswordController.clear();
+  }
+
+  /// 显示 SnackBar 消息
+  void _showSnackBar(String message, {required bool isError}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor:
+            isError ? TechColors.statusAlarm : TechColors.glowGreen,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   Widget _buildPasswordField({
     required String label,
     required TextEditingController controller,
-    required bool showPassword,
-    required VoidCallback onVisibilityToggle,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -891,7 +879,7 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(height: 8),
         TextField(
           controller: controller,
-          obscureText: !showPassword,
+          obscureText: true,
           style: const TextStyle(
             color: TechColors.textPrimary,
             fontSize: 13,
@@ -914,14 +902,6 @@ class _SettingsPageState extends State<SettingsPage> {
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
               borderSide: BorderSide(color: TechColors.glowCyan),
-            ),
-            suffixIcon: IconButton(
-              icon: Icon(
-                showPassword ? Icons.visibility : Icons.visibility_off,
-                color: TechColors.textSecondary,
-                size: 18,
-              ),
-              onPressed: onVisibilityToggle,
             ),
             hintText: '输入 $label',
             hintStyle: TextStyle(

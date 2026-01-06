@@ -255,7 +255,6 @@ class HistoryDataPageState extends State<HistoryDataPage>
 
   /// 加载回转窑温度历史数据
   Future<void> _loadHopperTemperatureData() async {
-    // 加载当前选中设备的温度数据
     final deviceId =
         HistoryDataService.hopperDeviceIds[_selectedHopperIndex + 1]!;
 
@@ -265,13 +264,10 @@ class HistoryDataPageState extends State<HistoryDataPage>
       end: _hopperChartEndTime,
     );
 
+    if (!mounted) return;
     if (result.success && result.hasData) {
       final spots = _convertToFlSpots(result.dataPoints!, 'temperature');
-      if (mounted) {
-        setState(() {
-          _temperatureData[_selectedHopperIndex] = spots;
-        });
-      }
+      setState(() => _temperatureData[_selectedHopperIndex] = spots);
     } else {
       debugPrint('❌ 加载温度数据失败: ${result.error}');
     }
@@ -288,101 +284,131 @@ class HistoryDataPageState extends State<HistoryDataPage>
       end: _hopperChartEndTime,
     );
 
+    if (!mounted) return;
     if (result.success && result.hasData) {
       final weightSpots = _convertToFlSpots(result.dataPoints!, 'weight');
       final feedSpots = _convertToFlSpots(result.dataPoints!, 'feed_rate');
-
-      if (mounted) {
-        setState(() {
-          _hopperWeightData[_selectedHopperIndex] = weightSpots;
-          _feedSpeedData[_selectedHopperIndex] = feedSpots;
-        });
-      }
+      setState(() {
+        _hopperWeightData[_selectedHopperIndex] = weightSpots;
+        _feedSpeedData[_selectedHopperIndex] = feedSpots;
+      });
     } else {
       debugPrint('❌ 加载称重数据失败: ${result.error}');
     }
   }
 
   /// 加载辊道窑历史数据
+  /// 🔧 [优化] 使用并行请求替代串行循环，大幅提升加载速度
   Future<void> _loadRollerData() async {
-    // 加载所有选中温区的数据
+    // 收集所有选中温区的请求任务
+    final List<Future<void>> tasks = [];
+
     for (int i = 0; i < 6; i++) {
       if (!_selectedRollerZones[i]) continue;
+      // 每个温区的数据加载作为独立任务
+      tasks.add(_loadSingleRollerZoneData(i));
+    }
 
-      final zoneId = HistoryDataService.rollerZoneIds[i + 1]!;
+    // 并行执行所有温区的数据加载
+    if (tasks.isNotEmpty) {
+      await Future.wait(tasks);
+    }
+  }
 
-      // 温度（使用统一的辊道窑时间范围）
-      final tempResult = await _historyService.queryRollerTemperatureHistory(
+  /// 加载单个辊道窑温区数据（供并行调用）
+  Future<void> _loadSingleRollerZoneData(int zoneIndex) async {
+    final zoneId = HistoryDataService.rollerZoneIds[zoneIndex + 1]!;
+
+    // 并行请求温度和功率数据
+    final results = await Future.wait([
+      _historyService.queryRollerTemperatureHistory(
         start: _rollerChartStartTime,
         end: _rollerChartEndTime,
         zone: zoneId,
-      );
-
-      if (tempResult.success && tempResult.hasData) {
-        final spots = _convertToFlSpots(tempResult.dataPoints!, 'temperature');
-        if (mounted) {
-          setState(() => _rollerTemperatureData[i] = spots);
-        }
-      }
-
-      // 功率（使用统一的辊道窑时间范围）
-      final powerResult = await _historyService.queryRollerPowerHistory(
+      ),
+      _historyService.queryRollerPowerHistory(
         start: _rollerChartStartTime,
         end: _rollerChartEndTime,
         zone: zoneId,
-      );
+      ),
+    ]);
 
-      if (powerResult.success && powerResult.hasData) {
-        final powerSpots = _convertToFlSpots(powerResult.dataPoints!, 'Pt');
-        final energySpots = _convertToFlSpots(powerResult.dataPoints!, 'ImpEp');
-        if (mounted) {
-          setState(() {
-            _rollerPowerData[i] = powerSpots;
-            _rollerEnergyData[i] = energySpots;
-          });
-        }
-      }
+    final tempResult = results[0];
+    final powerResult = results[1];
+
+    if (!mounted) return;
+
+    // 温度数据
+    if (tempResult.success && tempResult.hasData) {
+      final spots = _convertToFlSpots(tempResult.dataPoints!, 'temperature');
+      setState(() => _rollerTemperatureData[zoneIndex] = spots);
+    }
+
+    // 功率和能耗数据
+    if (powerResult.success && powerResult.hasData) {
+      final powerSpots = _convertToFlSpots(powerResult.dataPoints!, 'Pt');
+      final energySpots = _convertToFlSpots(powerResult.dataPoints!, 'ImpEp');
+      setState(() {
+        _rollerPowerData[zoneIndex] = powerSpots;
+        _rollerEnergyData[zoneIndex] = energySpots;
+      });
     }
   }
 
   /// 加载SCR和风机历史数据
+  /// 🔧 [优化] 使用并行请求替代串行循环
   Future<void> _loadScrFanData() async {
-    // SCR功率数据
+    final List<Future<void>> tasks = [];
+
+    // SCR功率数据请求任务
     for (int i = 0; i < 2; i++) {
-      if (!_selectedScrs[i]) continue;
-
-      final deviceId = HistoryDataService.scrDeviceIds[i + 1]!;
-      final result = await _historyService.queryScrPowerHistory(
-        deviceId: deviceId,
-        start: _pumpEnergyChartStartTime,
-        end: _pumpEnergyChartEndTime,
-      );
-
-      if (result.success && result.hasData) {
-        final spots = _convertToFlSpots(result.dataPoints!, 'Pt');
-        if (mounted) {
-          setState(() => _scrPowerData[i] = spots);
-        }
+      if (_selectedScrs[i]) {
+        tasks.add(_loadSingleScrData(i));
       }
     }
 
-    // 风机功率数据
+    // 风机功率数据请求任务
     for (int i = 0; i < 2; i++) {
-      if (!_selectedFans[i]) continue;
-
-      final deviceId = HistoryDataService.fanDeviceIds[i + 1]!;
-      final result = await _historyService.queryFanPowerHistory(
-        deviceId: deviceId,
-        start: _fanEnergyChartStartTime,
-        end: _fanEnergyChartEndTime,
-      );
-
-      if (result.success && result.hasData) {
-        final spots = _convertToFlSpots(result.dataPoints!, 'Pt');
-        if (mounted) {
-          setState(() => _fanPowerData[i] = spots);
-        }
+      if (_selectedFans[i]) {
+        tasks.add(_loadSingleFanData(i));
       }
+    }
+
+    // 并行执行所有请求
+    if (tasks.isNotEmpty) {
+      await Future.wait(tasks);
+    }
+  }
+
+  /// 加载单个SCR设备数据（供并行调用）
+  Future<void> _loadSingleScrData(int index) async {
+    final deviceId = HistoryDataService.scrDeviceIds[index + 1]!;
+    final result = await _historyService.queryScrPowerHistory(
+      deviceId: deviceId,
+      start: _pumpEnergyChartStartTime,
+      end: _pumpEnergyChartEndTime,
+    );
+
+    if (!mounted) return;
+    if (result.success && result.hasData) {
+      final spots = _convertToFlSpots(result.dataPoints!, 'Pt');
+      setState(() => _scrPowerData[index] = spots);
+    }
+  }
+
+  /// 加载单个风机设备数据（供并行调用）
+  Future<void> _loadSingleFanData(int index) async {
+    final deviceId = HistoryDataService.fanDeviceIds[index + 1]!;
+    final result = await _historyService.queryFanPowerHistory(
+      deviceId: deviceId,
+      start: _fanEnergyChartStartTime,
+      end: _fanEnergyChartEndTime,
+    );
+
+    if (!mounted) return;
+    if (result.success && result.hasData) {
+      final spots = _convertToFlSpots(result.dataPoints!, 'Pt');
+      setState(() => _fanPowerData[index] = spots);
     }
   }
 

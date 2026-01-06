@@ -7,6 +7,10 @@ import '../icons/icons.dart';
 
 /// 回转窑单元组件
 /// 用于显示单个回转窑设备
+///
+/// 🔧 性能优化:
+/// - 使用 context.read 替代 context.watch（父组件已 watch，此处只需读取）
+/// - 减少 build 中的重复计算
 class RotaryKilnCell extends StatelessWidget {
   final int index;
   final HopperData? data;
@@ -23,6 +27,7 @@ class RotaryKilnCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 1, 从料仓数据中提取各传感器数值
     final weight = data?.weighSensor?.weight ?? 0.0;
     final feedRate = data?.weighSensor?.feedRate ?? 0.0;
     final energy = data?.electricityMeter?.impEp ?? 0.0;
@@ -31,13 +36,17 @@ class RotaryKilnCell extends StatelessWidget {
     final currentB = data?.electricityMeter?.currentB ?? 0.0;
     final currentC = data?.electricityMeter?.currentC ?? 0.0;
 
-    // 获取温度颜色配置
-    final configProvider = context.watch<RealtimeConfigProvider>();
+    // 🔧 优化: 使用 context.read 而非 context.watch
+    // 父组件 RealtimeDashboardPage 已经 watch 了数据变化并传入新的 data
+    // 此 Widget 只需读取配置，无需再次监听
+    final configProvider = context.read<RealtimeConfigProvider>();
+
+    // 2, 根据温度阈值配置获取显示颜色
     final tempColor = deviceId != null
         ? configProvider.getRotaryKilnTempColor(deviceId!, temperature)
         : ThresholdColors.normal;
 
-    // 使用配置中的最大容量计算百分比
+    // 3, 使用配置中的最大容量计算料仓百分比 (0.0-1.0)
     final weightPercentage = deviceId != null
         ? configProvider.getHopperPercentage(deviceId!, weight)
         : (weight / 1000.0).clamp(0.0, 1.0);
@@ -156,7 +165,76 @@ class RotaryKilnCell extends StatelessWidget {
                   ),
                 ),
               ),
-              // 数据标签（）
+              // 料仓数据标签（重量+下料速度）- 位于电表标签左边
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 0,
+                child: Align(
+                  alignment: const Alignment(0.4, -1.1),
+                  child: Transform.translate(
+                    offset: const Offset(-68, 40), // 相对电表标签左移90px
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: TechColors.bgDeep.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: hopperColor.withOpacity(0.4),
+                          width: 1,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 重量
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              WeightIcon(color: hopperColor, size: 18),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${weight.toStringAsFixed(1)}kg',
+                                style: TextStyle(
+                                  color: hopperColor,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Roboto Mono',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          // 下料速度
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              FeedRateIcon(
+                                  color: TechColors.glowGreen, size: 18),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${feedRate.toStringAsFixed(1)}kg/h',
+                                style: const TextStyle(
+                                  color: TechColors.glowGreen,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Roboto Mono',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // 电表数据标签（能耗+三相电流）
               Positioned(
                 left: 0,
                 right: 0,
@@ -179,122 +257,76 @@ class RotaryKilnCell extends StatelessWidget {
                           width: 1,
                         ),
                       ),
-                      child: Row(
+                      child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // 左侧列：重量、进料速率、电能
-                          Column(
+                          // 能耗
+                          Row(
                             mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  WeightIcon(color: hopperColor, size: 18),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    '${weight.toStringAsFixed(1)}kg',
-                                    style: TextStyle(
-                                      color: hopperColor,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      fontFamily: 'Roboto Mono',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  FeedRateIcon(
-                                      color: TechColors.glowGreen, size: 18),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    '${feedRate.toStringAsFixed(1)}kg/h',
-                                    style: const TextStyle(
-                                      color: TechColors.glowGreen,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      fontFamily: 'Roboto Mono',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  EnergyIcon(
-                                      color: TechColors.glowOrange, size: 18),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    '${energy.toStringAsFixed(1)}kWh',
-                                    style: const TextStyle(
-                                      color: TechColors.glowOrange,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      fontFamily: 'Roboto Mono',
-                                    ),
-                                  ),
-                                ],
+                              EnergyIcon(
+                                  color: TechColors.glowOrange, size: 18),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${energy.toStringAsFixed(1)}kWh',
+                                style: const TextStyle(
+                                  color: TechColors.glowOrange,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Roboto Mono',
+                                ),
                               ),
                             ],
                           ),
-                          const SizedBox(width: 4),
-                          // 右侧列：三相电流
-                          Column(
+                          const SizedBox(height: 2),
+                          // A相电流
+                          Row(
                             mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // A相电流
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  CurrentIcon(color: hopperColor, size: 18),
-                                  Text(
-                                    'A:${currentA.toStringAsFixed(1)}A',
-                                    style: TextStyle(
-                                      color: hopperColor,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      fontFamily: 'Roboto Mono',
-                                    ),
-                                  ),
-                                ],
+                              CurrentIcon(color: hopperColor, size: 18),
+                              Text(
+                                'A:${currentA.toStringAsFixed(1)}A',
+                                style: TextStyle(
+                                  color: hopperColor,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Roboto Mono',
+                                ),
                               ),
-                              // B相电流
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  CurrentIcon(color: hopperColor, size: 18),
-                                  Text(
-                                    'B:${currentB.toStringAsFixed(1)}A',
-                                    style: TextStyle(
-                                      color: hopperColor,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      fontFamily: 'Roboto Mono',
-                                    ),
-                                  ),
-                                ],
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          // B相电流
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CurrentIcon(color: hopperColor, size: 18),
+                              Text(
+                                'B:${currentB.toStringAsFixed(1)}A',
+                                style: TextStyle(
+                                  color: hopperColor,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Roboto Mono',
+                                ),
                               ),
-                              // C相电流
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  CurrentIcon(color: hopperColor, size: 18),
-                                  Text(
-                                    'C:${currentC.toStringAsFixed(1)}A',
-                                    style: TextStyle(
-                                      color: hopperColor,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      fontFamily: 'Roboto Mono',
-                                    ),
-                                  ),
-                                ],
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          // C相电流
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CurrentIcon(color: hopperColor, size: 18),
+                              Text(
+                                'C:${currentC.toStringAsFixed(1)}A',
+                                style: TextStyle(
+                                  color: hopperColor,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Roboto Mono',
+                                ),
                               ),
                             ],
                           ),

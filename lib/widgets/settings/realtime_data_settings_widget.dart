@@ -17,64 +17,53 @@ class RealtimeDataSettingsWidget extends StatefulWidget {
 
 class _RealtimeDataSettingsWidgetState
     extends State<RealtimeDataSettingsWidget> {
-  // 当前展开的配置项
+  // ============================================================
+  // 状态变量
+  // ============================================================
+
+  // 1, 当前展开的配置区块索引 (-1 表示全部折叠)
   int _expandedIndex = 0;
 
-  // 控制器 Map，用于管理所有输入框
+  // 2, 输入框控制器集合 (key格式: "{configKey}_{fieldType}")
   final Map<String, TextEditingController> _controllers = {};
+
+  // ============================================================
+  // 生命周期
+  // ============================================================
 
   @override
   void initState() {
     super.initState();
+    // 延迟初始化，确保 Provider 已经准备好
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initControllers();
+      if (mounted) _initControllers();
     });
   }
 
+  /// 初始化所有输入框控制器
   void _initControllers() {
-    final provider = context.read<RealtimeConfigProvider>();
-
-    // 初始化回转窑控制器
-    for (var config in provider.rotaryKilnConfigs) {
-      _controllers['${config.key}_normal'] =
-          TextEditingController(text: config.normalMax.toString());
-      _controllers['${config.key}_warning'] =
-          TextEditingController(text: config.warningMax.toString());
+    if (!mounted) return;
+    
+    // 安全获取 Provider，避免在 Widget 树未稳定时访问
+    final RealtimeConfigProvider provider;
+    try {
+      provider = context.read<RealtimeConfigProvider>();
+    } catch (e) {
+      // Provider 未就绪，延迟重试
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) _initControllers();
+      });
+      return;
     }
 
-    // 初始化辊道窑控制器
-    for (var config in provider.rollerKilnConfigs) {
-      _controllers['${config.key}_normal'] =
-          TextEditingController(text: config.normalMax.toString());
-      _controllers['${config.key}_warning'] =
-          TextEditingController(text: config.warningMax.toString());
-    }
+    // 2, 初始化阈值配置控制器 (回转窑/辊道窑/风机/SCR泵/SCR燃气)
+    _initThresholdControllers(provider.rotaryKilnConfigs);
+    _initThresholdControllers(provider.rollerKilnConfigs);
+    _initThresholdControllers(provider.fanConfigs);
+    _initThresholdControllers(provider.scrPumpConfigs);
+    _initThresholdControllers(provider.scrGasConfigs);
 
-    // 初始化风机控制器
-    for (var config in provider.fanConfigs) {
-      _controllers['${config.key}_normal'] =
-          TextEditingController(text: config.normalMax.toString());
-      _controllers['${config.key}_warning'] =
-          TextEditingController(text: config.warningMax.toString());
-    }
-
-    // 初始化SCR氨水泵控制器
-    for (var config in provider.scrPumpConfigs) {
-      _controllers['${config.key}_normal'] =
-          TextEditingController(text: config.normalMax.toString());
-      _controllers['${config.key}_warning'] =
-          TextEditingController(text: config.warningMax.toString());
-    }
-
-    // 初始化SCR燃气表控制器
-    for (var config in provider.scrGasConfigs) {
-      _controllers['${config.key}_normal'] =
-          TextEditingController(text: config.normalMax.toString());
-      _controllers['${config.key}_warning'] =
-          TextEditingController(text: config.warningMax.toString());
-    }
-
-    // 初始化料仓容量控制器
+    // 2, 初始化料仓容量控制器
     for (var config in provider.hopperCapacityConfigs) {
       _controllers['${config.key}_maxCapacity'] =
           TextEditingController(text: config.maxCapacity.toString());
@@ -83,43 +72,46 @@ class _RealtimeDataSettingsWidgetState
     setState(() {});
   }
 
+  /// 初始化阈值配置控制器 (复用逻辑)
+  void _initThresholdControllers(List<ThresholdConfig> configs) {
+    for (var config in configs) {
+      _controllers['${config.key}_normal'] =
+          TextEditingController(text: config.normalMax.toString());
+      _controllers['${config.key}_warning'] =
+          TextEditingController(text: config.warningMax.toString());
+    }
+  }
+
+  /// 从 Provider 更新所有控制器的值 (重置时调用)
   void _updateControllersFromConfig() {
     final provider = context.read<RealtimeConfigProvider>();
 
-    for (var config in provider.rotaryKilnConfigs) {
-      _controllers['${config.key}_normal']?.text = config.normalMax.toString();
-      _controllers['${config.key}_warning']?.text =
-          config.warningMax.toString();
-    }
-    for (var config in provider.rollerKilnConfigs) {
-      _controllers['${config.key}_normal']?.text = config.normalMax.toString();
-      _controllers['${config.key}_warning']?.text =
-          config.warningMax.toString();
-    }
-    for (var config in provider.fanConfigs) {
-      _controllers['${config.key}_normal']?.text = config.normalMax.toString();
-      _controllers['${config.key}_warning']?.text =
-          config.warningMax.toString();
-    }
-    for (var config in provider.scrPumpConfigs) {
-      _controllers['${config.key}_normal']?.text = config.normalMax.toString();
-      _controllers['${config.key}_warning']?.text =
-          config.warningMax.toString();
-    }
-    for (var config in provider.scrGasConfigs) {
-      _controllers['${config.key}_normal']?.text = config.normalMax.toString();
-      _controllers['${config.key}_warning']?.text =
-          config.warningMax.toString();
-    }
-    // 更新料仓容量控制器
+    // 2, 更新阈值配置控制器
+    _updateThresholdControllers(provider.rotaryKilnConfigs);
+    _updateThresholdControllers(provider.rollerKilnConfigs);
+    _updateThresholdControllers(provider.fanConfigs);
+    _updateThresholdControllers(provider.scrPumpConfigs);
+    _updateThresholdControllers(provider.scrGasConfigs);
+
+    // 2, 更新料仓容量控制器
     for (var config in provider.hopperCapacityConfigs) {
       _controllers['${config.key}_maxCapacity']?.text =
           config.maxCapacity.toString();
     }
   }
 
+  /// 更新阈值配置控制器 (复用逻辑)
+  void _updateThresholdControllers(List<ThresholdConfig> configs) {
+    for (var config in configs) {
+      _controllers['${config.key}_normal']?.text = config.normalMax.toString();
+      _controllers['${config.key}_warning']?.text =
+          config.warningMax.toString();
+    }
+  }
+
   @override
   void dispose() {
+    // 2, 释放所有输入框控制器
     for (var controller in _controllers.values) {
       controller.dispose();
     }
@@ -128,122 +120,133 @@ class _RealtimeDataSettingsWidgetState
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<RealtimeConfigProvider>(
-      builder: (context, provider, child) {
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 颜色说明
-              _buildColorLegend(),
-              const SizedBox(height: 20),
+    // 🔧 [CRITICAL] 使用 context.watch 替代 Consumer
+    // Consumer 在 IndexedStack/Offstage 环境中会导致 '_dependents.isEmpty' 错误
+    // 因为 Consumer 的依赖关系在页面隐藏时不会被正确清理
+    final RealtimeConfigProvider provider;
+    try {
+      provider = context.watch<RealtimeConfigProvider>();
+    } catch (e) {
+      // Provider 未就绪时显示加载状态
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(TechColors.glowCyan),
+        ),
+      );
+    }
+    
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 颜色说明
+          _buildColorLegend(),
+          const SizedBox(height: 20),
 
-              // 回转窑温度配置
-              _buildConfigSection(
-                index: 0,
-                title: '回转窑温度阈值配置',
-                subtitle: '9个回转窑设备',
-                icon: Icons.whatshot,
-                accentColor: TechColors.glowOrange,
-                unit: '℃',
-                configs: provider.rotaryKilnConfigs,
-                onUpdate: (index, normalMax, warningMax) {
-                  provider.updateRotaryKilnConfig(index,
-                      normalMax: normalMax, warningMax: warningMax);
-                },
-              ),
-
-              const SizedBox(height: 12),
-
-              // 辊道窑温度配置
-              _buildConfigSection(
-                index: 1,
-                title: '辊道窑温度阈值配置',
-                subtitle: '6个温区',
-                icon: Icons.local_fire_department,
-                accentColor: TechColors.glowRed,
-                unit: '℃',
-                configs: provider.rollerKilnConfigs,
-                onUpdate: (index, normalMax, warningMax) {
-                  provider.updateRollerKilnConfig(index,
-                      normalMax: normalMax, warningMax: warningMax);
-                },
-              ),
-
-              const SizedBox(height: 12),
-
-              // 风机功率配置
-              _buildConfigSection(
-                index: 2,
-                title: '风机功率阈值配置',
-                subtitle: '2个风机',
-                icon: Icons.air,
-                accentColor: TechColors.glowCyan,
-                unit: 'kW',
-                configs: provider.fanConfigs,
-                onUpdate: (index, normalMax, warningMax) {
-                  provider.updateFanConfig(index,
-                      normalMax: normalMax, warningMax: warningMax);
-                },
-              ),
-
-              const SizedBox(height: 12),
-
-              // SCR氨水泵功率配置
-              _buildConfigSection(
-                index: 3,
-                title: 'SCR氨水泵功率阈值配置',
-                subtitle: '2个氨水泵',
-                icon: Icons.water_drop,
-                accentColor: TechColors.glowBlue,
-                unit: 'kW',
-                configs: provider.scrPumpConfigs,
-                onUpdate: (index, normalMax, warningMax) {
-                  provider.updateScrPumpConfig(index,
-                      normalMax: normalMax, warningMax: warningMax);
-                },
-              ),
-
-              const SizedBox(height: 12),
-
-              // SCR燃气表流量配置
-              _buildConfigSection(
-                index: 4,
-                title: 'SCR燃气表流量阈值配置',
-                subtitle: '2个燃气表',
-                icon: Icons.gas_meter,
-                accentColor: TechColors.glowGreen,
-                unit: 'm³/h',
-                configs: provider.scrGasConfigs,
-                onUpdate: (index, normalMax, warningMax) {
-                  provider.updateScrGasConfig(index,
-                      normalMax: normalMax, warningMax: warningMax);
-                },
-              ),
-
-              const SizedBox(height: 12),
-
-              // 料仓容量配置
-              _buildHopperCapacitySection(
-                index: 5,
-                title: '料仓容量配置',
-                subtitle: '7个带料仓的回转窑',
-                icon: Icons.inventory_2,
-                accentColor: TechColors.glowPurple,
-                configs: provider.hopperCapacityConfigs,
-                onUpdate: (index, maxCapacity) {
-                  provider.updateHopperCapacityConfig(index,
-                      maxCapacity: maxCapacity);
-                },
-              ),
-
-              const SizedBox(height: 24),
-              _buildActionButtons(provider),
-            ],
+          // 回转窑温度配置
+          _buildConfigSection(
+            index: 0,
+            title: '回转窑温度阈值配置',
+            subtitle: '9个回转窑设备',
+            icon: Icons.whatshot,
+            accentColor: TechColors.glowOrange,
+            unit: '℃',
+            configs: provider.rotaryKilnConfigs,
+            onUpdate: (index, normalMax, warningMax) {
+              provider.updateRotaryKilnConfig(index,
+                  normalMax: normalMax, warningMax: warningMax);
+            },
           ),
-        );
-      },
+
+          const SizedBox(height: 12),
+
+          // 辊道窑温度配置
+          _buildConfigSection(
+            index: 1,
+            title: '辊道窑温度阈值配置',
+            subtitle: '6个温区',
+            icon: Icons.local_fire_department,
+            accentColor: TechColors.glowRed,
+            unit: '℃',
+            configs: provider.rollerKilnConfigs,
+            onUpdate: (index, normalMax, warningMax) {
+              provider.updateRollerKilnConfig(index,
+                  normalMax: normalMax, warningMax: warningMax);
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          // 风机功率配置
+          _buildConfigSection(
+            index: 2,
+            title: '风机功率阈值配置',
+            subtitle: '2个风机',
+            icon: Icons.air,
+            accentColor: TechColors.glowCyan,
+            unit: 'kW',
+            configs: provider.fanConfigs,
+            onUpdate: (index, normalMax, warningMax) {
+              provider.updateFanConfig(index,
+                  normalMax: normalMax, warningMax: warningMax);
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          // SCR氨水泵功率配置
+          _buildConfigSection(
+            index: 3,
+            title: 'SCR氨水泵功率阈值配置',
+            subtitle: '2个氨水泵',
+            icon: Icons.water_drop,
+            accentColor: TechColors.glowBlue,
+            unit: 'kW',
+            configs: provider.scrPumpConfigs,
+            onUpdate: (index, normalMax, warningMax) {
+              provider.updateScrPumpConfig(index,
+                  normalMax: normalMax, warningMax: warningMax);
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          // SCR燃气表流量配置
+          _buildConfigSection(
+            index: 4,
+            title: 'SCR燃气表流量阈值配置',
+            subtitle: '2个燃气表',
+            icon: Icons.gas_meter,
+            accentColor: TechColors.glowGreen,
+            unit: 'm³/h',
+            configs: provider.scrGasConfigs,
+            onUpdate: (index, normalMax, warningMax) {
+              provider.updateScrGasConfig(index,
+                  normalMax: normalMax, warningMax: warningMax);
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          // 料仓容量配置
+          _buildHopperCapacitySection(
+            index: 5,
+            title: '料仓容量配置',
+            subtitle: '7个带料仓的回转窑',
+            icon: Icons.inventory_2,
+            accentColor: TechColors.glowPurple,
+            configs: provider.hopperCapacityConfigs,
+            onUpdate: (index, maxCapacity) {
+              provider.updateHopperCapacityConfig(index,
+                  maxCapacity: maxCapacity);
+            },
+          ),
+
+          const SizedBox(height: 24),
+          _buildActionButtons(provider),
+        ],
+      ),
     );
   }
 

@@ -2,8 +2,10 @@
 // 用于处理全局的网络请求配置、拦截器、基础请求方法等
 
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart'; // IOClient 需要单独导入
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 import 'api.dart';
 import '../utils/app_logger.dart';
 
@@ -14,26 +16,59 @@ class ApiClient {
 
   final String baseUrl = Api.baseUrl;
 
-  // 🔧 修复1: 复用 HTTP Client，避免内存泄漏
-  static final http.Client _httpClient = http.Client();
+  // ===== HTTP Client 配置 =====
+  // 1, HTTP Client 单例（定期刷新防止僵尸连接）
+  static http.Client _httpClient = _createClient();
+  static DateTime _lastRefresh = DateTime.now();
+  static const Duration _refreshInterval = Duration(minutes: 30);
+  static bool _isDisposed = false;
 
-  // 🔧 修复2: 请求超时配置
+  // 2, 超时配置（覆盖连接+响应全过程）
   static const Duration _timeout = Duration(seconds: 10);
+  static const Duration _connectionTimeout = Duration(seconds: 5);
 
-  // 连续失败计数（用于日志记录）
+  // 3, 连续失败计数（用于日志记录和诊断）
   int _consecutiveFailures = 0;
+
+  /// 🔧 [CRITICAL] 创建带连接超时的 HTTP Client
+  /// 解决 Windows 工控机上 TCP 连接卡死的问题
+  static http.Client _createClient() {
+    final httpClient = HttpClient()
+      ..connectionTimeout = _connectionTimeout // TCP 连接超时
+      ..idleTimeout = const Duration(seconds: 30); // 空闲连接超时
+    return IOClient(httpClient); // IOClient 已从 io_client.dart 导入
+  }
+
+  /// 获取 HTTP Client（自动刷新过期连接）
+  static http.Client get _client {
+    if (_isDisposed) {
+      _httpClient = _createClient();
+      _isDisposed = false;
+      _lastRefresh = DateTime.now();
+    } else if (DateTime.now().difference(_lastRefresh) > _refreshInterval) {
+      logger.info('HTTP Client 定期刷新（防止僵尸连接）');
+      _httpClient.close();
+      _httpClient = _createClient();
+      _lastRefresh = DateTime.now();
+    }
+    return _httpClient;
+  }
 
   Future<dynamic> get(String path, {Map<String, String>? params}) async {
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: params);
 
     try {
-      // 🔧 修复3: 添加超时控制
-      final response = await _httpClient.get(uri).timeout(_timeout);
-      _consecutiveFailures = 0; // 成功后重置失败计数
+      // 2, 超时控制覆盖整个请求过程（连接+传输+响应）
+      final response = await _client.get(uri).timeout(_timeout);
+      _consecutiveFailures = 0; // 3, 成功后重置失败计数
       return _processResponse(response, uri.toString());
     } on TimeoutException {
       _handleError('GET', uri.toString(),
           'Request timeout after ${_timeout.inSeconds}s');
+      rethrow;
+    } on SocketException catch (e) {
+      // 🔧 [CRITICAL] 捕获 Socket 异常（连接被拒绝、网络不可达等）
+      _handleError('GET', uri.toString(), 'Socket error: $e');
       rethrow;
     } on http.ClientException catch (e) {
       _handleError('GET', uri.toString(), 'Client error: $e');
@@ -49,7 +84,7 @@ class ApiClient {
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: params);
 
     try {
-      final response = await _httpClient.post(
+      final response = await _client.post(
         uri,
         body: jsonEncode(body),
         headers: {'Content-Type': 'application/json'},
@@ -59,6 +94,9 @@ class ApiClient {
     } on TimeoutException {
       _handleError('POST', uri.toString(),
           'Request timeout after ${_timeout.inSeconds}s');
+      rethrow;
+    } on SocketException catch (e) {
+      _handleError('POST', uri.toString(), 'Socket error: $e');
       rethrow;
     } on http.ClientException catch (e) {
       _handleError('POST', uri.toString(), 'Client error: $e');
@@ -74,7 +112,7 @@ class ApiClient {
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: params);
 
     try {
-      final response = await _httpClient.put(
+      final response = await _client.put(
         uri,
         body: jsonEncode(body),
         headers: {'Content-Type': 'application/json'},
@@ -84,6 +122,9 @@ class ApiClient {
     } on TimeoutException {
       _handleError('PUT', uri.toString(),
           'Request timeout after ${_timeout.inSeconds}s');
+      rethrow;
+    } on SocketException catch (e) {
+      _handleError('PUT', uri.toString(), 'Socket error: $e');
       rethrow;
     } on http.ClientException catch (e) {
       _handleError('PUT', uri.toString(), 'Client error: $e');
@@ -127,6 +168,10 @@ class ApiClient {
 
   /// 关闭 HTTP Client（应用退出时调用）
   static void dispose() {
-    _httpClient.close();
+    if (!_isDisposed) {
+      _httpClient.close();
+      _isDisposed = true;
+      logger.info('HTTP Client 已关闭');
+    }
   }
 }

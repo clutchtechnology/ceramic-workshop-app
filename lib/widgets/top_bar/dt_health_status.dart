@@ -13,144 +13,191 @@ class HealthStatusWidget extends StatefulWidget {
 }
 
 class _HealthStatusWidgetState extends State<HealthStatusWidget> {
+  // ===== 状态变量 =====
+  // 1-3, 当前健康状态 → build() 中显示指示器
   bool _isSystemHealthy = false;
   bool _isPlcHealthy = false;
   bool _isDbHealthy = false;
+
+  // 4, 定时器 → dispose() 中取消
   Timer? _timer;
 
-  // 记录上次状态，用于检测状态变化
+  // 5-7, 上次状态 → 检测状态变化，避免重复日志
   bool? _lastSystemHealthy;
   bool? _lastPlcHealthy;
   bool? _lastDbHealthy;
 
+  // ===== 生命周期 =====
   @override
   void initState() {
     super.initState();
     _checkHealth();
-    _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
-      try {
-        _checkHealth();
-      } catch (e) {
-        // 忽略异常，保持定时器运行
-      }
+    // 4, 启动定时健康检查（每分钟一次）
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) _checkHealth();
     });
   }
 
+  // 4, 取消定时器防止内存泄漏
   @override
   void dispose() {
     _timer?.cancel();
     super.dispose();
   }
 
+  // ===== 健康检查逻辑 =====
+  /// 更新健康状态并记录状态变化日志
+  void _updateHealthStatus({
+    required String serviceName,
+    required bool newValue,
+    required bool? lastValue,
+    required void Function(bool) updateLast,
+    required void Function(bool) updateCurrent,
+    Object? errorDetail,
+  }) {
+    if (!mounted) return;
+
+    // 状态变化时记录日志
+    if (newValue && lastValue == false) {
+      logger.info('$serviceName恢复正常');
+    } else if (!newValue && lastValue != false) {
+      if (errorDetail != null) {
+        logger.error('$serviceName不可用', errorDetail);
+      } else {
+        logger.error('$serviceName连接断开');
+      }
+    }
+
+    updateLast(newValue);
+    setState(() => updateCurrent(newValue));
+  }
+
   Future<void> _checkHealth() async {
     final client = ApiClient();
 
-    // Check System Health
+    // 1, 检查系统服务健康状态
+    await _checkSystemHealth(client);
+    // 2, 检查 PLC 连接状态
+    await _checkPlcHealth(client);
+    // 3, 检查数据库连接状态
+    await _checkDbHealth(client);
+  }
+
+  // 1, 系统服务健康检查
+  Future<void> _checkSystemHealth(ApiClient client) async {
     try {
       await client.get(Api.health);
-      if (mounted) {
-        // 状态变化：从不健康变为健康
-        if (_lastSystemHealthy == false) {
-          logger.info('系统服务恢复正常');
-        }
-        _lastSystemHealthy = true;
-        setState(() => _isSystemHealthy = true);
-      }
+      _updateHealthStatus(
+        serviceName: '系统服务',
+        newValue: true,
+        lastValue: _lastSystemHealthy,
+        updateLast: (v) => _lastSystemHealthy = v,
+        updateCurrent: (v) => _isSystemHealthy = v,
+      );
     } catch (e) {
-      if (mounted) {
-        // 状态变化：从健康变为不健康，记录ERROR
-        if (_lastSystemHealthy != false) {
-          logger.error('系统服务不可达', e);
-        }
-        _lastSystemHealthy = false;
-        setState(() => _isSystemHealthy = false);
-      }
-    }
-
-    // Check PLC Health - 需要检查返回的 connected 字段
-    try {
-      final response = await client.get(Api.healthPlc);
-      // 解析响应，检查 data.connected 字段
-      bool plcConnected = false;
-      if (response is Map<String, dynamic>) {
-        final data = response['data'];
-        if (data is Map<String, dynamic>) {
-          plcConnected = data['connected'] == true;
-        }
-      }
-      if (mounted) {
-        // 状态变化日志
-        if (plcConnected && _lastPlcHealthy == false) {
-          logger.info('PLC连接恢复正常');
-        } else if (!plcConnected && _lastPlcHealthy != false) {
-          logger.error('PLC连接断开 - connected: $plcConnected');
-        }
-        _lastPlcHealthy = plcConnected;
-        setState(() => _isPlcHealthy = plcConnected);
-      }
-    } catch (e) {
-      if (mounted) {
-        if (_lastPlcHealthy != false) {
-          logger.error('PLC健康检查失败', e);
-        }
-        _lastPlcHealthy = false;
-        setState(() => _isPlcHealthy = false);
-      }
-    }
-
-    // Check DB Health - 需要检查返回的 status 字段
-    try {
-      final response = await client.get(Api.healthDb);
-      // 解析响应，检查 data.status 或 data.databases.influxdb.connected 字段
-      bool dbConnected = false;
-      if (response is Map<String, dynamic>) {
-        final data = response['data'];
-        if (data is Map<String, dynamic>) {
-          // 检查 status 是否为 "healthy"
-          if (data['status'] == 'healthy') {
-            dbConnected = true;
-          } else {
-            // 或者检查 databases.influxdb.connected
-            final databases = data['databases'];
-            if (databases is Map<String, dynamic>) {
-              final influxdb = databases['influxdb'];
-              if (influxdb is Map<String, dynamic>) {
-                dbConnected = influxdb['connected'] == true;
-              }
-            }
-          }
-        }
-      }
-      if (mounted) {
-        // 状态变化日志
-        if (dbConnected && _lastDbHealthy == false) {
-          logger.info('数据库连接恢复正常');
-        } else if (!dbConnected && _lastDbHealthy != false) {
-          logger.error('数据库连接断开 - status: ${response}');
-        }
-        _lastDbHealthy = dbConnected;
-        setState(() => _isDbHealthy = dbConnected);
-      }
-    } catch (e) {
-      if (mounted) {
-        if (_lastDbHealthy != false) {
-          logger.error('数据库健康检查失败', e);
-        }
-        _lastDbHealthy = false;
-        setState(() => _isDbHealthy = false);
-      }
+      _updateHealthStatus(
+        serviceName: '系统服务',
+        newValue: false,
+        lastValue: _lastSystemHealthy,
+        updateLast: (v) => _lastSystemHealthy = v,
+        updateCurrent: (v) => _isSystemHealthy = v,
+        errorDetail: e,
+      );
     }
   }
 
+  // 2, PLC 连接状态检查
+  Future<void> _checkPlcHealth(ApiClient client) async {
+    try {
+      final response = await client.get(Api.healthPlc);
+      final plcConnected = _parseConnected(response);
+      _updateHealthStatus(
+        serviceName: 'PLC',
+        newValue: plcConnected,
+        lastValue: _lastPlcHealthy,
+        updateLast: (v) => _lastPlcHealthy = v,
+        updateCurrent: (v) => _isPlcHealthy = v,
+      );
+    } catch (e) {
+      _updateHealthStatus(
+        serviceName: 'PLC',
+        newValue: false,
+        lastValue: _lastPlcHealthy,
+        updateLast: (v) => _lastPlcHealthy = v,
+        updateCurrent: (v) => _isPlcHealthy = v,
+        errorDetail: e,
+      );
+    }
+  }
+
+  // 3, 数据库连接状态检查
+  Future<void> _checkDbHealth(ApiClient client) async {
+    try {
+      final response = await client.get(Api.healthDb);
+      final dbConnected = _parseDbStatus(response);
+      _updateHealthStatus(
+        serviceName: '数据库',
+        newValue: dbConnected,
+        lastValue: _lastDbHealthy,
+        updateLast: (v) => _lastDbHealthy = v,
+        updateCurrent: (v) => _isDbHealthy = v,
+      );
+    } catch (e) {
+      _updateHealthStatus(
+        serviceName: '数据库',
+        newValue: false,
+        lastValue: _lastDbHealthy,
+        updateLast: (v) => _lastDbHealthy = v,
+        updateCurrent: (v) => _isDbHealthy = v,
+        errorDetail: e,
+      );
+    }
+  }
+
+  /// 解析 {"data": {"connected": true}} 格式的响应
+  bool _parseConnected(dynamic response) {
+    if (response is Map<String, dynamic>) {
+      final data = response['data'];
+      if (data is Map<String, dynamic>) {
+        return data['connected'] == true;
+      }
+    }
+    return false;
+  }
+
+  /// 解析数据库状态响应（支持两种格式）
+  /// - {"data": {"status": "healthy"}}
+  /// - {"data": {"databases": {"influxdb": {"connected": true}}}}
+  bool _parseDbStatus(dynamic response) {
+    if (response is! Map<String, dynamic>) return false;
+    final data = response['data'];
+    if (data is! Map<String, dynamic>) return false;
+
+    // 格式1: status == "healthy"
+    if (data['status'] == 'healthy') return true;
+
+    // 格式2: databases.influxdb.connected
+    final databases = data['databases'];
+    if (databases is Map<String, dynamic>) {
+      final influxdb = databases['influxdb'];
+      if (influxdb is Map<String, dynamic>) {
+        return influxdb['connected'] == true;
+      }
+    }
+    return false;
+  }
+
+  // ===== UI 构建 =====
   @override
   Widget build(BuildContext context) {
+    // 1-3, 显示三个服务的健康状态指示器
     return Row(
       children: [
-        _buildStatusIndicator('服务', _isSystemHealthy),
+        _buildStatusIndicator('服务', _isSystemHealthy), // 1
         const SizedBox(width: 8),
-        _buildStatusIndicator('PLC', _isPlcHealthy),
+        _buildStatusIndicator('PLC', _isPlcHealthy), // 2
         const SizedBox(width: 8),
-        _buildStatusIndicator('数据库', _isDbHealthy),
+        _buildStatusIndicator('数据库', _isDbHealthy), // 3
       ],
     );
   }

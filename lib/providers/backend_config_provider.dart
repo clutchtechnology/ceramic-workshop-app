@@ -109,17 +109,28 @@ class PlcConfigData {
 
 /// 后端配置 Provider
 /// 负责与后端API交互并持久化配置
+///
+/// 业务流程:
+/// 1. 初始化时先从本地 SharedPreferences 加载缓存配置
+/// 2. 然后从后端 API 刷新最新配置
+/// 3. 更新配置时: 先推送到后端 -> 成功后保存本地
 class BackendConfigProvider extends ChangeNotifier {
-  static const String _storageKey = 'backend_config_v1';
+  // 1, SharedPreferences 存储键 - 服务器配置
   static const String _serverConfigKey = 'backend_server_config';
+  // 2, SharedPreferences 存储键 - PLC配置
   static const String _plcConfigKey = 'backend_plc_config';
 
+  // 3, 配置加载完成标志 (用于UI显示加载状态)
   bool _isLoaded = false;
   bool get isLoaded => _isLoaded;
 
+  // 4, 服务器配置数据 (host/port/debug)
   ServerConfigData? _serverConfig;
+  // 5, PLC配置数据 (ip_address/rack/slot/timeout_ms/poll_interval)
   PlcConfigData? _plcConfig;
+  // 6, API请求进行中标志
   bool _isLoading = false;
+  // 7, 最近一次操作的错误信息
   String? _error;
 
   ServerConfigData? get serverConfig => _serverConfig;
@@ -128,9 +139,13 @@ class BackendConfigProvider extends ChangeNotifier {
   String? get error => _error;
 
   /// 初始化：先从本地加载，再从后端刷新
+  /// 调用时机: App启动时在 main.dart 或 Provider 初始化时调用
   Future<void> initialize() async {
+    // 1, 先从本地 SharedPreferences 加载缓存配置 (离线可用)
     await _loadFromLocal();
+    // 然后从后端 API 刷新最新配置
     await refreshFromBackend();
+    // 3, 标记配置加载完成
     _isLoaded = true;
     notifyListeners();
   }
@@ -147,20 +162,23 @@ class BackendConfigProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // 加载服务器配置
+      // 1, 加载服务器配置 (使用存储键 _serverConfigKey)
       final serverJson = prefs.getString(_serverConfigKey);
       if (serverJson != null) {
+        // 4, 解析并赋值服务器配置
         _serverConfig = ServerConfigData.fromJson(jsonDecode(serverJson));
       }
 
-      // 加载PLC配置
+      // 2, 加载PLC配置 (使用存储键 _plcConfigKey)
       final plcJson = prefs.getString(_plcConfigKey);
       if (plcJson != null) {
+        // 5, 解析并赋值PLC配置
         _plcConfig = PlcConfigData.fromJson(jsonDecode(plcJson));
       }
 
       notifyListeners();
     } catch (e) {
+      // 7, 记录错误但不中断流程 (本地缓存失败不影响后端刷新)
       debugPrint('从本地加载配置失败: $e');
     }
   }
@@ -186,32 +204,39 @@ class BackendConfigProvider extends ChangeNotifier {
   }
 
   /// 从后端刷新配置
+  /// 调用时机: 初始化时 / 用户手动刷新 / 设置页面进入时
   Future<void> refreshFromBackend() async {
+    // 6, 设置加载状态
     _isLoading = true;
+    // 7, 清除旧错误
     _error = null;
     notifyListeners();
 
     final client = ApiClient();
 
     try {
-      // 获取服务器配置
+      // 获取服务器配置 (GET /api/config/server)
       final serverData = await client.get(Api.configServer);
       if (serverData['success'] == true && serverData['data'] != null) {
+        // 4, 更新服务器配置
         _serverConfig = ServerConfigData.fromJson(serverData['data']);
       }
 
-      // 获取PLC配置
+      // 获取PLC配置 (GET /api/config/plc)
       final plcData = await client.get(Api.configPlc);
       if (plcData['success'] == true && plcData['data'] != null) {
+        // 5, 更新PLC配置
         _plcConfig = PlcConfigData.fromJson(plcData['data']);
       }
 
-      // 保存到本地
+      // 1,2, 保存到本地缓存 (使用 _serverConfigKey 和 _plcConfigKey)
       await _saveToLocal();
 
+      // 6, 清除加载状态
       _isLoading = false;
       notifyListeners();
     } catch (e) {
+      // 7, 记录错误信息
       _error = '无法连接到后端服务: $e';
       _isLoading = false;
       notifyListeners();

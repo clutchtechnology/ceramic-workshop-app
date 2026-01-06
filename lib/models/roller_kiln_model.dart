@@ -23,6 +23,13 @@ class RollerKilnData {
       mainMeter: RollerKilnMeter.fromJson(mainMeterData),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'device_id': deviceId,
+        'timestamp': timestamp,
+        'zones': zones.map((z) => z.toJson()).toList(),
+        'main_meter': mainMeter.toJson(),
+      };
 }
 
 /// 辊道窑温区数据 (支持三相电流)
@@ -62,6 +69,18 @@ class RollerKilnZone {
       currentC: (json['current_c'] as num?)?.toDouble() ?? 0.0,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'zone_id': zoneId,
+        'zone_name': zoneName,
+        'temperature': temperature,
+        'power': power,
+        'energy': energy,
+        'voltage': voltage,
+        'current_a': currentA,
+        'current_b': currentB,
+        'current_c': currentC,
+      };
 }
 
 /// 辊道窑主电表数据 (支持三相电流)
@@ -92,4 +111,13 @@ class RollerKilnMeter {
       currentC: (json['current_c'] as num?)?.toDouble() ?? 0.0,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'power': power,
+        'energy': energy,
+        'voltage': voltage,
+        'current_a': currentA,
+        'current_b': currentB,
+        'current_c': currentC,
+      };
 }

@@ -7,6 +7,9 @@ import '../icons/icons.dart';
 
 /// 无料仓回转窑单元组件
 /// 用于显示单个无料仓回转窑设备
+///
+/// 🔧 性能优化:
+/// - 使用 context.read 替代 context.watch（父组件已 watch，此处只需读取）
 class RotaryKilnNoHopperCell extends StatelessWidget {
   /// 窑编号
   final int index;
@@ -24,6 +27,7 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 1, 从料仓数据中提取各传感器数值（无料仓设备只有电表和温度）
     final power = data?.electricityMeter?.pt ?? 0.0;
     final energy = data?.electricityMeter?.impEp ?? 0.0;
     final temperature = data?.temperatureSensor?.temperature ?? 0.0;
@@ -31,8 +35,10 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
     final currentB = data?.electricityMeter?.currentB ?? 0.0;
     final currentC = data?.electricityMeter?.currentC ?? 0.0;
 
-    // 获取温度颜色配置
-    final configProvider = context.watch<RealtimeConfigProvider>();
+    // 🔧 优化: 使用 context.read 而非 context.watch
+    final configProvider = context.read<RealtimeConfigProvider>();
+
+    // 2, 根据温度阈值配置获取显示颜色
     final tempColor = deviceId != null
         ? configProvider.getRotaryKilnTempColor(deviceId!, temperature)
         : ThresholdColors.normal;

@@ -113,11 +113,23 @@ class HopperCapacityConfig {
 }
 
 /// 实时数据配置 Provider
+///
+/// 🔧 性能优化:
+/// - 使用 Map 缓存替代 List.firstWhere 线性查找 (O(n) → O(1))
+/// - 缓存在配置加载后构建，避免每次 build 重复查找
 class RealtimeConfigProvider extends ChangeNotifier {
   static const String _storageKey = 'realtime_threshold_config_v2';
 
   bool _isLoaded = false;
   bool get isLoaded => _isLoaded;
+
+  // 🔧 性能优化: 使用 Map 缓存加速查找 (O(1) 替代 O(n))
+  final Map<String, ThresholdConfig> _rotaryKilnCache = {};
+  final Map<String, ThresholdConfig> _rollerKilnCache = {};
+  final Map<String, ThresholdConfig> _fanCache = {};
+  final Map<String, ThresholdConfig> _scrPumpCache = {};
+  final Map<String, ThresholdConfig> _scrGasCache = {};
+  final Map<String, HopperCapacityConfig> _hopperCapacityCache = {};
 
   // ============================================================
   // 回转窑温度配置 (9个设备)
@@ -304,12 +316,50 @@ class RealtimeConfigProvider extends ChangeNotifier {
         final jsonData = jsonDecode(jsonString) as Map<String, dynamic>;
         _loadFromJson(jsonData);
       }
+
+      // 🔧 构建缓存 Map (加速后续查找)
+      _buildCaches();
+
       _isLoaded = true;
       notifyListeners();
     } catch (e) {
       debugPrint('加载实时数据配置失败: $e');
+      _buildCaches(); // 即使加载失败也要构建默认缓存
       _isLoaded = true;
       notifyListeners();
+    }
+  }
+
+  /// 🔧 构建缓存 Map (O(1) 查找替代 O(n) 遍历)
+  void _buildCaches() {
+    _rotaryKilnCache.clear();
+    for (var config in rotaryKilnConfigs) {
+      _rotaryKilnCache[config.key] = config;
+    }
+
+    _rollerKilnCache.clear();
+    for (var config in rollerKilnConfigs) {
+      _rollerKilnCache[config.key] = config;
+    }
+
+    _fanCache.clear();
+    for (var config in fanConfigs) {
+      _fanCache[config.key] = config;
+    }
+
+    _scrPumpCache.clear();
+    for (var config in scrPumpConfigs) {
+      _scrPumpCache[config.key] = config;
+    }
+
+    _scrGasCache.clear();
+    for (var config in scrGasConfigs) {
+      _scrGasCache[config.key] = config;
+    }
+
+    _hopperCapacityCache.clear();
+    for (var config in hopperCapacityConfigs) {
+      _hopperCapacityCache[config.key] = config;
     }
   }
 
@@ -547,33 +597,42 @@ class RealtimeConfigProvider extends ChangeNotifier {
         hopperCapacityConfigs[i].maxCapacity = 1500.0;
       }
     }
+    // 🔧 重建缓存确保一致性
+    _buildCaches();
     notifyListeners();
   }
 
   // ============================================================
   // 便捷获取颜色的方法
+  // 🔧 性能优化: 使用缓存 Map 替代 List.firstWhere (O(1) vs O(n))
   // ============================================================
+
+  // 默认配置（缓存未命中时使用）
+  static final _defaultRotaryKilnConfig = ThresholdConfig(
+      key: '', displayName: '', normalMax: 800.0, warningMax: 1000.0);
+  static final _defaultRollerKilnConfig = ThresholdConfig(
+      key: '', displayName: '', normalMax: 1200.0, warningMax: 1400.0);
+  static final _defaultFanConfig = ThresholdConfig(
+      key: '', displayName: '', normalMax: 80.0, warningMax: 120.0);
+  static final _defaultScrPumpConfig = ThresholdConfig(
+      key: '', displayName: '', normalMax: 30.0, warningMax: 50.0);
+  static final _defaultScrGasConfig = ThresholdConfig(
+      key: '', displayName: '', normalMax: 100.0, warningMax: 150.0);
+  static final _defaultHopperCapacityConfig =
+      HopperCapacityConfig(key: '', displayName: '', maxCapacity: 1000.0);
 
   /// 根据设备ID获取回转窑温度颜色
   /// deviceId: 例如 "short_hopper_1"
   Color getRotaryKilnTempColor(String deviceId, double temperature) {
     final key = '${deviceId}_temp';
-    final config = rotaryKilnConfigs.firstWhere(
-      (c) => c.key == key,
-      orElse: () => ThresholdConfig(
-          key: key, displayName: '', normalMax: 800.0, warningMax: 1000.0),
-    );
+    final config = _rotaryKilnCache[key] ?? _defaultRotaryKilnConfig;
     return config.getColor(temperature);
   }
 
   /// 根据温区tag获取辊道窑温度颜色
   /// zoneTag: 例如 "zone1_temp"
   Color getRollerKilnTempColor(String zoneTag, double temperature) {
-    final config = rollerKilnConfigs.firstWhere(
-      (c) => c.key == zoneTag,
-      orElse: () => ThresholdConfig(
-          key: zoneTag, displayName: '', normalMax: 1200.0, warningMax: 1400.0),
-    );
+    final config = _rollerKilnCache[zoneTag] ?? _defaultRollerKilnConfig;
     return config.getColor(temperature);
   }
 
@@ -587,11 +646,7 @@ class RealtimeConfigProvider extends ChangeNotifier {
   /// fanId: 例如 "fan_1"
   Color getFanPowerColor(String fanId, double power) {
     final key = '${fanId}_power';
-    final config = fanConfigs.firstWhere(
-      (c) => c.key == key,
-      orElse: () => ThresholdConfig(
-          key: key, displayName: '', normalMax: 80.0, warningMax: 120.0),
-    );
+    final config = _fanCache[key] ?? _defaultFanConfig;
     return config.getColor(power);
   }
 
@@ -599,11 +654,7 @@ class RealtimeConfigProvider extends ChangeNotifier {
   /// scrId: 例如 "scr_1"
   Color getScrPumpPowerColor(String scrId, double power) {
     final key = '${scrId}_meter';
-    final config = scrPumpConfigs.firstWhere(
-      (c) => c.key == key,
-      orElse: () => ThresholdConfig(
-          key: key, displayName: '', normalMax: 30.0, warningMax: 50.0),
-    );
+    final config = _scrPumpCache[key] ?? _defaultScrPumpConfig;
     return config.getColor(power);
   }
 
@@ -611,65 +662,42 @@ class RealtimeConfigProvider extends ChangeNotifier {
   /// scrId: 例如 "scr_1"
   Color getScrGasFlowColor(String scrId, double flow) {
     final key = '${scrId}_gas_meter';
-    final config = scrGasConfigs.firstWhere(
-      (c) => c.key == key,
-      orElse: () => ThresholdConfig(
-          key: key, displayName: '', normalMax: 100.0, warningMax: 150.0),
-    );
+    final config = _scrGasCache[key] ?? _defaultScrGasConfig;
     return config.getColor(flow);
   }
 
   // ============================================================
   // 获取阈值配置的方法
+  // 🔧 性能优化: 使用缓存 Map
   // ============================================================
 
   /// 获取回转窑阈值配置
   ThresholdConfig? getRotaryKilnThreshold(String deviceId) {
     final key = '${deviceId}_temp';
-    try {
-      return rotaryKilnConfigs.firstWhere((c) => c.key == key);
-    } catch (e) {
-      return null;
-    }
+    return _rotaryKilnCache[key];
   }
 
   /// 获取辊道窑阈值配置
   ThresholdConfig? getRollerKilnThreshold(String zoneTag) {
-    try {
-      return rollerKilnConfigs.firstWhere((c) => c.key == zoneTag);
-    } catch (e) {
-      return null;
-    }
+    return _rollerKilnCache[zoneTag];
   }
 
   /// 获取风机阈值配置
   ThresholdConfig? getFanThreshold(String fanId) {
     final key = '${fanId}_power';
-    try {
-      return fanConfigs.firstWhere((c) => c.key == key);
-    } catch (e) {
-      return null;
-    }
+    return _fanCache[key];
   }
 
   /// 获取SCR氨水泵阈值配置
   ThresholdConfig? getScrPumpThreshold(String scrId) {
     final key = '${scrId}_meter';
-    try {
-      return scrPumpConfigs.firstWhere((c) => c.key == key);
-    } catch (e) {
-      return null;
-    }
+    return _scrPumpCache[key];
   }
 
   /// 获取SCR燃气表阈值配置
   ThresholdConfig? getScrGasThreshold(String scrId) {
     final key = '${scrId}_gas_meter';
-    try {
-      return scrGasConfigs.firstWhere((c) => c.key == key);
-    } catch (e) {
-      return null;
-    }
+    return _scrGasCache[key];
   }
 
   // ============================================================
@@ -702,6 +730,7 @@ class RealtimeConfigProvider extends ChangeNotifier {
 
   // ============================================================
   // 料仓容量相关方法
+  // 🔧 性能优化: 使用缓存 Map 替代 List.firstWhere (O(1) vs O(n))
   // ============================================================
 
   /// 根据设备ID获取料仓容量百分比
@@ -710,11 +739,7 @@ class RealtimeConfigProvider extends ChangeNotifier {
   /// 返回: 百分比 (0-100)
   double getHopperCapacityPercentage(String deviceId, double currentWeight) {
     final key = '${deviceId}_capacity';
-    final config = hopperCapacityConfigs.firstWhere(
-      (c) => c.key == key,
-      orElse: () =>
-          HopperCapacityConfig(key: key, displayName: '', maxCapacity: 1000.0),
-    );
+    final config = _hopperCapacityCache[key] ?? _defaultHopperCapacityConfig;
     return config.calculatePercentage(currentWeight);
   }
 
@@ -722,22 +747,14 @@ class RealtimeConfigProvider extends ChangeNotifier {
   /// deviceId: 例如 "short_hopper_1", "long_hopper_2"
   double getHopperMaxCapacity(String deviceId) {
     final key = '${deviceId}_capacity';
-    final config = hopperCapacityConfigs.firstWhere(
-      (c) => c.key == key,
-      orElse: () =>
-          HopperCapacityConfig(key: key, displayName: '', maxCapacity: 1000.0),
-    );
+    final config = _hopperCapacityCache[key] ?? _defaultHopperCapacityConfig;
     return config.maxCapacity;
   }
 
   /// 获取料仓容量配置
   HopperCapacityConfig? getHopperCapacityConfig(String deviceId) {
     final key = '${deviceId}_capacity';
-    try {
-      return hopperCapacityConfigs.firstWhere((c) => c.key == key);
-    } catch (e) {
-      return null;
-    }
+    return _hopperCapacityCache[key];
   }
 
   /// 根据设备ID获取料仓容量比例 (0.0 - 1.0)

@@ -1,78 +1,127 @@
 // ============================================================
-// 文件说明: sensor_status_model.dart - 传感器状态位数据模型
+// 文件说明: sensor_status_model.dart - 设备状态位数据模型
 // ============================================================
 // 功能:
-//   - 定义传感器状态位数据结构
-//   - 提供JSON序列化/反序列化
+//   - 定义设备状态位数据结构
+//   - 解析后端返回的结构化 JSON 数据
 // ============================================================
 
-/// 单个传感器的状态数据
-class SensorStatus {
+/// 单个模块的状态数据 (后端已解析)
+class ModuleStatus {
   final String deviceId;
+  final String deviceName;
   final String deviceType;
+  final String moduleTag;
   final String description;
-  final bool done; // 通信完成
-  final bool busy; // 通信忙
-  final bool error; // 通信错误
-  final int statusCode; // 状态码
-  final DateTime? timestamp;
+  final int dbNumber;
+  final int offset;
+  final bool error;
+  final int statusCode;
+  final String statusHex;
+  final bool isNormal;
+  final String? timestamp;
 
-  SensorStatus({
+  ModuleStatus({
     required this.deviceId,
+    required this.deviceName,
     required this.deviceType,
-    this.description = '',
-    required this.done,
-    required this.busy,
+    required this.moduleTag,
+    required this.description,
+    required this.dbNumber,
+    required this.offset,
     required this.error,
     required this.statusCode,
+    required this.statusHex,
+    required this.isNormal,
     this.timestamp,
   });
 
-  /// 从JSON创建
-  factory SensorStatus.fromJson(Map<String, dynamic> json) {
-    return SensorStatus(
+  factory ModuleStatus.fromJson(Map<String, dynamic> json) {
+    return ModuleStatus(
       deviceId: json['device_id'] ?? '',
+      deviceName: json['device_name'] ?? '',
       deviceType: json['device_type'] ?? '',
+      moduleTag: json['module_tag'] ?? '',
       description: json['description'] ?? '',
-      done: json['done'] ?? false,
-      busy: json['busy'] ?? false,
+      dbNumber: json['db_number'] ?? 0,
+      offset: json['offset'] ?? 0,
       error: json['error'] ?? false,
       statusCode: json['status_code'] ?? 0,
-      timestamp: json['timestamp'] != null
-          ? DateTime.tryParse(json['timestamp'])
-          : null,
+      statusHex: json['status_hex'] ?? '0000',
+      isNormal: json['is_normal'] ?? true,
+      timestamp: json['timestamp'],
     );
   }
 }
 
-/// 所有传感器状态的响应数据
-class AllSensorStatusResponse {
+/// 统计信息
+class StatusSummary {
+  final int total;
+  final int normal;
+  final int error;
+
+  StatusSummary({
+    required this.total,
+    required this.normal,
+    required this.error,
+  });
+
+  factory StatusSummary.fromJson(Map<String, dynamic> json) {
+    return StatusSummary(
+      total: json['total'] ?? 0,
+      normal: json['normal'] ?? 0,
+      error: json['error'] ?? 0,
+    );
+  }
+}
+
+/// 所有状态位的响应数据 (按 DB 分组)
+class AllStatusResponse {
   final bool success;
-  final Map<String, SensorStatus>? data;
+  final Map<String, List<ModuleStatus>>? data; // "db3", "db7", "db11"
+  final StatusSummary? summary;
   final String? error;
 
-  AllSensorStatusResponse({
+  AllStatusResponse({
     required this.success,
     this.data,
+    this.summary,
     this.error,
   });
 
-  factory AllSensorStatusResponse.fromJson(Map<String, dynamic> json) {
-    Map<String, SensorStatus>? statusMap;
+  factory AllStatusResponse.fromJson(Map<String, dynamic> json) {
+    Map<String, List<ModuleStatus>>? dataMap;
 
     if (json['data'] != null && json['data'] is Map) {
-      statusMap = {};
+      dataMap = {};
       (json['data'] as Map).forEach((key, value) {
-        if (value is Map<String, dynamic>) {
-          statusMap![key] = SensorStatus.fromJson(value);
+        if (value is List) {
+          dataMap![key] = value
+              .map((item) => ModuleStatus.fromJson(item as Map<String, dynamic>))
+              .toList();
         }
       });
     }
 
-    return AllSensorStatusResponse(
+    return AllStatusResponse(
       success: json['success'] ?? false,
-      data: statusMap,
+      data: dataMap,
+      summary: json['summary'] != null
+          ? StatusSummary.fromJson(json['summary'])
+          : null,
       error: json['error'],
     );
+  }
+
+  /// 获取所有状态的扁平列表
+  List<ModuleStatus> get flatList {
+    if (data == null) return [];
+    final List<ModuleStatus> result = [];
+    for (final key in ['db3', 'db7', 'db11']) {
+      if (data!.containsKey(key)) {
+        result.addAll(data![key]!);
+      }
+    }
+    return result;
   }
 }

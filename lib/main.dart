@@ -21,12 +21,9 @@ void main() async {
     await logger.info('应用程序启动中...');
 
     // 捕获 Flutter 框架错误
-    FlutterError.onError = (FlutterErrorDetails details) async {
-      await logger.fatal(
-        'Flutter框架错误',
-        details.exception,
-        details.stack,
-      );
+    FlutterError.onError = (FlutterErrorDetails details) {
+      // 异步记录但不等待（fire-and-forget）
+      logger.fatal('Flutter框架错误', details.exception, details.stack);
       // 在 Release 模式下也显示错误（避免静默崩溃）
       FlutterError.presentError(details);
     };
@@ -45,7 +42,7 @@ void main() async {
 }
 
 Future<void> _initializeApp() async {
-  // 初始化窗口管理器 - 全屏显示（工控机部署）
+  // 初始化窗口管理器 - 最大化显示（不覆盖任务栏）
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await logger.info('初始化窗口管理器...');
     await windowManager.ensureInitialized();
@@ -58,7 +55,7 @@ Future<void> _initializeApp() async {
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.setResizable(false); // 全屏模式禁止调整大小
+      await windowManager.setResizable(false); // 禁止调整大小
       await windowManager.setFullScreen(true); // 全屏显示
       await windowManager.show();
       await windowManager.focus();
@@ -97,6 +94,11 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  // ===== 状态变量 =====
+  // 1, 资源清理标志 → _cleanupResources() 中防止重复清理
+  bool _isDisposed = false;
+
+  // ===== 生命周期 =====
   @override
   void initState() {
     super.initState();
@@ -107,13 +109,32 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _cleanupResources();
     WidgetsBinding.instance.removeObserver(this);
-    // 🔧 关闭 HTTP Client
-    ApiClient.dispose();
-    logger.close();
     super.dispose();
   }
 
+  // ===== 资源清理 =====
+  /// 统一资源清理方法（dispose 和 detached 都调用）
+  void _cleanupResources() {
+    // 1, 检查是否已清理，防止重复执行
+    if (_isDisposed) return;
+    _isDisposed = true;
+
+    logger.lifecycle('开始清理资源...');
+
+    // 1. 关闭 HTTP Client
+    ApiClient.dispose();
+
+    // 2. 清理 Provider 资源（如果有）
+    // widget.realtimeConfigProvider.dispose(); // 如果 Provider 有 dispose
+
+    // 3. 关闭日志系统（最后执行）
+    logger.lifecycle('资源清理完成');
+    logger.close();
+  }
+
+  // ===== 应用生命周期监听 =====
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -129,7 +150,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         logger.lifecycle('应用进入后台 (paused)');
         break;
       case AppLifecycleState.detached:
+        // 🔧 [CRITICAL] Windows 关闭时 dispose 可能不执行，这里是最后机会
         logger.lifecycle('应用即将退出 (detached)');
+        _cleanupResources();
         break;
       case AppLifecycleState.hidden:
         logger.lifecycle('应用被隐藏 (hidden)');
@@ -137,6 +160,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
+  // ===== UI 构建 =====
   @override
   Widget build(BuildContext context) {
     return MultiProvider(

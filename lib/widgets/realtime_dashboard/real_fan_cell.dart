@@ -244,6 +244,31 @@ class FanCell extends StatelessWidget {
               ],
             ),
           ),
+          // 右上角设备标签
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: TechColors.bgDeep.withOpacity(0.85),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: TechColors.glowCyan.withOpacity(0.5),
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                '风机$index:表${index == 1 ? 64 : 65}',
+                style: const TextStyle(
+                  color: TechColors.glowCyan,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Roboto Mono',
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
