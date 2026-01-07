@@ -27,13 +27,24 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
   bool? _lastPlcHealthy;
   bool? _lastDbHealthy;
 
+  // 🔧 网络异常退避
+  int _consecutiveFailures = 0;
+  static const int _normalIntervalMinutes = 1;
+  static const int _maxIntervalMinutes = 5;
+
   // ===== 生命周期 =====
   @override
   void initState() {
     super.initState();
     _checkHealth();
     // 4, 启动定时健康检查（每分钟一次）
-    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+    _startPolling(_normalIntervalMinutes);
+  }
+
+  /// 🔧 启动轮询（支持动态间隔）
+  void _startPolling(int intervalMinutes) {
+    _timer?.cancel();
+    _timer = Timer.periodic(Duration(minutes: intervalMinutes), (_) {
       if (mounted) _checkHealth();
     });
   }
@@ -75,16 +86,42 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
   Future<void> _checkHealth() async {
     final client = ApiClient();
 
+    bool allHealthy = true;
+
     // 1, 检查系统服务健康状态
-    await _checkSystemHealth(client);
+    if (!await _checkSystemHealth(client)) allHealthy = false;
     // 2, 检查 PLC 连接状态
-    await _checkPlcHealth(client);
+    if (!await _checkPlcHealth(client)) allHealthy = false;
     // 3, 检查数据库连接状态
-    await _checkDbHealth(client);
+    if (!await _checkDbHealth(client)) allHealthy = false;
+
+    // 🔧 根据健康状态调整轮询间隔
+    _adjustPollingInterval(allHealthy);
+  }
+
+  /// 🔧 调整轮询间隔
+  void _adjustPollingInterval(bool allHealthy) {
+    if (!mounted) return;
+
+    if (allHealthy) {
+      if (_consecutiveFailures > 0) {
+        _consecutiveFailures = 0;
+        _startPolling(_normalIntervalMinutes);
+      }
+    } else {
+      final previousFailures = _consecutiveFailures;
+      _consecutiveFailures = (_consecutiveFailures + 1).clamp(0, 3);
+      if (_consecutiveFailures != previousFailures) {
+        final newInterval =
+            (_normalIntervalMinutes * (1 << _consecutiveFailures))
+                .clamp(_normalIntervalMinutes, _maxIntervalMinutes);
+        _startPolling(newInterval);
+      }
+    }
   }
 
   // 1, 系统服务健康检查
-  Future<void> _checkSystemHealth(ApiClient client) async {
+  Future<bool> _checkSystemHealth(ApiClient client) async {
     try {
       await client.get(Api.health);
       _updateHealthStatus(
@@ -94,6 +131,7 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
         updateLast: (v) => _lastSystemHealthy = v,
         updateCurrent: (v) => _isSystemHealthy = v,
       );
+      return true;
     } catch (e) {
       _updateHealthStatus(
         serviceName: '系统服务',
@@ -103,11 +141,12 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
         updateCurrent: (v) => _isSystemHealthy = v,
         errorDetail: e,
       );
+      return false;
     }
   }
 
   // 2, PLC 连接状态检查
-  Future<void> _checkPlcHealth(ApiClient client) async {
+  Future<bool> _checkPlcHealth(ApiClient client) async {
     try {
       final response = await client.get(Api.healthPlc);
       final plcConnected = _parseConnected(response);
@@ -118,6 +157,7 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
         updateLast: (v) => _lastPlcHealthy = v,
         updateCurrent: (v) => _isPlcHealthy = v,
       );
+      return plcConnected;
     } catch (e) {
       _updateHealthStatus(
         serviceName: 'PLC',
@@ -127,11 +167,12 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
         updateCurrent: (v) => _isPlcHealthy = v,
         errorDetail: e,
       );
+      return false;
     }
   }
 
   // 3, 数据库连接状态检查
-  Future<void> _checkDbHealth(ApiClient client) async {
+  Future<bool> _checkDbHealth(ApiClient client) async {
     try {
       final response = await client.get(Api.healthDb);
       final dbConnected = _parseDbStatus(response);
@@ -142,6 +183,7 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
         updateLast: (v) => _lastDbHealthy = v,
         updateCurrent: (v) => _isDbHealthy = v,
       );
+      return dbConnected;
     } catch (e) {
       _updateHealthStatus(
         serviceName: '数据库',
@@ -151,6 +193,7 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
         updateCurrent: (v) => _isDbHealthy = v,
         errorDetail: e,
       );
+      return false;
     }
   }
 

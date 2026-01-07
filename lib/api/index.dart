@@ -20,7 +20,7 @@ class ApiClient {
   // 1, HTTP Client 单例（定期刷新防止僵尸连接）
   static http.Client _httpClient = _createClient();
   static DateTime _lastRefresh = DateTime.now();
-  static const Duration _refreshInterval = Duration(minutes: 30);
+  static const Duration _refreshInterval = Duration(minutes: 10); // 🔧 缩短到10分钟
   static bool _isDisposed = false;
 
   // 2, 超时配置（覆盖连接+响应全过程）
@@ -28,7 +28,7 @@ class ApiClient {
   static const Duration _connectionTimeout = Duration(seconds: 5);
 
   // 3, 连续失败计数（用于日志记录和诊断）
-  int _consecutiveFailures = 0;
+  static int _consecutiveFailures = 0; // 🔧 改为 static，全局共享
 
   /// 🔧 [CRITICAL] 创建带连接超时的 HTTP Client
   /// 解决 Windows 工控机上 TCP 连接卡死的问题
@@ -45,11 +45,20 @@ class ApiClient {
       _httpClient = _createClient();
       _isDisposed = false;
       _lastRefresh = DateTime.now();
+      _consecutiveFailures = 0; // 🔧 重置失败计数
     } else if (DateTime.now().difference(_lastRefresh) > _refreshInterval) {
       logger.info('HTTP Client 定期刷新（防止僵尸连接）');
       _httpClient.close();
       _httpClient = _createClient();
       _lastRefresh = DateTime.now();
+      _consecutiveFailures = 0;
+    } else if (_consecutiveFailures >= 3) {
+      // 🔧 [CRITICAL] 连续失败3次，强制刷新 Client（可能连接已损坏）
+      logger.warning('连续失败 $_consecutiveFailures 次，强制刷新 HTTP Client');
+      _httpClient.close();
+      _httpClient = _createClient();
+      _lastRefresh = DateTime.now();
+      _consecutiveFailures = 0;
     }
     return _httpClient;
   }

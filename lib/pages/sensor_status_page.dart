@@ -25,6 +25,8 @@ class SensorStatusPageState extends State<SensorStatusPage> {
   static const int _columnCount = 3;
   // 7, 轮询间隔 (秒)
   static const int _pollIntervalSeconds = 5;
+  // 🔧 网络异常退避配置
+  static const int _maxBackoffSeconds = 60;
 
   // ============================================================
   // 状态变量
@@ -42,6 +44,13 @@ class SensorStatusPageState extends State<SensorStatusPage> {
   // 5, 错误信息 (用于UI显示网络/API错误)
   String? _errorMessage;
 
+  // 🔧 网络异常退避计数
+  int _consecutiveFailures = 0;
+
+  // 🔧 [CRITICAL] 防止 _isRefreshing 卡死
+  DateTime? _refreshStartTime;
+  static const int _maxRefreshDurationSeconds = 15;
+
   // ============================================================
   // 生命周期
   // ============================================================
@@ -49,8 +58,9 @@ class SensorStatusPageState extends State<SensorStatusPage> {
   @override
   void initState() {
     super.initState();
-    // 2, 启动轮询
-    resumePolling();
+    // 🔧 [CRITICAL] 不在 initState 中启动轮询！
+    // 由 top_bar.dart 的 _onNavItemTap() 控制，避免 Offstage 中的隐藏页面也在轮询
+    // resumePolling(); // 已移除
   }
 
   @override
@@ -79,12 +89,22 @@ class SensorStatusPageState extends State<SensorStatusPage> {
     // 2, 防止重复创建定时器
     if (_timer != null) return;
 
+    // 重置退避计数
+    _consecutiveFailures = 0;
+
     // 立即获取一次数据
     _fetchData();
 
     // 2, 创建轮询定时器 (7, 使用常量间隔)
+    _startPollingWithInterval(_pollIntervalSeconds);
+    logger.info('SensorStatusPage: 轮询已恢复');
+  }
+
+  /// 🔧 启动轮询定时器（支持动态间隔）
+  void _startPollingWithInterval(int intervalSeconds) {
+    _timer?.cancel();
     _timer = Timer.periodic(
-      Duration(seconds: _pollIntervalSeconds),
+      Duration(seconds: intervalSeconds),
       (_) async {
         if (!mounted) return;
         try {
@@ -94,7 +114,26 @@ class SensorStatusPageState extends State<SensorStatusPage> {
         }
       },
     );
-    logger.info('SensorStatusPage: 轮询已恢复');
+  }
+
+  /// 🔧 调整轮询间隔（网络异常时退避）
+  void _adjustPollingInterval(bool wasSuccess) {
+    if (!mounted || _timer == null) return;
+
+    if (wasSuccess) {
+      if (_consecutiveFailures > 0) {
+        _consecutiveFailures = 0;
+        _startPollingWithInterval(_pollIntervalSeconds);
+      }
+    } else {
+      _consecutiveFailures = (_consecutiveFailures + 1).clamp(0, 4);
+      final newInterval = (_pollIntervalSeconds * (1 << _consecutiveFailures))
+          .clamp(_pollIntervalSeconds, _maxBackoffSeconds);
+      if (_consecutiveFailures == 1) {
+        logger.warning('SensorStatusPage: 网络异常，轮询间隔延长至 ${newInterval}s');
+      }
+      _startPollingWithInterval(newInterval);
+    }
   }
 
   // ============================================================
@@ -103,9 +142,26 @@ class SensorStatusPageState extends State<SensorStatusPage> {
 
   /// 获取状态数据
   Future<void> _fetchData() async {
-    // 4, 防抖: 如果正在刷新则跳过
-    if (_isRefreshing || !mounted) return;
+    // 🔧 [CRITICAL] 检测 _isRefreshing 是否卡死
+    if (_isRefreshing) {
+      if (_refreshStartTime != null) {
+        final duration =
+            DateTime.now().difference(_refreshStartTime!).inSeconds;
+        if (duration > _maxRefreshDurationSeconds) {
+          logger
+              .error('SensorStatusPage: _isRefreshing 卡死超过 ${duration}s，强制重置！');
+          _isRefreshing = false;
+          _refreshStartTime = null;
+        } else {
+          return;
+        }
+      } else {
+        _isRefreshing = false;
+      }
+    }
+    if (!mounted) return;
 
+    _refreshStartTime = DateTime.now();
     setState(() {
       _isRefreshing = true;
       // 5, 清除旧错误
@@ -121,9 +177,13 @@ class SensorStatusPageState extends State<SensorStatusPage> {
         if (response.success) {
           // 3, 更新响应数据
           _response = response;
+          // 🔧 成功时重置退避
+          _adjustPollingInterval(true);
         } else {
           // 5, 记录错误信息
           _errorMessage = response.error ?? '获取状态失败';
+          // 🔧 失败时启动退避
+          _adjustPollingInterval(false);
         }
       });
     } catch (e) {
@@ -132,12 +192,17 @@ class SensorStatusPageState extends State<SensorStatusPage> {
         // 5, 记录网络错误
         _errorMessage = '网络错误: $e';
       });
+      // 🔧 网络异常时启动退避
+      _adjustPollingInterval(false);
     } finally {
+      // 🔧 [CRITICAL] 无论成功失败，都必须重置状态
+      _refreshStartTime = null;
       if (mounted) {
         setState(() {
-          // 4, 重置防抖标志
           _isRefreshing = false;
         });
+      } else {
+        _isRefreshing = false;
       }
     }
   }
@@ -170,17 +235,17 @@ class SensorStatusPageState extends State<SensorStatusPage> {
     );
   }
 
-  /// 垂直布局: 回转窑 → 辊道窑 → SCR/风机 (高度按设备数量比例分配)
+  /// 垂直布局: 回转窑 → 辊道窑 → SCR/风机 (固定高度比例 2:1:1)
   Widget _buildVerticalLayout() {
     // 3, 获取各DB的状态列表
     final db3List = _getStatusByDb(3);
     final db7List = _getStatusByDb(7);
     final db11List = _getStatusByDb(11);
 
-    // 计算高度比例 (最小值为1，避免flex=0)
-    final db3Flex = db3List.isEmpty ? 1 : db3List.length;
-    final db7Flex = db7List.isEmpty ? 1 : db7List.length;
-    final db11Flex = db11List.isEmpty ? 1 : db11List.length;
+    // 固定高度比例: 料仓(DB3) 1/2, 辊道窑(DB7) 1/4, SCR/风机(DB11) 1/4
+    const int db3Flex = 2; // 1/2
+    const int db7Flex = 1; // 1/4
+    const int db11Flex = 1; // 1/4
 
     return Padding(
       padding: const EdgeInsets.all(8),

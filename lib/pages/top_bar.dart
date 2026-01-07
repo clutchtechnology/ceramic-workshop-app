@@ -73,6 +73,14 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) _updateTime();
     });
+
+    // 🔧 [CRITICAL] 确保非活跃页面的 Timer 不运行
+    // 延迟执行，等待页面完成构建后再控制 Timer
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // 默认显示实时大屏 (index=0)，确保其他页面的 Timer 已暂停
+      _pausePagePolling(2); // 暂停状态监控页
+      // 只有当前页面 (index=0) 的 Timer 应该运行
+    });
   }
 
   /// 2, 更新时钟显示

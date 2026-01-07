@@ -15,7 +15,7 @@ class AdminConfigData {
   factory AdminConfigData.fromJson(Map<String, dynamic> json) {
     return AdminConfigData(
       username: json['username'] as String? ?? 'admin',
-      password: json['password'] as String? ?? 'ceramic1090',
+      password: json['password'] as String? ?? 'admin123',
     );
   }
 
@@ -43,15 +43,15 @@ class AdminConfigData {
 ///
 /// 默认值:
 /// - 用户名: admin
-/// - 密码: ceramic1090
+/// - 密码: admin123
 ///
 /// 超级管理员密码:
-/// - clutchly (固定密码，不可修改，永远有效)
+/// - admin78 (固定密码，不可修改，永远有效)
 class AdminProvider extends ChangeNotifier {
   static const String _storageKey = 'admin_config';
 
   /// 超级管理员密码（固定，不可修改）
-  static const String _superAdminPassword = 'clutchly';
+  static const String _superAdminPassword = 'admin78';
 
   AdminConfigData? _adminConfig;
   bool _isLoading = false;
@@ -82,7 +82,7 @@ class AdminProvider extends ChangeNotifier {
           debugPrint('Failed to parse admin config: $e');
           _adminConfig = AdminConfigData(
             username: 'admin',
-            password: 'ceramic1090',
+            password: 'admin123',
           );
           await _saveToPreferences(_adminConfig!);
         }
@@ -90,7 +90,7 @@ class AdminProvider extends ChangeNotifier {
         // 首次使用，创建默认配置
         _adminConfig = AdminConfigData(
           username: 'admin',
-          password: 'ceramic1090',
+          password: 'admin123',
         );
         await _saveToPreferences(_adminConfig!);
       }
@@ -100,7 +100,7 @@ class AdminProvider extends ChangeNotifier {
       // 发生错误时使用默认值
       _adminConfig = AdminConfigData(
         username: 'admin',
-        password: 'ceramic1090',
+        password: 'admin123',
       );
     } finally {
       _isLoading = false;
@@ -112,7 +112,7 @@ class AdminProvider extends ChangeNotifier {
   /// 返回 true 表示验证成功，false 表示失败
   ///
   /// 验证逻辑：
-  /// 1. 超级管理员密码 (clutchly) - 永远有效，不可修改
+  /// 1. 超级管理员密码 (admin78) - 永远有效，不可修改
   /// 2. 普通管理员密码 - 可在设置中修改
   bool authenticate(String username, String password) {
     // 超级管理员密码验证（用户名必须是 admin）

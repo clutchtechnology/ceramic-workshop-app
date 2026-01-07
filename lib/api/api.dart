@@ -42,7 +42,7 @@ class Api {
   static const String configPlcTest = '/api/config/plc/test';
 
   // 传感器状态位 (后端解析)
-  static const String statusAll = '/api/status';          // 按DB分组
-  static const String statusFlat = '/api/status/flat';    // 扁平列表
+  static const String statusAll = '/api/status'; // 按DB分组
+  static const String statusFlat = '/api/status/flat'; // 扁平列表
   static String statusDb(int dbNumber) => '/api/status/db/$dbNumber'; // 单个DB
 }

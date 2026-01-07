@@ -59,6 +59,15 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   DateTime? _lastUIRefreshTime;
   int _consecutiveSkips = 0;
 
+  // 🔧 [CRITICAL] 防止 _isRefreshing 卡死的保护机制
+  DateTime? _refreshStartTime; // 记录请求开始时间
+  static const int _maxRefreshDurationSeconds = 20; // 最大允许刷新时长
+
+  // 🔧 [CRITICAL] 网络异常时的退避策略
+  int _consecutiveFailures = 0; // 连续失败次数
+  static const int _maxBackoffSeconds = 60; // 最大退避间隔
+  static const int _normalIntervalSeconds = 5; // 正常轮询间隔
+
   // 6, UI索引到设备ID的映射 (硬件布局决定)
   // 短窑: 7,6,5,4, 无料仓: 2,1, 长窑: 8,3,9
   final Map<int, String> _deviceMapping = {
@@ -101,9 +110,19 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   }
 
   /// 🔧 [核心] 启动轮询定时器（提取公共逻辑，消除重复）
+  /// 支持动态间隔：网络异常时自动延长轮询间隔，恢复后自动缩短
   void _startPolling() {
     _timer?.cancel(); // 防止重复创建
-    _timer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+
+    // 🔧 计算当前轮询间隔（指数退避）
+    int intervalSeconds = _normalIntervalSeconds;
+    if (_consecutiveFailures > 0) {
+      // 每失败一次，间隔翻倍，最大60秒
+      intervalSeconds = (_normalIntervalSeconds * (1 << _consecutiveFailures))
+          .clamp(_normalIntervalSeconds, _maxBackoffSeconds);
+    }
+
+    _timer = Timer.periodic(Duration(seconds: intervalSeconds), (timer) async {
       // 🔧 [CRITICAL] 必须检查 mounted，防止 Widget 销毁后继续执行
       if (!mounted) {
         timer.cancel();
@@ -126,6 +145,36 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
         // 异常不会导致定时器停止
       }
     });
+  }
+
+  /// 🔧 重启轮询（用于失败后调整间隔）
+  void _restartPollingIfNeeded(bool wasSuccess) {
+    if (!mounted) return;
+
+    final previousFailures = _consecutiveFailures;
+
+    if (wasSuccess) {
+      // 成功时，如果之前有失败记录，需要恢复正常间隔
+      if (_consecutiveFailures > 0) {
+        _consecutiveFailures = 0;
+        logger.info('网络恢复，轮询间隔恢复为 ${_normalIntervalSeconds}s');
+        _startPolling(); // 重启以应用新间隔
+      }
+    } else {
+      // 失败时，增加失败计数，但不超过4次（最大退避60秒）
+      _consecutiveFailures = (_consecutiveFailures + 1).clamp(0, 4);
+
+      // 只有失败次数变化时才重启定时器
+      if (_consecutiveFailures != previousFailures &&
+          _consecutiveFailures > 0) {
+        final newInterval =
+            (_normalIntervalSeconds * (1 << _consecutiveFailures))
+                .clamp(_normalIntervalSeconds, _maxBackoffSeconds);
+        logger.warning(
+            '网络异常，轮询间隔延长至 ${newInterval}s (连续失败 $_consecutiveFailures 次)');
+        _startPolling(); // 重启以应用新间隔
+      }
+    }
   }
 
   @override
@@ -172,14 +221,33 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   }
 
   Future<void> _fetchData() async {
-    // 4, 检测是否正在刷新，防止重复请求
+    // 🔧 [CRITICAL] 检测 _isRefreshing 是否卡死
     if (_isRefreshing) {
       _consecutiveSkips++;
-      // 5, 连续跳过10次则记录警告，用于诊断卡死问题
-      if (_consecutiveSkips >= 10) {
-        logger.warning('UI刷新被跳过 $_consecutiveSkips 次（_isRefreshing持续为true）');
+
+      // 检查是否超过最大允许刷新时长
+      if (_refreshStartTime != null) {
+        final duration =
+            DateTime.now().difference(_refreshStartTime!).inSeconds;
+        if (duration > _maxRefreshDurationSeconds) {
+          // 🔧 强制重置 _isRefreshing，防止永久卡死
+          logger.error('⚠️ _isRefreshing 卡死超过 ${duration}s，强制重置！');
+          _isRefreshing = false;
+          _refreshStartTime = null;
+          // 不 return，继续执行本次请求
+        } else {
+          // 5, 连续跳过10次则记录警告
+          if (_consecutiveSkips >= 10) {
+            logger.warning(
+                'UI刷新被跳过 $_consecutiveSkips 次（_isRefreshing持续为true, 已等待${duration}s）');
+          }
+          return;
+        }
+      } else {
+        // _refreshStartTime 为空但 _isRefreshing 为 true，异常状态，强制重置
+        logger.warning('异常状态：_isRefreshing=true 但 _refreshStartTime=null，强制重置');
+        _isRefreshing = false;
       }
-      return;
     }
     if (!mounted) {
       logger.warning('组件未挂载，跳过刷新');
@@ -187,6 +255,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     }
 
     _consecutiveSkips = 0; // 5, 重置跳过计数
+    _refreshStartTime = DateTime.now(); // 🔧 记录请求开始时间
 
     setState(() {
       _isRefreshing = true; // 4, 标记开始刷新
@@ -211,9 +280,22 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
       final rollerData = results[1] as RollerKilnData?;
       final scrFanData = results[2] as ScrFanBatchData?;
 
+      // 🔧 [CRITICAL] 数据有效性检查 - 防止空数据覆盖正常数据
+      final hasValidHopperData = hopperData.isNotEmpty;
+      final hasValidRollerData = rollerData != null;
+      final hasValidScrFanData = scrFanData != null;
+
+      // 如果所有数据都为空，则视为失败（保持原有数据）
+      if (!hasValidHopperData && !hasValidRollerData && !hasValidScrFanData) {
+        throw Exception('API 返回空数据，可能后端正在处理中');
+      }
+
       // 5, 更新请求统计
       _successCount++;
       _lastSuccessTime = DateTime.now();
+
+      // 🔧 网络恢复，重置退避
+      _restartPollingIfNeeded(true);
 
       // 5, 每500次成功记录一次日志（约42分钟），减少日志噪音
       if (_successCount % 500 == 0) {
@@ -223,23 +305,33 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
 
       if (mounted) {
         setState(() {
-          _hopperData = hopperData; // 1, 更新料仓数据
-          _rollerKilnData = rollerData; // 2, 更新辊道窑数据
-          _scrFanData = scrFanData; // 3, 更新SCR+风机数据
+          // 🔧 [CRITICAL] 只有当新数据非空时才更新（防止空数据覆盖导致显示为0）
+          if (hasValidHopperData) {
+            _hopperData = hopperData; // 1, 更新料仓数据
+          }
+          if (hasValidRollerData) {
+            _rollerKilnData = rollerData; // 2, 更新辊道窑数据
+          }
+          if (hasValidScrFanData) {
+            _scrFanData = scrFanData; // 3, 更新SCR+风机数据
+          }
         });
         _lastUIRefreshTime = DateTime.now(); // 5, 记录UI刷新时间
 
-        // 异步保存到本地缓存（不阻塞UI）
+        // 异步保存到本地缓存（只保存非空数据）
         _cacheService.saveCache(
-          hopperData: hopperData,
-          rollerKilnData: rollerData,
-          scrFanData: scrFanData,
+          hopperData: hasValidHopperData ? hopperData : _hopperData,
+          rollerKilnData: hasValidRollerData ? rollerData : _rollerKilnData,
+          scrFanData: hasValidScrFanData ? scrFanData : _scrFanData,
         );
       } else {
         logger.warning('数据获取成功但组件已卸载，无法刷新UI');
       }
     } catch (e, stack) {
       _failCount++; // 5, 记录失败次数
+
+      // 🔧 网络异常，启动退避策略
+      _restartPollingIfNeeded(false);
 
       // 请求失败时保持上一次成功的数据，不清空也不更新
       // 这样即使后端服务未启动或网络异常，UI也能显示最后一次成功获取的数据
@@ -253,10 +345,15 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
             stack);
       }
     } finally {
+      // 🔧 [CRITICAL] 无论成功失败，都必须重置状态
+      _refreshStartTime = null;
       if (mounted) {
         setState(() {
           _isRefreshing = false; // 4, 标记刷新结束
         });
+      } else {
+        // 即使 unmounted，也要重置标志（虽然此时已无意义）
+        _isRefreshing = false;
       }
     }
   }

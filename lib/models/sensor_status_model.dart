@@ -97,7 +97,8 @@ class AllStatusResponse {
       (json['data'] as Map).forEach((key, value) {
         if (value is List) {
           dataMap![key] = value
-              .map((item) => ModuleStatus.fromJson(item as Map<String, dynamic>))
+              .map(
+                  (item) => ModuleStatus.fromJson(item as Map<String, dynamic>))
               .toList();
         }
       });

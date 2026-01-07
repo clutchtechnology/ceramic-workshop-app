@@ -178,7 +178,7 @@ class RotaryKilnLongCell extends StatelessWidget {
                 child: Align(
                   alignment: const Alignment(0.4, -1.1),
                   child: Transform.translate(
-                    offset: const Offset(-72, 40), // 相对电表标签左移90px
+                    offset: const Offset(-92, 40), // 相对电表标签左移（原-72，再左移20px）
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 4,
