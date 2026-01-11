@@ -259,7 +259,7 @@ class FanCell extends StatelessWidget {
                 ),
               ),
               child: Text(
-                '风机$index:表${index == 1 ? 64 : 65}',
+                '风机$index:表${index == 1 ? 65 : 66}',
                 style: const TextStyle(
                   color: TechColors.glowCyan,
                   fontSize: 14,

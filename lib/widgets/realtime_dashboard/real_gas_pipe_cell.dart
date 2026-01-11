@@ -11,10 +11,10 @@ class GasPipeCell extends StatelessWidget {
   /// 运行状态 (true=运行, false=停止)
   final bool isRunning;
 
-  /// 流速 (m³/h)
+  /// 流速 (L/min)
   final double flowRate;
 
-  /// 能耗 (kW)
+  /// 累计流量 (m³)
   final double energyConsumption;
 
   const GasPipeCell({
@@ -83,7 +83,7 @@ class GasPipeCell extends StatelessWidget {
                       const SizedBox(width: 2),
                       Flexible(
                         child: Text(
-                          '${flowRate.toStringAsFixed(1)}m³/h',
+                          '${flowRate.toStringAsFixed(1)}L/min',
                           style: const TextStyle(
                             color: TechColors.glowCyan,
                             fontSize: 16,

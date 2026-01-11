@@ -228,12 +228,12 @@ class RealtimeConfigProvider extends ChangeNotifier {
     ThresholdConfig(
         key: 'fan_1_power',
         displayName: '1号风机功率',
-        normalMax: 80.0,
+        normalMax: 0.3,
         warningMax: 120.0),
     ThresholdConfig(
         key: 'fan_2_power',
         displayName: '2号风机功率',
-        normalMax: 80.0,
+        normalMax: 0.3,
         warningMax: 120.0),
   ];
 
@@ -245,13 +245,13 @@ class RealtimeConfigProvider extends ChangeNotifier {
     ThresholdConfig(
         key: 'scr_1_meter',
         displayName: '1号SCR氨水泵功率',
-        normalMax: 30.0,
-        warningMax: 50.0),
+        normalMax: 0.1,
+        warningMax: 100.0),
     ThresholdConfig(
         key: 'scr_2_meter',
         displayName: '2号SCR氨水泵功率',
-        normalMax: 30.0,
-        warningMax: 50.0),
+        normalMax: 0.1,
+        warningMax: 100.0),
   ];
 
   // ============================================================
@@ -576,13 +576,13 @@ class RealtimeConfigProvider extends ChangeNotifier {
     }
     // 重置风机
     for (var config in fanConfigs) {
-      config.normalMax = 80.0;
+      config.normalMax = 0.3;
       config.warningMax = 120.0;
     }
     // 重置SCR氨水泵
     for (var config in scrPumpConfigs) {
-      config.normalMax = 30.0;
-      config.warningMax = 50.0;
+      config.normalMax = 0.1;
+      config.warningMax = 100.0;
     }
     // 重置SCR燃气表
     for (var config in scrGasConfigs) {

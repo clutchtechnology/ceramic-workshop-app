@@ -72,11 +72,11 @@ class HistoryDataService {
   // ============================================================
 
   /// 目标数据点数（保持图表显示效果一致）
-  static const int _targetPoints = 120;
+  static const int _targetPoints = 80;
 
   /// 可接受的数据点范围
-  static const int _minPoints = 60;
-  static const int _maxPoints = 200;
+  static const int _minPoints = 40;
+  static const int _maxPoints = 150;
 
   /// 有效的聚合间隔选项（秒）
   /// InfluxDB 支持的常用间隔值
@@ -313,6 +313,21 @@ class HistoryDataService {
       end: end,
       moduleType: 'ElectricityMeter',
       fields: ['Pt'],
+    );
+  }
+
+  /// 🔧 查询料仓能耗历史 (ImpEp - 累积电能)
+  Future<HistoryDataResult> queryHopperEnergyHistory({
+    required String deviceId,
+    required DateTime start,
+    required DateTime end,
+  }) {
+    return queryHopperHistory(
+      deviceId: deviceId,
+      start: start,
+      end: end,
+      moduleType: 'ElectricityMeter',
+      fields: ['ImpEp'],
     );
   }
 

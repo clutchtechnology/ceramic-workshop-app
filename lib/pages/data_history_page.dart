@@ -45,8 +45,8 @@ class HistoryDataPageState extends State<HistoryDataPage>
   // 3, 批量写入延迟：最近180秒的数据可能还未写入
   static const Duration _batchWriteDelay = Duration(seconds: 180);
 
-  // 4, 查询时间窗口：查询50秒的历史数据
-  static const Duration _queryWindow = Duration(seconds: 50);
+  // 4, 查询时间窗口：查询24小时的历史数据
+  static const Duration _queryWindow = Duration(hours: 24);
 
   // ==================== 刷新防抖机制 ====================
   // 5, 上次刷新历史数据的时间戳 (用于防抖)
@@ -95,7 +95,10 @@ class HistoryDataPageState extends State<HistoryDataPage>
   // 17, 回转窑料仓重量数据
   final Map<int, List<FlSpot>> _hopperWeightData = {};
 
-  // 18, 辊道窑温度数据 (key: 温区索引 0-5)
+  // 18, 回转窑能耗数据
+  final Map<int, List<FlSpot>> _hopperEnergyData = {};
+
+  // 19, 辊道窑温度数据 (key: 温区索引 0-5)
   final Map<int, List<FlSpot>> _rollerTemperatureData = {};
 
   // 19, 辊道窑能耗数据
@@ -184,11 +187,11 @@ class HistoryDataPageState extends State<HistoryDataPage>
   /// 初始化所有图表的时间范围
   ///
   /// 优先从数据库获取最新数据时间戳作为结束时间，
-  /// 开始时间 = 结束时间 - 查询窗口（50秒）
+  /// 开始时间 = 结束时间 - 查询窗口（24小时）
   ///
   /// 如果无法获取数据库时间戳，则回退到旧逻辑：
-  /// - 结束时间：150秒前（跳过未写入的数据）
-  /// - 开始时间：200秒前（查询50秒的时间窗口）
+  /// - 结束时间：180秒前（跳过未写入的数据）
+  /// - 开始时间：24小时前（查询24小时的时间窗口）
   Future<void> _initializeTimeRanges() async {
     DateTime end;
     DateTime start;
@@ -199,14 +202,14 @@ class HistoryDataPageState extends State<HistoryDataPage>
     if (latestTimestamp != null) {
       // 使用数据库最新时间戳作为结束时间
       end = latestTimestamp;
-      start = end.subtract(_queryWindow); // 往前50秒
+      start = end.subtract(_queryWindow); // 往前24小时
       debugPrint(
           '📊 使用数据库最新时间戳: ${end.toString()}, 查询范围: ${start.toString()} ~ ${end.toString()}');
     } else {
-      // 回退到旧逻辑：200秒前 到 150秒前
+      // 回退到旧逻辑：24小时前 到 180秒前
       final now = DateTime.now();
-      end = now.subtract(_batchWriteDelay); // 150秒前
-      start = end.subtract(_queryWindow); // 200秒前
+      end = now.subtract(_batchWriteDelay); // 180秒前
+      start = end.subtract(_queryWindow); // 24小时前
       debugPrint(
           '📊 无法获取数据库时间戳，使用回退逻辑: ${start.toString()} ~ ${end.toString()} (跳过最近150秒)');
     }
@@ -241,6 +244,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
       await Future.wait([
         _loadHopperTemperatureData(),
         _loadHopperWeightData(),
+        _loadHopperEnergyData(), // 🔧 新增：加载回转窑能耗数据
         _loadRollerData(),
         _loadScrFanData(),
       ]).timeout(const Duration(seconds: 30));
@@ -294,6 +298,26 @@ class HistoryDataPageState extends State<HistoryDataPage>
       });
     } else {
       debugPrint('❌ 加载称重数据失败: ${result.error}');
+    }
+  }
+
+  /// 加载回转窑能耗历史数据
+  Future<void> _loadHopperEnergyData() async {
+    final deviceId =
+        HistoryDataService.hopperDeviceIds[_selectedHopperIndex + 1]!;
+
+    final result = await _historyService.queryHopperEnergyHistory(
+      deviceId: deviceId,
+      start: _hopperChartStartTime,
+      end: _hopperChartEndTime,
+    );
+
+    if (!mounted) return;
+    if (result.success && result.hasData) {
+      final spots = _convertToFlSpots(result.dataPoints!, 'ImpEp');
+      setState(() => _hopperEnergyData[_selectedHopperIndex] = spots);
+    } else {
+      debugPrint('❌ 加载能耗数据失败: ${result.error}');
     }
   }
 
@@ -532,6 +556,12 @@ class HistoryDataPageState extends State<HistoryDataPage>
                     child: _buildTemperatureChart(),
                   ),
                   const SizedBox(height: 8),
+                  // 🔧 能耗曲线（新增）
+                  Expanded(
+                    flex: 3,
+                    child: _buildHopperEnergyChart(),
+                  ),
+                  const SizedBox(height: 8),
                   // 下料速度曲线（无选择器）
                   Expanded(
                     flex: 3,
@@ -675,6 +705,26 @@ class HistoryDataPageState extends State<HistoryDataPage>
       xAxisLabel: '数据点',
       xInterval: 5,
       dataMap: _hopperWeightData,
+      isSingleSelect: true,
+      selectedIndex: _selectedHopperIndex,
+      itemColors: _hopperColors,
+      itemCount: 9,
+      getItemLabel: _getHopperLabel,
+      selectorLabel: '选择回转窑',
+      showSelector: false, // 不显示选择器
+      onItemSelect: (index) {},
+    );
+  }
+
+  /// 🔧 料仓能耗曲线图（不显示选择器，与温度图共用选择器）
+  Widget _buildHopperEnergyChart() {
+    return TechLineChart(
+      title: '能耗历史 (kWh)',
+      accentColor: TechColors.glowOrange,
+      yAxisLabel: '能耗(kWh)',
+      xAxisLabel: '数据点',
+      xInterval: 5,
+      dataMap: _hopperEnergyData,
       isSingleSelect: true,
       selectedIndex: _selectedHopperIndex,
       itemColors: _hopperColors,
@@ -1026,9 +1076,10 @@ class HistoryDataPageState extends State<HistoryDataPage>
   void _refreshChartData(String chartType) {
     // 根据图表类型刷新对应数据
     if (chartType == 'hopper') {
-      // 回转窑：同时刷新温度和称重数据
+      // 回转窑：同时刷新温度、称重和能耗数据
       _loadHopperTemperatureData();
       _loadHopperWeightData();
+      _loadHopperEnergyData(); // 🔧 新增能耗数据加载
     } else if (chartType == 'roller') {
       // 辊道窑：刷新所有温区数据
       _loadRollerData();

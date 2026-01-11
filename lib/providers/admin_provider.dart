@@ -15,7 +15,7 @@ class AdminConfigData {
   factory AdminConfigData.fromJson(Map<String, dynamic> json) {
     return AdminConfigData(
       username: json['username'] as String? ?? 'admin',
-      password: json['password'] as String? ?? 'admin123',
+      password: json['password'] as String? ?? 'Imerys666',
     );
   }
 
@@ -51,7 +51,7 @@ class AdminProvider extends ChangeNotifier {
   static const String _storageKey = 'admin_config';
 
   /// 超级管理员密码（固定，不可修改）
-  static const String _superAdminPassword = 'admin78';
+  static const String _superAdminPassword = 'Imerys666';
 
   AdminConfigData? _adminConfig;
   bool _isLoading = false;
@@ -82,7 +82,7 @@ class AdminProvider extends ChangeNotifier {
           debugPrint('Failed to parse admin config: $e');
           _adminConfig = AdminConfigData(
             username: 'admin',
-            password: 'admin123',
+            password: 'Imerys666',
           );
           await _saveToPreferences(_adminConfig!);
         }
@@ -90,7 +90,7 @@ class AdminProvider extends ChangeNotifier {
         // 首次使用，创建默认配置
         _adminConfig = AdminConfigData(
           username: 'admin',
-          password: 'admin123',
+          password: 'Imerys666',
         );
         await _saveToPreferences(_adminConfig!);
       }
