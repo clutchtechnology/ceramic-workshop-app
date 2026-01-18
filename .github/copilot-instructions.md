@@ -660,3 +660,4 @@ Timer.periodic(Duration(seconds: 30), (_) {
 | **App 卡死 (Freeze)** | **检查 12.1-12.4 的所有检查清单项**                   |
 | **内存持续增长**      | **检查 Timer 累积、HTTP Client 泄漏、IndexedStack**   |
 | **UI 无响应**         | **检查 HTTP 超时设置、异步操作阻塞主线程**            |
+中文回答我的需求.

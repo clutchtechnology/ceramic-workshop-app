@@ -98,16 +98,18 @@ class FanCell extends StatelessWidget {
                                 const PowerIcon(
                                     size: 18, color: TechColors.glowCyan),
                                 const SizedBox(width: 2),
-                                Text(
-                                  '${power.toStringAsFixed(1)}kW',
-                                  style: const TextStyle(
-                                    color: TechColors.glowCyan,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                    fontFamily: 'Roboto Mono',
+                                Flexible(
+                                  child: Text(
+                                    '${power.toStringAsFixed(1)}kW',
+                                    style: const TextStyle(
+                                      color: TechColors.glowCyan,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                      fontFamily: 'Roboto Mono',
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    softWrap: false,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
-                                  softWrap: false,
                                 ),
                               ],
                             ),
@@ -118,16 +120,18 @@ class FanCell extends StatelessWidget {
                                 const EnergyIcon(
                                     size: 18, color: TechColors.glowOrange),
                                 const SizedBox(width: 2),
-                                Text(
-                                  '${cumulativeEnergy.toStringAsFixed(1)}kWh',
-                                  style: const TextStyle(
-                                    color: TechColors.glowOrange,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                    fontFamily: 'Roboto Mono',
+                                Flexible(
+                                  child: Text(
+                                    '${cumulativeEnergy.toStringAsFixed(1)}kWh',
+                                    style: const TextStyle(
+                                      color: TechColors.glowOrange,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                      fontFamily: 'Roboto Mono',
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    softWrap: false,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
-                                  softWrap: false,
                                 ),
                               ],
                             ),
@@ -145,16 +149,18 @@ class FanCell extends StatelessWidget {
                               children: [
                                 CurrentIcon(
                                     color: TechColors.glowCyan, size: 18),
-                                Text(
-                                  'A:${currentA.toStringAsFixed(1)}A',
-                                  style: const TextStyle(
-                                    color: TechColors.glowCyan,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                    fontFamily: 'Roboto Mono',
+                                Flexible(
+                                  child: Text(
+                                    'A:${currentA.toStringAsFixed(1)}A',
+                                    style: const TextStyle(
+                                      color: TechColors.glowCyan,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                      fontFamily: 'Roboto Mono',
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    softWrap: false,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
-                                  softWrap: false,
                                 ),
                               ],
                             ),
@@ -163,16 +169,18 @@ class FanCell extends StatelessWidget {
                               children: [
                                 CurrentIcon(
                                     color: TechColors.glowCyan, size: 18),
-                                Text(
-                                  'B:${currentB.toStringAsFixed(1)}A',
-                                  style: const TextStyle(
-                                    color: TechColors.glowCyan,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                    fontFamily: 'Roboto Mono',
+                                Flexible(
+                                  child: Text(
+                                    'B:${currentB.toStringAsFixed(1)}A',
+                                    style: const TextStyle(
+                                      color: TechColors.glowCyan,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                      fontFamily: 'Roboto Mono',
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    softWrap: false,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
-                                  softWrap: false,
                                 ),
                               ],
                             ),
@@ -181,16 +189,18 @@ class FanCell extends StatelessWidget {
                               children: [
                                 CurrentIcon(
                                     color: TechColors.glowCyan, size: 18),
-                                Text(
-                                  'C:${currentC.toStringAsFixed(1)}A',
-                                  style: const TextStyle(
-                                    color: TechColors.glowCyan,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                    fontFamily: 'Roboto Mono',
+                                Flexible(
+                                  child: Text(
+                                    'C:${currentC.toStringAsFixed(1)}A',
+                                    style: const TextStyle(
+                                      color: TechColors.glowCyan,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                      fontFamily: 'Roboto Mono',
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    softWrap: false,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
-                                  softWrap: false,
                                 ),
                               ],
                             ),

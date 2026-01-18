@@ -43,7 +43,7 @@ class _RealtimeDataSettingsWidgetState
   /// 初始化所有输入框控制器
   void _initControllers() {
     if (!mounted) return;
-    
+
     // 安全获取 Provider，避免在 Widget 树未稳定时访问
     final RealtimeConfigProvider provider;
     try {
@@ -58,6 +58,7 @@ class _RealtimeDataSettingsWidgetState
 
     // 2, 初始化阈值配置控制器 (回转窑/辊道窑/风机/SCR泵/SCR燃气)
     _initThresholdControllers(provider.rotaryKilnConfigs);
+    _initThresholdControllers(provider.rotaryKilnPowerConfigs); // 新增
     _initThresholdControllers(provider.rollerKilnConfigs);
     _initThresholdControllers(provider.fanConfigs);
     _initThresholdControllers(provider.scrPumpConfigs);
@@ -88,6 +89,7 @@ class _RealtimeDataSettingsWidgetState
 
     // 2, 更新阈值配置控制器
     _updateThresholdControllers(provider.rotaryKilnConfigs);
+    _updateThresholdControllers(provider.rotaryKilnPowerConfigs); // 新增
     _updateThresholdControllers(provider.rollerKilnConfigs);
     _updateThresholdControllers(provider.fanConfigs);
     _updateThresholdControllers(provider.scrPumpConfigs);
@@ -134,7 +136,7 @@ class _RealtimeDataSettingsWidgetState
         ),
       );
     }
-    
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -161,9 +163,26 @@ class _RealtimeDataSettingsWidgetState
 
           const SizedBox(height: 12),
 
-          // 辊道窑温度配置
+          // 回转窑功率配置 (新增)
           _buildConfigSection(
             index: 1,
+            title: '回转窑功率阈值配置',
+            subtitle: '9个回转窑设备 (判断运行状态)',
+            icon: Icons.flash_on,
+            accentColor: TechColors.glowPurple,
+            unit: 'kW',
+            configs: provider.rotaryKilnPowerConfigs,
+            onUpdate: (index, normalMax, warningMax) {
+              provider.updateRotaryKilnPowerConfig(index,
+                  normalMax: normalMax, warningMax: warningMax);
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          // 辊道窑温度配置
+          _buildConfigSection(
+            index: 2,
             title: '辊道窑温度阈值配置',
             subtitle: '6个温区',
             icon: Icons.local_fire_department,
@@ -180,7 +199,7 @@ class _RealtimeDataSettingsWidgetState
 
           // 风机功率配置
           _buildConfigSection(
-            index: 2,
+            index: 3,
             title: '风机功率阈值配置',
             subtitle: '2个风机',
             icon: Icons.air,
@@ -197,7 +216,7 @@ class _RealtimeDataSettingsWidgetState
 
           // SCR氨水泵功率配置
           _buildConfigSection(
-            index: 3,
+            index: 4,
             title: 'SCR氨水泵功率阈值配置',
             subtitle: '2个氨水泵',
             icon: Icons.water_drop,
@@ -214,7 +233,7 @@ class _RealtimeDataSettingsWidgetState
 
           // SCR燃气表流量配置
           _buildConfigSection(
-            index: 4,
+            index: 5,
             title: 'SCR燃气表流量阈值配置',
             subtitle: '2个燃气表',
             icon: Icons.gas_meter,
@@ -231,7 +250,7 @@ class _RealtimeDataSettingsWidgetState
 
           // 料仓容量配置
           _buildHopperCapacitySection(
-            index: 5,
+            index: 6,
             title: '料仓容量配置',
             subtitle: '7个带料仓的回转窑',
             icon: Icons.inventory_2,

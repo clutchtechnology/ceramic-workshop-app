@@ -591,6 +591,13 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
         ) ??
         0.0;
 
+    // 2, 计算辊道窑6个温区的总功率 (kW)
+    final totalPower = _rollerKilnData?.zones.fold<double>(
+          0.0,
+          (sum, zone) => sum + zone.power,
+        ) ??
+        0.0;
+
     // 2, 计算辊道窑6个温区的三相总电流 (A)
     final totalCurrentA = _rollerKilnData?.zones.fold<double>(
           0.0,
@@ -671,6 +678,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                               zone.zoneName,
                               '${zone.temperature.toStringAsFixed(0)}°C',
                               '${zone.energy.toStringAsFixed(0)}kWh',
+                              powerValue: zone.power, // 传入功率数值
                               zoneIndex: index + 1, // 温区索引 1-6
                               temperatureValue: zone.temperature,
                               currentA: zone.currentA,
@@ -692,6 +700,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                               '区域 ${index + 1}',
                               '0°C',
                               '0kWh',
+                              powerValue: 0.0,
                               zoneIndex: index + 1,
                               temperatureValue: 0.0,
                               currentA: 0.0,
@@ -722,7 +731,28 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 第一行：总能耗
+                    // 第一行：总分区 (已移除)
+                    // 第二行：总功率
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const PowerIcon(size: 18, color: TechColors.glowCyan),
+                        const SizedBox(width: 2),
+                        Text(
+                          _rollerKilnData != null
+                              ? '${totalPower.toStringAsFixed(1)}kW'
+                              : '0.0kW',
+                          style: const TextStyle(
+                            color: TechColors.glowCyan,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: 'Roboto Mono',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    // 第三行：总能耗
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -806,12 +836,15 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   /// [zoneIndex] 温区索引 (1-6)
   /// [temperatureValue] 温度数值，用于计算颜色
   /// [currentA], [currentB], [currentC] 三相电流值
-  Widget _buildRollerKilnDataCard(String zone, String temperature, String power,
+  /// [powerValue] 功率数值 (kW)
+  Widget _buildRollerKilnDataCard(
+      String zone, String temperature, String energyString,
       {int? zoneIndex,
       double? temperatureValue,
       double? currentA,
       double? currentB,
-      double? currentC}) {
+      double? currentC,
+      double? powerValue}) {
     // 获取温度颜色配置
     final configProvider = context.read<RealtimeConfigProvider>();
     final tempColor = (zoneIndex != null && temperatureValue != null)
@@ -819,8 +852,11 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
             zoneIndex, temperatureValue)
         : TechColors.glowRed;
 
+    // 格式化功率
+    final powerString =
+        powerValue != null ? '${powerValue.toStringAsFixed(1)}kW' : '0.0kW';
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       decoration: BoxDecoration(
         color: TechColors.bgDeep.withOpacity(0.85),
         borderRadius: BorderRadius.circular(4),
@@ -829,145 +865,197 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
           width: 1,
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 左侧列: 温区名称 + 温度 + 能耗
-          Flexible(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+          // 顶部标签 (衍生出的 Height)
+          Container(
+            height: 22,
+            alignment: Alignment.centerLeft, // 左对齐
+            padding: const EdgeInsets.only(left: 4), // 加一点左边距，防止紧贴边缘
+            color: TechColors.bgDeep.withOpacity(0.95),
+            child: Text(
+              zone,
+              style: const TextStyle(
+                color: TechColors.glowGreen,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Roboto Mono',
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          // 主数据盒子
+          Container(
+            padding: const EdgeInsets.fromLTRB(4, 2, 4, 2),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 2),
-                  child: Text(
-                    zone,
-                    style: const TextStyle(
-                      color: TechColors.glowGreen,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'Roboto Mono',
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    softWrap: false,
+                // 左侧列: 温度 + 功率 + 能耗
+                Flexible(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      // 温度
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ThermometerIcon(color: tempColor, size: 16),
+                          const SizedBox(width: 2),
+                          Flexible(
+                            child: Text(
+                              temperature,
+                              style: TextStyle(
+                                color: tempColor,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              softWrap: false,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      // 功率
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const PowerIcon(size: 16, color: TechColors.glowCyan),
+                          const SizedBox(width: 2),
+                          Flexible(
+                            child: Text(
+                              powerString,
+                              style: const TextStyle(
+                                color: TechColors.glowCyan,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              softWrap: false,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      // 能耗
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          EnergyIcon(color: TechColors.glowOrange, size: 16),
+                          const SizedBox(width: 2),
+                          Flexible(
+                            child: Text(
+                              energyString,
+                              style: const TextStyle(
+                                color: TechColors.glowOrange,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              softWrap: false,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 2),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ThermometerIcon(color: tempColor, size: 18),
-                    const SizedBox(width: 2),
-                    Text(
-                      temperature,
-                      style: TextStyle(
-                        color: tempColor,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        fontFamily: 'Roboto Mono',
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      softWrap: false,
+                // 右侧列: 三相电流
+                if (currentA != null && currentB != null && currentC != null)
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CurrentIcon(color: TechColors.glowCyan, size: 16),
+                            Flexible(
+                              child: Text(
+                                'A:${currentA.toStringAsFixed(1)}',
+                                style: const TextStyle(
+                                  color: TechColors.glowCyan,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Roboto Mono',
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                softWrap: false,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CurrentIcon(color: TechColors.glowCyan, size: 16),
+                            Flexible(
+                              child: Text(
+                                'B:${currentB.toStringAsFixed(1)}',
+                                style: const TextStyle(
+                                  color: TechColors.glowCyan,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Roboto Mono',
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                softWrap: false,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CurrentIcon(color: TechColors.glowCyan, size: 16),
+                            Flexible(
+                              child: Text(
+                                'C:${currentC.toStringAsFixed(1)}',
+                                style: const TextStyle(
+                                  color: TechColors.glowCyan,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Roboto Mono',
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                softWrap: false,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    EnergyIcon(color: TechColors.glowOrange, size: 18),
-                    const SizedBox(width: 2),
-                    Text(
-                      power,
-                      style: const TextStyle(
-                        color: TechColors.glowOrange,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        fontFamily: 'Roboto Mono',
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      softWrap: false,
-                    ),
-                  ],
-                ),
+                  ),
               ],
             ),
           ),
-          // 右侧列: 三相电流
-          if (currentA != null && currentB != null && currentC != null)
-            Flexible(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CurrentIcon(color: TechColors.glowCyan, size: 18),
-                      Text(
-                        'A:${currentA.toStringAsFixed(1)}A',
-                        style: const TextStyle(
-                          color: TechColors.glowCyan,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          fontFamily: 'Roboto Mono',
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        softWrap: false,
-                      ),
-                    ],
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CurrentIcon(color: TechColors.glowCyan, size: 18),
-                      Text(
-                        'B:${currentB.toStringAsFixed(1)}A',
-                        style: const TextStyle(
-                          color: TechColors.glowCyan,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          fontFamily: 'Roboto Mono',
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        softWrap: false,
-                      ),
-                    ],
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CurrentIcon(color: TechColors.glowCyan, size: 18),
-                      Text(
-                        'C:${currentC.toStringAsFixed(1)}A',
-                        style: const TextStyle(
-                          color: TechColors.glowCyan,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          fontFamily: 'Roboto Mono',
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        softWrap: false,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );
   }
 
-  /// 风机区域 - 包含2个横向排列的小容器
+  /// 风机区域 - 包含2个容器
   Widget _buildFanSection(double width, double height) {
-    // 3, 从风机批量数据中安全获取设备
+    // 3, 安全获取风机数据
     final fanDevices = _scrFanData?.fan.devices;
-    final fan1 = (fanDevices?.isNotEmpty ?? false) ? fanDevices![0] : null;
+    // index=1对应数组下标0, index=2对应数组下标1
+    final fan1 =
+        (fanDevices != null && fanDevices.isNotEmpty) ? fanDevices[0] : null;
     final fan2 =
-        (fanDevices != null && fanDevices.length >= 2) ? fanDevices[1] : null;
+        (fanDevices != null && fanDevices.length > 1) ? fanDevices[1] : null;
 
-    // 3, 使用配置的阈值判断风机运行状态
     final configProvider = context.read<RealtimeConfigProvider>();
     final fan1Power = fan1?.elec?.pt ?? 0.0;
     final fan2Power = fan2?.elec?.pt ?? 0.0;

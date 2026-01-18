@@ -30,6 +30,7 @@ class RotaryKilnLongCell extends StatelessWidget {
     // 1, 从料仓数据中提取各传感器数值
     final weight = data?.weighSensor?.weight ?? 0.0;
     final feedRate = data?.weighSensor?.feedRate ?? 0.0;
+    final power = data?.electricityMeter?.pt ?? 0.0;
     final energy = data?.electricityMeter?.impEp ?? 0.0;
     // ✅ 长料仓显示两个温度
     final temperature1 = data?.temperatureSensor1?.temperature ?? 0.0;
@@ -49,6 +50,11 @@ class RotaryKilnLongCell extends StatelessWidget {
     final tempColor2 = deviceId != null
         ? configProvider.getRotaryKilnTempColor(deviceId!, temperature2)
         : ThresholdColors.normal;
+
+    // 运行状态
+    final isRunning = deviceId != null
+        ? configProvider.isRotaryKilnRunning(deviceId!, power)
+        : power > 0.1;
 
     // 3, 使用配置的料斗容量计算百分比 (0.0-1.0)
     final double capacityPercentage = deviceId != null
@@ -107,7 +113,7 @@ class RotaryKilnLongCell extends StatelessWidget {
               // 左侧垂直进度条
               Positioned(
                 left: 0,
-                top: 0,
+                top: 24, // 避开状态标签
                 bottom: 0,
                 child: Center(
                   child: Container(
@@ -202,13 +208,17 @@ class RotaryKilnLongCell extends StatelessWidget {
                             children: [
                               WeightIcon(color: hopperColor, size: 18),
                               const SizedBox(width: 2),
-                              Text(
-                                '${weight.toStringAsFixed(0)}kg',
-                                style: TextStyle(
-                                  color: hopperColor,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: 'Roboto Mono',
+                              Flexible(
+                                child: Text(
+                                  '${weight.toStringAsFixed(0)}kg',
+                                  style: TextStyle(
+                                    color: hopperColor,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Roboto Mono',
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
                                 ),
                               ),
                             ],
@@ -221,13 +231,17 @@ class RotaryKilnLongCell extends StatelessWidget {
                               FeedRateIcon(
                                   color: TechColors.glowGreen, size: 18),
                               const SizedBox(width: 2),
-                              Text(
-                                '${feedRate.toStringAsFixed(1)}kg/h',
-                                style: const TextStyle(
-                                  color: TechColors.glowGreen,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: 'Roboto Mono',
+                              Flexible(
+                                child: Text(
+                                  '${feedRate.toStringAsFixed(1)}kg/h',
+                                  style: const TextStyle(
+                                    color: TechColors.glowGreen,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Roboto Mono',
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
                                 ),
                               ),
                             ],
@@ -265,6 +279,29 @@ class RotaryKilnLongCell extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // 功率
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const PowerIcon(
+                                  size: 18, color: TechColors.glowCyan),
+                              const SizedBox(width: 2),
+                              Flexible(
+                                child: Text(
+                                  '${power.toStringAsFixed(1)}kW',
+                                  style: const TextStyle(
+                                    color: TechColors.glowCyan,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Roboto Mono',
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
                           // 能耗
                           Row(
                             mainAxisSize: MainAxisSize.min,
@@ -272,13 +309,17 @@ class RotaryKilnLongCell extends StatelessWidget {
                               EnergyIcon(
                                   color: TechColors.glowOrange, size: 18),
                               const SizedBox(width: 2),
-                              Text(
-                                '${energy.toStringAsFixed(1)}kWh',
-                                style: const TextStyle(
-                                  color: TechColors.glowOrange,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: 'Roboto Mono',
+                              Flexible(
+                                child: Text(
+                                  '${energy.toStringAsFixed(1)}kWh',
+                                  style: const TextStyle(
+                                    color: TechColors.glowOrange,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Roboto Mono',
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
                                 ),
                               ),
                             ],
@@ -289,13 +330,17 @@ class RotaryKilnLongCell extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               CurrentIcon(color: hopperColor, size: 18),
-                              Text(
-                                'A:${currentA.toStringAsFixed(1)}A',
-                                style: TextStyle(
-                                  color: hopperColor,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: 'Roboto Mono',
+                              Flexible(
+                                child: Text(
+                                  'A:${currentA.toStringAsFixed(1)}A',
+                                  style: TextStyle(
+                                    color: hopperColor,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Roboto Mono',
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
                                 ),
                               ),
                             ],
@@ -306,13 +351,17 @@ class RotaryKilnLongCell extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               CurrentIcon(color: hopperColor, size: 18),
-                              Text(
-                                'B:${currentB.toStringAsFixed(1)}A',
-                                style: TextStyle(
-                                  color: hopperColor,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: 'Roboto Mono',
+                              Flexible(
+                                child: Text(
+                                  'B:${currentB.toStringAsFixed(1)}A',
+                                  style: TextStyle(
+                                    color: hopperColor,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Roboto Mono',
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
                                 ),
                               ),
                             ],
@@ -323,13 +372,17 @@ class RotaryKilnLongCell extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               CurrentIcon(color: hopperColor, size: 18),
-                              Text(
-                                'C:${currentC.toStringAsFixed(1)}A',
-                                style: TextStyle(
-                                  color: hopperColor,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: 'Roboto Mono',
+                              Flexible(
+                                child: Text(
+                                  'C:${currentC.toStringAsFixed(1)}A',
+                                  style: TextStyle(
+                                    color: hopperColor,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Roboto Mono',
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
                                 ),
                               ),
                             ],
@@ -337,6 +390,58 @@ class RotaryKilnLongCell extends StatelessWidget {
                         ],
                       ),
                     ),
+                  ),
+                ),
+              ),
+              // 左上角运行状态
+              Positioned(
+                left: 4,
+                top: 4,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: TechColors.bgDeep.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: isRunning
+                            ? TechColors.statusNormal.withOpacity(0.5)
+                            : TechColors.statusOffline.withOpacity(0.5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isRunning
+                              ? TechColors.statusNormal
+                              : TechColors.statusOffline,
+                          boxShadow: [
+                            BoxShadow(
+                              color: isRunning
+                                  ? TechColors.statusNormal.withOpacity(0.6)
+                                  : TechColors.statusOffline.withOpacity(0.3),
+                              blurRadius: 4,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        isRunning ? '运行' : '停止',
+                        style: TextStyle(
+                          color: isRunning
+                              ? TechColors.statusNormal
+                              : TechColors.statusOffline,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

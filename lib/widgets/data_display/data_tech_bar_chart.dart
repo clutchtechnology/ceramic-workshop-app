@@ -72,6 +72,9 @@ class TechBarChart extends StatelessWidget {
   /// 设置为false时不显示设备选择器和时间选择器
   final bool showSelector;
 
+  /// 自定义底部标签格式化函数
+  final String Function(double value)? getBottomTitle;
+
   const TechBarChart({
     super.key,
     required this.title,
@@ -95,6 +98,7 @@ class TechBarChart extends StatelessWidget {
     this.onItemToggle,
     this.compact = false,
     this.showSelector = true,
+    this.getBottomTitle,
   }) : assert(
           // 当 showSelector 为 true 时才需要验证选择器参数
           !showSelector ||
@@ -305,6 +309,15 @@ class TechBarChart extends StatelessWidget {
               reservedSize: 16,
               interval: xInterval,
               getTitlesWidget: (value, meta) {
+                if (getBottomTitle != null) {
+                  return Text(
+                    getBottomTitle!(value),
+                    style: const TextStyle(
+                      color: TechColors.textSecondary,
+                      fontSize: 9,
+                    ),
+                  );
+                }
                 return Text(
                   value.toInt().toString(),
                   style: const TextStyle(

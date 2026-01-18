@@ -144,6 +144,29 @@ class ApiClient {
     }
   }
 
+  Future<dynamic> delete(String path, {Map<String, String>? params}) async {
+    final uri = Uri.parse('$baseUrl$path').replace(queryParameters: params);
+
+    try {
+      final response = await _client.delete(uri).timeout(_timeout);
+      _consecutiveFailures = 0;
+      return _processResponse(response, uri.toString());
+    } on TimeoutException {
+      _handleError('DELETE', uri.toString(),
+          'Request timeout after ${_timeout.inSeconds}s');
+      rethrow;
+    } on SocketException catch (e) {
+      _handleError('DELETE', uri.toString(), 'Socket error: $e');
+      rethrow;
+    } on http.ClientException catch (e) {
+      _handleError('DELETE', uri.toString(), 'Client error: $e');
+      rethrow;
+    } catch (e) {
+      _handleError('DELETE', uri.toString(), e.toString());
+      rethrow;
+    }
+  }
+
   dynamic _processResponse(http.Response response, String url) {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       // 🔧 记录成功的网络请求（仅在连续失败后恢复时记录）

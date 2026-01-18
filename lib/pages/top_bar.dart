@@ -31,7 +31,6 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
   String _timeString = '';
 
   // 8, 窗口状态（是否全屏/最大化）
-  bool _isFullScreen = true; // 默认全屏模式
   bool _restoreFullScreenAfterMinimize = false;
 
   // ============================================================
@@ -105,13 +104,15 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
   @override
   void onWindowEnterFullScreen() {
     if (!mounted) return;
-    setState(() => _isFullScreen = true);
+    // _isFullScreen 未被使用，移除赋值以消除警告
+    // setState(() => _isFullScreen = true);
   }
 
   @override
   void onWindowLeaveFullScreen() {
     if (!mounted) return;
-    setState(() => _isFullScreen = false);
+    // _isFullScreen 未被使用，移除赋值以消除警告
+    // setState(() => _isFullScreen = false);
   }
 
   @override
@@ -292,31 +293,35 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
           // 导航项
           ...List.generate(navItems.length, (index) {
             final isSelected = _selectedNavIndex == index;
-            return GestureDetector(
-              onTap: () => _onNavItemTap(index),
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? TechColors.glowCyan.withOpacity(0.15)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
+            return Container(
+              margin: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: () => _onNavItemTap(index),
+                behavior: HitTestBehavior.opaque, // 确保透明区域也能响应点击
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  decoration: BoxDecoration(
                     color: isSelected
-                        ? TechColors.glowCyan.withOpacity(0.5)
+                        ? TechColors.glowCyan.withOpacity(0.15)
                         : Colors.transparent,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: isSelected
+                          ? TechColors.glowCyan.withOpacity(0.5)
+                          : Colors.transparent,
+                    ),
                   ),
-                ),
-                child: Text(
-                  navItems[index],
-                  style: TextStyle(
-                    color: isSelected
-                        ? TechColors.glowCyan
-                        : TechColors.textSecondary,
-                    fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
+                  child: Text(
+                    navItems[index],
+                    style: TextStyle(
+                      color: isSelected
+                          ? TechColors.glowCyan
+                          : TechColors.textSecondary,
+                      fontSize: 13,
+                      fontWeight:
+                          isSelected ? FontWeight.w500 : FontWeight.w400,
+                    ),
                   ),
                 ),
               ),
@@ -329,8 +334,9 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
           // 设置按钮
           GestureDetector(
             onTap: () => _showPasswordDialog(),
+            behavior: HitTestBehavior.opaque, // 增大点击判定区域
             child: Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12), // 增大内边距
               decoration: BoxDecoration(
                 color: _selectedNavIndex == 3
                     ? TechColors.glowCyan.withOpacity(0.15)

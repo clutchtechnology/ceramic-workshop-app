@@ -331,6 +331,71 @@ class HistoryDataService {
     );
   }
 
+  /// 查询回转窑投料记录 (Feeding History)
+  /// 返回原始投料事件列表
+  Future<List<FeedingRecord>> queryHopperFeedingHistory({
+    required String deviceId,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    try {
+      debugPrint(
+          '🔍 查询投料历史: $deviceId, Start: ${start.toString()}, End: ${end.toString()}');
+      final jsonResponse = await ApiClient().get(
+        '/api/hopper/$deviceId/feeding-history',
+        params: {
+          'start': _formatLocalTime(start),
+          'end': _formatLocalTime(end),
+          'limit': '5000', // 增加Limit以支持高频数据
+        },
+      );
+
+      if (jsonResponse['success'] == true || jsonResponse['code'] == 200) {
+        final List<dynamic> list = jsonResponse['data'];
+        debugPrint('✅ 投料历史返回: ${list.length} 条记录');
+        return list.map((json) => FeedingRecord.fromJson(json)).toList();
+      } else {
+        debugPrint(
+            '❌ 后端返回错误: ${jsonResponse['error'] ?? jsonResponse['message']}');
+      }
+      return [];
+    } catch (e) {
+      debugPrint('❌ 查询投料记录异常: $e');
+      return [];
+    }
+  }
+
+  /// 回填（校正）投料记录
+  Future<bool> backfillFeedingRecord(
+      String deviceId, Map<String, dynamic> record) async {
+    try {
+      final jsonResponse = await ApiClient().post(
+        '/api/hopper/$deviceId/feeding-history/backfill',
+        body: record,
+      );
+
+      return jsonResponse['success'] == true || jsonResponse['code'] == 200;
+    } catch (e) {
+      debugPrint('❌ 回填投料记录失败: $e');
+      return false;
+    }
+  }
+
+  /// 🔧 [New] 删除错误的投料记录
+  Future<bool> deleteFeedingRecord(String deviceId, DateTime time) async {
+    try {
+      final jsonResponse = await ApiClient().delete(
+        '/api/hopper/$deviceId/feeding-history',
+        params: {'time': time.toIso8601String()},
+      );
+
+      return jsonResponse['success'] == true || jsonResponse['code'] == 200;
+    } catch (e) {
+      debugPrint('❌ 删除投料记录失败: $e');
+      return false;
+    }
+  }
+
   // ============================================================
   // 辊道窑历史数据查询
   // ============================================================
@@ -608,6 +673,26 @@ class TimeRange {
   TimeRange({required this.start, required this.end});
 
   Duration get duration => end.difference(start);
+}
+
+class FeedingRecord {
+  final DateTime time;
+  final double addedWeight;
+  final String deviceId;
+
+  FeedingRecord({
+    required this.time,
+    required this.addedWeight,
+    required this.deviceId,
+  });
+
+  factory FeedingRecord.fromJson(Map<String, dynamic> json) {
+    return FeedingRecord(
+      time: DateTime.parse(json['time']).toLocal(),
+      addedWeight: (json['added_weight'] as num).toDouble(),
+      deviceId: json['device_id'] as String,
+    );
+  }
 }
 
 /// 历史数据点

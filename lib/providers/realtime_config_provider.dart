@@ -125,6 +125,7 @@ class RealtimeConfigProvider extends ChangeNotifier {
 
   // 🔧 性能优化: 使用 Map 缓存加速查找 (O(1) 替代 O(n))
   final Map<String, ThresholdConfig> _rotaryKilnCache = {};
+  final Map<String, ThresholdConfig> _rotaryKilnPowerCache = {}; // 新增: 回转窑功率缓存
   final Map<String, ThresholdConfig> _rollerKilnCache = {};
   final Map<String, ThresholdConfig> _fanCache = {};
   final Map<String, ThresholdConfig> _scrPumpCache = {};
@@ -181,6 +182,59 @@ class RealtimeConfigProvider extends ChangeNotifier {
         displayName: '9号回转窑 (长料仓)',
         normalMax: 800.0,
         warningMax: 1000.0),
+  ];
+
+  // ============================================================
+  // 回转窑功率配置 (9个设备) - 用于判断运行状态
+  // 键值格式: {device_id}_power
+  // 默认正常上限 0.1 (作为启动阈值), 警告上限 100.0
+  // ============================================================
+  final List<ThresholdConfig> rotaryKilnPowerConfigs = [
+    ThresholdConfig(
+        key: 'short_hopper_1_power',
+        displayName: '7号回转窑功率',
+        normalMax: 0.1,
+        warningMax: 100.0),
+    ThresholdConfig(
+        key: 'short_hopper_2_power',
+        displayName: '6号回转窑功率',
+        normalMax: 0.1,
+        warningMax: 100.0),
+    ThresholdConfig(
+        key: 'short_hopper_3_power',
+        displayName: '5号回转窑功率',
+        normalMax: 0.1,
+        warningMax: 100.0),
+    ThresholdConfig(
+        key: 'short_hopper_4_power',
+        displayName: '4号回转窑功率',
+        normalMax: 0.1,
+        warningMax: 100.0),
+    ThresholdConfig(
+        key: 'no_hopper_1_power',
+        displayName: '2号回转窑功率',
+        normalMax: 0.1,
+        warningMax: 100.0),
+    ThresholdConfig(
+        key: 'no_hopper_2_power',
+        displayName: '1号回转窑功率',
+        normalMax: 0.1,
+        warningMax: 100.0),
+    ThresholdConfig(
+        key: 'long_hopper_1_power',
+        displayName: '8号回转窑功率',
+        normalMax: 0.1,
+        warningMax: 100.0),
+    ThresholdConfig(
+        key: 'long_hopper_2_power',
+        displayName: '3号回转窑功率',
+        normalMax: 0.1,
+        warningMax: 100.0),
+    ThresholdConfig(
+        key: 'long_hopper_3_power',
+        displayName: '9号回转窑功率',
+        normalMax: 0.1,
+        warningMax: 100.0),
   ];
 
   // ============================================================
@@ -337,6 +391,11 @@ class RealtimeConfigProvider extends ChangeNotifier {
       _rotaryKilnCache[config.key] = config;
     }
 
+    _rotaryKilnPowerCache.clear();
+    for (var config in rotaryKilnPowerConfigs) {
+      _rotaryKilnPowerCache[config.key] = config;
+    }
+
     _rollerKilnCache.clear();
     for (var config in rollerKilnConfigs) {
       _rollerKilnCache[config.key] = config;
@@ -370,6 +429,20 @@ class RealtimeConfigProvider extends ChangeNotifier {
       for (var config in rotaryKilnConfigs) {
         if (rotaryData[config.key] != null) {
           final data = rotaryData[config.key] as Map<String, dynamic>;
+          config.normalMax =
+              (data['normalMax'] as num?)?.toDouble() ?? config.normalMax;
+          config.warningMax =
+              (data['warningMax'] as num?)?.toDouble() ?? config.warningMax;
+        }
+      }
+    }
+
+    // 加载回转窑功率配置
+    if (json['rotaryKilnPower'] != null) {
+      final rotaryPowerData = json['rotaryKilnPower'] as Map<String, dynamic>;
+      for (var config in rotaryKilnPowerConfigs) {
+        if (rotaryPowerData[config.key] != null) {
+          final data = rotaryPowerData[config.key] as Map<String, dynamic>;
           config.normalMax =
               (data['normalMax'] as num?)?.toDouble() ?? config.normalMax;
           config.warningMax =
@@ -456,6 +529,13 @@ class RealtimeConfigProvider extends ChangeNotifier {
             'warningMax': config.warningMax
           }
       },
+      'rotaryKilnPower': {
+        for (var config in rotaryKilnPowerConfigs)
+          config.key: {
+            'normalMax': config.normalMax,
+            'warningMax': config.warningMax
+          }
+      },
       'rollerKiln': {
         for (var config in rollerKilnConfigs)
           config.key: {
@@ -515,6 +595,18 @@ class RealtimeConfigProvider extends ChangeNotifier {
     }
   }
 
+  /// 更新回转窑功率配置
+  void updateRotaryKilnPowerConfig(int index,
+      {double? normalMax, double? warningMax}) {
+    if (index >= 0 && index < rotaryKilnPowerConfigs.length) {
+      if (normalMax != null)
+        rotaryKilnPowerConfigs[index].normalMax = normalMax;
+      if (warningMax != null)
+        rotaryKilnPowerConfigs[index].warningMax = warningMax;
+      notifyListeners();
+    }
+  }
+
   /// 更新辊道窑配置
   void updateRollerKilnConfig(int index,
       {double? normalMax, double? warningMax}) {
@@ -569,6 +661,11 @@ class RealtimeConfigProvider extends ChangeNotifier {
       config.normalMax = 800.0;
       config.warningMax = 1000.0;
     }
+    // 重置回转窑功率
+    for (var config in rotaryKilnPowerConfigs) {
+      config.normalMax = 0.1;
+      config.warningMax = 100.0;
+    }
     // 重置辊道窑
     for (var config in rollerKilnConfigs) {
       config.normalMax = 1200.0;
@@ -610,6 +707,8 @@ class RealtimeConfigProvider extends ChangeNotifier {
   // 默认配置（缓存未命中时使用）
   static final _defaultRotaryKilnConfig = ThresholdConfig(
       key: '', displayName: '', normalMax: 800.0, warningMax: 1000.0);
+  static final _defaultRotaryKilnPowerConfig = ThresholdConfig(
+      key: '', displayName: '', normalMax: 0.1, warningMax: 100.0);
   static final _defaultRollerKilnConfig = ThresholdConfig(
       key: '', displayName: '', normalMax: 1200.0, warningMax: 1400.0);
   static final _defaultFanConfig = ThresholdConfig(
@@ -677,6 +776,12 @@ class RealtimeConfigProvider extends ChangeNotifier {
     return _rotaryKilnCache[key];
   }
 
+  /// 获取回转窑功率阈值配置
+  ThresholdConfig? getRotaryKilnPowerThreshold(String deviceId) {
+    final key = '${deviceId}_power';
+    return _rotaryKilnPowerCache[key];
+  }
+
   /// 获取辊道窑阈值配置
   ThresholdConfig? getRollerKilnThreshold(String zoneTag) {
     return _rollerKilnCache[zoneTag];
@@ -703,6 +808,15 @@ class RealtimeConfigProvider extends ChangeNotifier {
   // ============================================================
   // 判断设备运行状态的方法
   // ============================================================
+
+  /// 判断回转窑是否运行（功率 >= minThreshold）
+  /// deviceId: 设备ID
+  bool isRotaryKilnRunning(String deviceId, double power) {
+    if (power < 0) power = 0;
+    final key = '${deviceId}_power';
+    final config = _rotaryKilnPowerCache[key] ?? _defaultRotaryKilnPowerConfig;
+    return config.isRunning(power);
+  }
 
   /// 判断风机是否运行（功率 >= minThreshold）
   /// fanIndex: 风机索引 (1 或 2)

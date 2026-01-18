@@ -71,6 +71,15 @@ class TechLineChart extends StatelessWidget {
   /// 设置为false时不显示设备选择器和时间选择器
   final bool showSelector;
 
+  /// 是否使用平滑曲线（默认true）
+  final bool isCurved;
+
+  /// 是否防止曲线过冲（默认true，防止数据点之间产生不合理的波动）
+  final bool preventCurveOverShooting;
+
+  /// 自定义底部标签格式化函数
+  final String Function(double value)? getBottomTitle;
+
   const TechLineChart({
     super.key,
     required this.title,
@@ -94,6 +103,9 @@ class TechLineChart extends StatelessWidget {
     this.onItemToggle,
     this.compact = false,
     this.showSelector = true,
+    this.isCurved = true,
+    this.preventCurveOverShooting = true,
+    this.getBottomTitle,
   }) : assert(
           // 当 showSelector 为 true 时才需要验证选择器参数
           !showSelector ||
@@ -292,6 +304,15 @@ class TechLineChart extends StatelessWidget {
               reservedSize: 16,
               interval: xInterval,
               getTitlesWidget: (value, meta) {
+                if (getBottomTitle != null) {
+                  return Text(
+                    getBottomTitle!(value),
+                    style: const TextStyle(
+                      color: TechColors.textSecondary,
+                      fontSize: 9,
+                    ),
+                  );
+                }
                 return Text(
                   value.toInt().toString(),
                   style: const TextStyle(
@@ -332,7 +353,8 @@ class TechLineChart extends StatelessWidget {
         result.add(
           LineChartBarData(
             spots: dataMap[selectedIndex]!,
-            isCurved: true,
+            isCurved: isCurved,
+            preventCurveOverShooting: preventCurveOverShooting,
             color: itemColors[selectedIndex!],
             barWidth: 2,
             dotData: const FlDotData(show: false),
@@ -346,7 +368,8 @@ class TechLineChart extends StatelessWidget {
           result.add(
             LineChartBarData(
               spots: dataMap[i]!,
-              isCurved: true,
+              isCurved: isCurved,
+              preventCurveOverShooting: preventCurveOverShooting,
               color: itemColors[i],
               barWidth: 2,
               dotData: const FlDotData(show: false),
