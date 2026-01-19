@@ -25,12 +25,14 @@ class ThresholdConfig {
   final String displayName; // 显示名称
   double normalMax; // 正常上限
   double warningMax; // 警告上限（超过此值为报警）
+  bool subtractTemp100; // 是否在温度>300时减去100度显示
 
   ThresholdConfig({
     required this.key,
     required this.displayName,
     this.normalMax = 0.0,
     this.warningMax = 0.0,
+    this.subtractTemp100 = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -38,6 +40,7 @@ class ThresholdConfig {
         'displayName': displayName,
         'normalMax': normalMax,
         'warningMax': warningMax,
+        'subtractTemp100': subtractTemp100,
       };
 
   factory ThresholdConfig.fromJson(Map<String, dynamic> json) {
@@ -46,18 +49,21 @@ class ThresholdConfig {
       displayName: json['displayName'] as String,
       normalMax: (json['normalMax'] as num?)?.toDouble() ?? 0.0,
       warningMax: (json['warningMax'] as num?)?.toDouble() ?? 0.0,
+      subtractTemp100: json['subtractTemp100'] as bool? ?? false,
     );
   }
 
   ThresholdConfig copyWith({
     double? normalMax,
     double? warningMax,
+    bool? subtractTemp100,
   }) {
     return ThresholdConfig(
       key: key,
       displayName: displayName,
       normalMax: normalMax ?? this.normalMax,
       warningMax: warningMax ?? this.warningMax,
+      subtractTemp100: subtractTemp100 ?? this.subtractTemp100,
     );
   }
 
@@ -333,31 +339,31 @@ class RealtimeConfigProvider extends ChangeNotifier {
     HopperCapacityConfig(
         key: 'short_hopper_1_capacity',
         displayName: '7号窑料仓 (短)',
-        maxCapacity: 1000.0),
+        maxCapacity: 500.0),
     HopperCapacityConfig(
         key: 'short_hopper_2_capacity',
         displayName: '6号窑料仓 (短)',
-        maxCapacity: 1000.0),
+        maxCapacity: 500.0),
     HopperCapacityConfig(
         key: 'short_hopper_3_capacity',
         displayName: '5号窑料仓 (短)',
-        maxCapacity: 1000.0),
+        maxCapacity: 500.0),
     HopperCapacityConfig(
         key: 'short_hopper_4_capacity',
         displayName: '4号窑料仓 (短)',
-        maxCapacity: 1000.0),
+        maxCapacity: 500.0),
     HopperCapacityConfig(
         key: 'long_hopper_1_capacity',
         displayName: '8号窑料仓 (长)',
-        maxCapacity: 1500.0),
+        maxCapacity: 800.0),
     HopperCapacityConfig(
         key: 'long_hopper_2_capacity',
         displayName: '3号窑料仓 (长)',
-        maxCapacity: 1500.0),
+        maxCapacity: 800.0),
     HopperCapacityConfig(
         key: 'long_hopper_3_capacity',
         displayName: '9号窑料仓 (长)',
-        maxCapacity: 1500.0),
+        maxCapacity: 800.0),
   ];
 
   /// 初始化加载配置
@@ -433,6 +439,8 @@ class RealtimeConfigProvider extends ChangeNotifier {
               (data['normalMax'] as num?)?.toDouble() ?? config.normalMax;
           config.warningMax =
               (data['warningMax'] as num?)?.toDouble() ?? config.warningMax;
+          config.subtractTemp100 =
+              data['subtractTemp100'] as bool? ?? config.subtractTemp100;
         }
       }
     }
@@ -526,7 +534,8 @@ class RealtimeConfigProvider extends ChangeNotifier {
         for (var config in rotaryKilnConfigs)
           config.key: {
             'normalMax': config.normalMax,
-            'warningMax': config.warningMax
+            'warningMax': config.warningMax,
+            'subtractTemp100': config.subtractTemp100,
           }
       },
       'rotaryKilnPower': {
@@ -587,10 +596,14 @@ class RealtimeConfigProvider extends ChangeNotifier {
 
   /// 更新回转窑配置
   void updateRotaryKilnConfig(int index,
-      {double? normalMax, double? warningMax}) {
+      {double? normalMax, double? warningMax, bool? subtractTemp100}) {
     if (index >= 0 && index < rotaryKilnConfigs.length) {
       if (normalMax != null) rotaryKilnConfigs[index].normalMax = normalMax;
       if (warningMax != null) rotaryKilnConfigs[index].warningMax = warningMax;
+      if (subtractTemp100 != null)
+        rotaryKilnConfigs[index].subtractTemp100 = subtractTemp100;
+      // 更新缓存
+      _rotaryKilnCache[rotaryKilnConfigs[index].key] = rotaryKilnConfigs[index];
       notifyListeners();
     }
   }
@@ -660,6 +673,7 @@ class RealtimeConfigProvider extends ChangeNotifier {
     for (var config in rotaryKilnConfigs) {
       config.normalMax = 800.0;
       config.warningMax = 1000.0;
+      config.subtractTemp100 = false;
     }
     // 重置回转窑功率
     for (var config in rotaryKilnPowerConfigs) {
@@ -686,12 +700,12 @@ class RealtimeConfigProvider extends ChangeNotifier {
       config.normalMax = 100.0;
       config.warningMax = 150.0;
     }
-    // 重置料仓容量 (短料仓1000kg, 长料仓1500kg)
+    // 重置料仓容量 (短料仓500kg, 长料仓800kg)
     for (int i = 0; i < hopperCapacityConfigs.length; i++) {
       if (hopperCapacityConfigs[i].key.contains('short')) {
-        hopperCapacityConfigs[i].maxCapacity = 1000.0;
+        hopperCapacityConfigs[i].maxCapacity = 500.0;
       } else {
-        hopperCapacityConfigs[i].maxCapacity = 1500.0;
+        hopperCapacityConfigs[i].maxCapacity = 800.0;
       }
     }
     // 🔧 重建缓存确保一致性
@@ -703,6 +717,14 @@ class RealtimeConfigProvider extends ChangeNotifier {
   // 便捷获取颜色的方法
   // 🔧 性能优化: 使用缓存 Map 替代 List.firstWhere (O(1) vs O(n))
   // ============================================================
+
+  /// 根据设备ID判断是否需要减100度显示
+  /// deviceId: 例如 "no_hopper_1" (对应窑2), "no_hopper_2" (对应窑1)
+  bool shouldSubtractTemp100(String deviceId) {
+    final key = '${deviceId}_temp';
+    final config = _rotaryKilnCache[key];
+    return config?.subtractTemp100 ?? false;
+  }
 
   // 默认配置（缓存未命中时使用）
   static final _defaultRotaryKilnConfig = ThresholdConfig(

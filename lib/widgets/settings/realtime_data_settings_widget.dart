@@ -146,18 +146,20 @@ class _RealtimeDataSettingsWidgetState
           _buildColorLegend(),
           const SizedBox(height: 20),
 
-          // 回转窑温度配置
-          _buildConfigSection(
+          // 回转窑温度配置（窑1有减100度开关）
+          _buildRotaryKilnTempConfigSection(
             index: 0,
             title: '回转窑温度阈值配置',
-            subtitle: '9个回转窑设备',
+            subtitle: '9个回转窑设备 (窑1支持减100°C显示)',
             icon: Icons.whatshot,
             accentColor: TechColors.glowOrange,
             unit: '℃',
             configs: provider.rotaryKilnConfigs,
-            onUpdate: (index, normalMax, warningMax) {
+            onUpdate: (index, normalMax, warningMax, subtractTemp100) {
               provider.updateRotaryKilnConfig(index,
-                  normalMax: normalMax, warningMax: warningMax);
+                  normalMax: normalMax,
+                  warningMax: warningMax,
+                  subtractTemp100: subtractTemp100);
             },
           ),
 
@@ -405,6 +407,300 @@ class _RealtimeDataSettingsWidgetState
               child: _buildConfigTable(configs, unit, onUpdate),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// 回转窑温度配置区块（带减100度开关）
+  Widget _buildRotaryKilnTempConfigSection({
+    required int index,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color accentColor,
+    required String unit,
+    required List<ThresholdConfig> configs,
+    required Function(int index, double? normalMax, double? warningMax,
+            bool? subtractTemp100)
+        onUpdate,
+  }) {
+    final isExpanded = _expandedIndex == index;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: TechColors.bgMedium.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color:
+              isExpanded ? accentColor.withOpacity(0.5) : TechColors.borderDark,
+        ),
+      ),
+      child: Column(
+        children: [
+          // 标题栏
+          InkWell(
+            onTap: () {
+              setState(() {
+                _expandedIndex = isExpanded ? -1 : index;
+              });
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: accentColor.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Icon(icon, color: accentColor, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            color: TechColors.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: const TextStyle(
+                            color: TechColors.textSecondary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    isExpanded ? Icons.expand_less : Icons.expand_more,
+                    color: TechColors.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // 展开内容 - 表格（带减100度开关）
+          if (isExpanded) ...[
+            Container(height: 1, color: TechColors.borderDark),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: _buildRotaryKilnTempConfigTable(configs, unit, onUpdate),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 回转窑温度配置表格（只有窑1有减100度开关）
+  Widget _buildRotaryKilnTempConfigTable(
+    List<ThresholdConfig> configs,
+    String unit,
+    Function(int index, double? normalMax, double? warningMax,
+            bool? subtractTemp100)
+        onUpdate,
+  ) {
+    return Column(
+      children: [
+        // 表头
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          decoration: BoxDecoration(
+            color: TechColors.bgDeep.withOpacity(0.5),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(4),
+              topRight: Radius.circular(4),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Expanded(
+                flex: 3,
+                child: Text(
+                  '设备名称',
+                  style: TextStyle(
+                    color: TechColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: ThresholdColors.normal,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '正常上限 ($unit)',
+                      style: const TextStyle(
+                        color: TechColors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: ThresholdColors.warning,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '警告上限 ($unit)',
+                      style: const TextStyle(
+                        color: TechColors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // 只有窑1需要减100度开关，表头留空
+              const Expanded(
+                flex: 1,
+                child: SizedBox(),
+              ),
+            ],
+          ),
+        ),
+        // 表格行
+        ...configs.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final config = entry.value;
+          return _buildRotaryKilnTempConfigRow(idx, config, unit, onUpdate);
+        }),
+      ],
+    );
+  }
+
+  /// 回转窑温度配置表格行（只有窑1有减100度开关）
+  Widget _buildRotaryKilnTempConfigRow(
+    int index,
+    ThresholdConfig config,
+    String unit,
+    Function(int index, double? normalMax, double? warningMax,
+            bool? subtractTemp100)
+        onUpdate,
+  ) {
+    final normalController = _controllers['${config.key}_normal'];
+    final warningController = _controllers['${config.key}_warning'];
+
+    // 只有窑1 (no_hopper_2) 显示减100度开关
+    final isKiln1 = config.key == 'no_hopper_2_temp';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+      decoration: BoxDecoration(
+        color: index.isEven
+            ? TechColors.bgDeep.withOpacity(0.3)
+            : TechColors.bgMedium.withOpacity(0.3),
+        border: Border(
+          bottom: BorderSide(color: TechColors.borderDark.withOpacity(0.5)),
+        ),
+      ),
+      child: Row(
+        children: [
+          // 设备名称
+          Expanded(
+            flex: 3,
+            child: Text(
+              config.displayName,
+              style: const TextStyle(
+                color: TechColors.textPrimary,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          // 正常上限输入框
+          Expanded(
+            flex: 2,
+            child: _buildInputField(
+              controller: normalController,
+              color: ThresholdColors.normal,
+              onChanged: (value) {
+                final v = double.tryParse(value);
+                if (v != null) {
+                  onUpdate(index, v, null, null);
+                }
+              },
+            ),
+          ),
+          // 警告上限输入框
+          Expanded(
+            flex: 2,
+            child: _buildInputField(
+              controller: warningController,
+              color: ThresholdColors.warning,
+              onChanged: (value) {
+                final v = double.tryParse(value);
+                if (v != null) {
+                  onUpdate(index, null, v, null);
+                }
+              },
+            ),
+          ),
+          // 只有窑1显示减100度开关
+          Expanded(
+            flex: 1,
+            child: isKiln1
+                ? Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          '-100°C',
+                          style: TextStyle(
+                            color: TechColors.textSecondary,
+                            fontSize: 10,
+                          ),
+                        ),
+                        Switch(
+                          value: config.subtractTemp100,
+                          onChanged: (value) {
+                            onUpdate(index, null, null, value);
+                          },
+                          activeColor: TechColors.glowCyan,
+                          activeTrackColor:
+                              TechColors.glowCyan.withOpacity(0.5),
+                          inactiveThumbColor: TechColors.textSecondary,
+                          inactiveTrackColor: TechColors.bgDeep,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ],
+                    ),
+                  )
+                : const SizedBox(),
+          ),
         ],
       ),
     );

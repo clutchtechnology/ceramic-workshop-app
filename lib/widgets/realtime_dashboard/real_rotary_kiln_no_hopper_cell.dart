@@ -35,12 +35,15 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
     final currentB = data?.electricityMeter?.currentB ?? 0.0;
     final currentC = data?.electricityMeter?.currentC ?? 0.0;
 
-    // 🔧 窑1特殊处理：如果温度超过300度，显示时减去100度
-    final displayTemperature =
-        (index == 1 && temperature > 300) ? temperature - 100 : temperature;
-
     // 🔧 优化: 使用 context.read 而非 context.watch
     final configProvider = context.read<RealtimeConfigProvider>();
+
+    // 🔧 根据配置决定是否在温度>300时减去100度显示
+    final shouldSubtract = deviceId != null
+        ? configProvider.shouldSubtractTemp100(deviceId!)
+        : false;
+    final displayTemperature =
+        (shouldSubtract && temperature > 300) ? temperature - 100 : temperature;
 
     // 2, 根据温度阈值配置获取显示颜色（使用原始温度判断颜色）
     final tempColor = deviceId != null
