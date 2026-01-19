@@ -122,25 +122,13 @@ class GasPipeCell extends StatelessWidget {
               ),
             ),
           ),
-          // 右上角启停状态指示灯
+          // 左上角启停状态指示灯
           Positioned(
             top: 8,
-            right: 8,
+            left: 8,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  isRunning ? '运行' : '停止',
-                  style: TextStyle(
-                    color: isRunning
-                        ? TechColors.statusNormal
-                        : TechColors.statusOffline,
-                    fontSize: 16.5,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'Roboto Mono',
-                  ),
-                ),
-                const SizedBox(width: 6),
                 Container(
                   width: 12,
                   height: 12,
@@ -159,6 +147,18 @@ class GasPipeCell extends StatelessWidget {
                         spreadRadius: 2,
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  isRunning ? '运行' : '停止',
+                  style: TextStyle(
+                    color: isRunning
+                        ? TechColors.statusNormal
+                        : TechColors.statusOffline,
+                    fontSize: 16.5,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Roboto Mono',
                   ),
                 ),
               ],

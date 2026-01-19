@@ -50,14 +50,14 @@ class WaterPumpCell extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // 水泵图片作为背景
+          // 水泵图片作为背景（变小）
           Positioned(
-            top: 0,
-            left: 20,
-            right: 20,
-            bottom: 70,
+            top: 8,
+            left: 35,
+            right: 35,
+            bottom: 55,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
               child: Image.asset(
                 'assets/images/water_pump.png',
                 fit: BoxFit.contain,
@@ -75,9 +75,9 @@ class WaterPumpCell extends StatelessWidget {
           Positioned(
             left: 4,
             right: 4,
-            bottom: 8,
+            bottom: 4,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
               decoration: BoxDecoration(
                 color: TechColors.bgDeep.withOpacity(0.85),
                 borderRadius: BorderRadius.circular(4),
@@ -99,14 +99,14 @@ class WaterPumpCell extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const PowerIcon(
-                                size: 18, color: TechColors.glowCyan),
+                                size: 16, color: TechColors.glowCyan),
                             const SizedBox(width: 2),
                             Flexible(
                               child: Text(
                                 '${power.toStringAsFixed(1)}kW',
                                 style: const TextStyle(
                                   color: TechColors.glowCyan,
-                                  fontSize: 16,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   fontFamily: 'Roboto Mono',
                                 ),
@@ -116,19 +116,19 @@ class WaterPumpCell extends StatelessWidget {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 1),
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const EnergyIcon(
-                                size: 18, color: TechColors.glowOrange),
+                                size: 16, color: TechColors.glowOrange),
                             const SizedBox(width: 2),
                             Flexible(
                               child: Text(
-                                '${energyConsumption.toStringAsFixed(1)}kWh',
+                                '${energyConsumption.toStringAsFixed(0)}kWh',
                                 style: const TextStyle(
                                   color: TechColors.glowOrange,
-                                  fontSize: 16,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   fontFamily: 'Roboto Mono',
                                 ),
@@ -141,7 +141,7 @@ class WaterPumpCell extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // 右侧列：三相电流
+                  // 右侧列：三相电流（紧凑显示）
                   Flexible(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -150,13 +150,13 @@ class WaterPumpCell extends StatelessWidget {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            CurrentIcon(color: TechColors.glowCyan, size: 18),
+                            CurrentIcon(color: TechColors.glowCyan, size: 16),
                             Flexible(
                               child: Text(
                                 'A:${currentA.toStringAsFixed(1)}A',
                                 style: const TextStyle(
                                   color: TechColors.glowCyan,
-                                  fontSize: 16,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   fontFamily: 'Roboto Mono',
                                 ),
@@ -169,13 +169,13 @@ class WaterPumpCell extends StatelessWidget {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            CurrentIcon(color: TechColors.glowCyan, size: 18),
+                            CurrentIcon(color: TechColors.glowCyan, size: 16),
                             Flexible(
                               child: Text(
                                 'B:${currentB.toStringAsFixed(1)}A',
                                 style: const TextStyle(
                                   color: TechColors.glowCyan,
-                                  fontSize: 16,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   fontFamily: 'Roboto Mono',
                                 ),
@@ -188,13 +188,13 @@ class WaterPumpCell extends StatelessWidget {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            CurrentIcon(color: TechColors.glowCyan, size: 18),
+                            CurrentIcon(color: TechColors.glowCyan, size: 16),
                             Flexible(
                               child: Text(
                                 'C:${currentC.toStringAsFixed(1)}A',
                                 style: const TextStyle(
                                   color: TechColors.glowCyan,
-                                  fontSize: 16,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   fontFamily: 'Roboto Mono',
                                 ),
@@ -268,7 +268,7 @@ class WaterPumpCell extends StatelessWidget {
                 ),
               ),
               child: Text(
-                '氨泵$index:表${index == 1 ? 63 : 64}',
+                'SCR${index == 1 ? "北" : "南"} 氨水泵:表${index == 1 ? 63 : 64}',
                 style: const TextStyle(
                   color: TechColors.glowCyan,
                   fontSize: 14,

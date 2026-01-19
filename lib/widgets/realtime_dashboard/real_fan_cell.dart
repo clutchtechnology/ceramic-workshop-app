@@ -48,12 +48,12 @@ class FanCell extends StatelessWidget {
         children: [
           Column(
             children: [
-              // 上方 - 风机图片
+              // 上方 - 风机图片（变小）
               Expanded(
                 flex: 1,
                 child: Padding(
                   padding: const EdgeInsets.only(
-                      top: 28.0, left: 4.0, right: 4.0, bottom: 4.0),
+                      top: 32.0, left: 20.0, right: 20.0, bottom: 8.0),
                   child: Image.asset(
                     'assets/images/fan.png',
                     fit: BoxFit.contain,
@@ -67,14 +67,14 @@ class FanCell extends StatelessWidget {
                   ),
                 ),
               ),
-              // 下方 - 数据显示区域（两列显示：左列功率+能耗，右列三相电流）
+              // 下方 - 数据显示区域（紧凑布局）
               Padding(
                 padding:
-                    const EdgeInsets.only(left: 4.0, right: 4.0, bottom: 8.0),
+                    const EdgeInsets.only(left: 4.0, right: 4.0, bottom: 4.0),
                 child: Container(
                   width: double.infinity,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                   decoration: BoxDecoration(
                     color: TechColors.bgDeep.withOpacity(0.85),
                     borderRadius: BorderRadius.circular(4),
@@ -96,14 +96,14 @@ class FanCell extends StatelessWidget {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 const PowerIcon(
-                                    size: 18, color: TechColors.glowCyan),
+                                    size: 16, color: TechColors.glowCyan),
                                 const SizedBox(width: 2),
                                 Flexible(
                                   child: Text(
                                     '${power.toStringAsFixed(1)}kW',
                                     style: const TextStyle(
                                       color: TechColors.glowCyan,
-                                      fontSize: 16,
+                                      fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                       fontFamily: 'Roboto Mono',
                                     ),
@@ -113,19 +113,19 @@ class FanCell extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 2),
+                            const SizedBox(height: 1),
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 const EnergyIcon(
-                                    size: 18, color: TechColors.glowOrange),
+                                    size: 16, color: TechColors.glowOrange),
                                 const SizedBox(width: 2),
                                 Flexible(
                                   child: Text(
-                                    '${cumulativeEnergy.toStringAsFixed(1)}kWh',
+                                    '${cumulativeEnergy.toStringAsFixed(0)}kWh',
                                     style: const TextStyle(
                                       color: TechColors.glowOrange,
-                                      fontSize: 16,
+                                      fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                       fontFamily: 'Roboto Mono',
                                     ),
@@ -138,7 +138,7 @@ class FanCell extends StatelessWidget {
                           ],
                         ),
                       ),
-                      // 右侧列：三相电流
+                      // 右侧列：三相电流（单行紧凑显示）
                       Flexible(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -148,13 +148,13 @@ class FanCell extends StatelessWidget {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 CurrentIcon(
-                                    color: TechColors.glowCyan, size: 18),
+                                    color: TechColors.glowCyan, size: 16),
                                 Flexible(
                                   child: Text(
                                     'A:${currentA.toStringAsFixed(1)}A',
                                     style: const TextStyle(
                                       color: TechColors.glowCyan,
-                                      fontSize: 16,
+                                      fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                       fontFamily: 'Roboto Mono',
                                     ),
@@ -168,13 +168,13 @@ class FanCell extends StatelessWidget {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 CurrentIcon(
-                                    color: TechColors.glowCyan, size: 18),
+                                    color: TechColors.glowCyan, size: 16),
                                 Flexible(
                                   child: Text(
                                     'B:${currentB.toStringAsFixed(1)}A',
                                     style: const TextStyle(
                                       color: TechColors.glowCyan,
-                                      fontSize: 16,
+                                      fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                       fontFamily: 'Roboto Mono',
                                     ),
@@ -188,13 +188,13 @@ class FanCell extends StatelessWidget {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 CurrentIcon(
-                                    color: TechColors.glowCyan, size: 18),
+                                    color: TechColors.glowCyan, size: 16),
                                 Flexible(
                                   child: Text(
                                     'C:${currentC.toStringAsFixed(1)}A',
                                     style: const TextStyle(
                                       color: TechColors.glowCyan,
-                                      fontSize: 16,
+                                      fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                       fontFamily: 'Roboto Mono',
                                     ),
@@ -269,7 +269,7 @@ class FanCell extends StatelessWidget {
                 ),
               ),
               child: Text(
-                '风机$index:表${index == 1 ? 65 : 66}',
+                'SCR${index == 1 ? "南" : "北"} 风机:表${index == 1 ? 65 : 66}',
                 style: const TextStyle(
                   color: TechColors.glowCyan,
                   fontSize: 14,

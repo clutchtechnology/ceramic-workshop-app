@@ -282,17 +282,159 @@ class HistoryDataPageState extends State<HistoryDataPage>
     });
   }
 
-  /// 导出回转窑报表
-  Future<void> _exportHopperReport() async {
+  /// 显示导出日期选择对话框
+  Future<void> _showExportDatePicker() async {
+    // 默认选择最近7天
+    DateTime startDate = DateTime.now().subtract(const Duration(days: 7));
+    DateTime endDate = DateTime.now();
+
+    final result = await showDialog<Map<String, DateTime>>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: TechColors.bgDark,
+              title: const Text(
+                '选择导出日期范围',
+                style: TextStyle(color: TechColors.textPrimary),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 起始日期
+                  ListTile(
+                    title: const Text('起始日期',
+                        style: TextStyle(color: TechColors.textSecondary)),
+                    subtitle: Text(
+                      DateFormat('yyyy-MM-dd').format(startDate),
+                      style: const TextStyle(
+                          color: TechColors.glowCyan, fontSize: 16),
+                    ),
+                    trailing: const Icon(Icons.calendar_today,
+                        color: TechColors.glowCyan),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: startDate,
+                        firstDate: DateTime(2024),
+                        lastDate: DateTime.now(),
+                        builder: (context, child) {
+                          return Theme(
+                            data: ThemeData.dark().copyWith(
+                              colorScheme: const ColorScheme.dark(
+                                primary: TechColors.glowCyan,
+                                surface: TechColors.bgDark,
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) {
+                        setDialogState(() => startDate = picked);
+                      }
+                    },
+                  ),
+                  const Divider(color: TechColors.bgMedium),
+                  // 结束日期
+                  ListTile(
+                    title: const Text('结束日期',
+                        style: TextStyle(color: TechColors.textSecondary)),
+                    subtitle: Text(
+                      DateFormat('yyyy-MM-dd').format(endDate),
+                      style: const TextStyle(
+                          color: TechColors.glowCyan, fontSize: 16),
+                    ),
+                    trailing: const Icon(Icons.calendar_today,
+                        color: TechColors.glowCyan),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: endDate,
+                        firstDate: DateTime(2024),
+                        lastDate: DateTime.now(),
+                        builder: (context, child) {
+                          return Theme(
+                            data: ThemeData.dark().copyWith(
+                              colorScheme: const ColorScheme.dark(
+                                primary: TechColors.glowCyan,
+                                surface: TechColors.bgDark,
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) {
+                        setDialogState(() => endDate = picked);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // 预估行数提示
+                  Builder(
+                    builder: (context) {
+                      final days = endDate.difference(startDate).inDays + 1;
+                      final totalRows = days * 9;
+                      return Text(
+                        '预计导出 $days 天 × 9窑 = $totalRows 行数据',
+                        style: const TextStyle(
+                            color: TechColors.textSecondary, fontSize: 12),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消',
+                      style: TextStyle(color: TechColors.textSecondary)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: TechColors.glowCyan),
+                  onPressed: () {
+                    if (endDate.isBefore(startDate)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('结束日期不能早于起始日期')),
+                      );
+                      return;
+                    }
+                    Navigator.pop(
+                        context, {'start': startDate, 'end': endDate});
+                  },
+                  child: const Text('导出',
+                      style: TextStyle(color: TechColors.bgDeep)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result != null) {
+      await _exportHopperReportByDays(result['start']!, result['end']!);
+    }
+  }
+
+  /// 按日导出回转窑报表
+  Future<void> _exportHopperReportByDays(
+      DateTime startDate, DateTime endDate) async {
     if (!mounted) return;
+
+    final days = endDate.difference(startDate).inDays + 1;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('正在生成回转窑报表...')),
+      SnackBar(content: Text('正在生成 $days 天的回转窑报表，请稍候...')),
     );
 
     try {
       final rows = <List<dynamic>>[];
       // 表头
       rows.add([
+        '日期',
         '窑编号',
         '起始时间',
         '终止时间',
@@ -302,67 +444,84 @@ class HistoryDataPageState extends State<HistoryDataPage>
         '投料总量(kg)'
       ]);
 
-      final start = _hopperChartStartTime;
-      final end = _hopperChartEndTime;
       final dateFormat = DateFormat('yyyy-MM-dd HH:mm:ss');
+      final dayFormat = DateFormat('yyyy-MM-dd');
 
-      // 遍历 1-9 号窑
-      for (int i = 1; i <= 9; i++) {
-        final deviceId = HistoryDataService.hopperDeviceIds[i]!;
-        final kilnName = _getHopperLabel(i - 1);
+      // 按日遍历
+      for (int d = 0; d < days; d++) {
+        final dayStart = DateTime(
+            startDate.year, startDate.month, startDate.day + d, 0, 0, 0);
+        final dayEnd = DateTime(
+            startDate.year, startDate.month, startDate.day + d, 23, 59, 59);
+        final dayLabel = dayFormat.format(dayStart);
 
-        // 1. 获取能耗数据
-        final energyRes = await _historyService.queryHopperEnergyHistory(
-          deviceId: deviceId,
-          start: start,
-          end: end,
-        );
+        debugPrint('📊 [Export] 正在处理: $dayLabel');
 
-        double firstEnergy = 0.0;
-        double lastEnergy = 0.0;
-        double consumption = 0.0;
+        // 遍历 1-9 号窑
+        for (int i = 1; i <= 9; i++) {
+          final deviceId = HistoryDataService.hopperDeviceIds[i]!;
+          final kilnName = _getHopperLabel(i - 1);
 
-        if (energyRes.success &&
-            energyRes.hasData &&
-            energyRes.dataPoints != null &&
-            energyRes.dataPoints!.isNotEmpty) {
-          final points = energyRes.dataPoints!;
-          // 假设点按时间排序
-          firstEnergy =
-              (points.first.fields['ImpEp'] as num?)?.toDouble() ?? 0.0;
-          lastEnergy = (points.last.fields['ImpEp'] as num?)?.toDouble() ?? 0.0;
-          consumption = lastEnergy - firstEnergy;
-          if (consumption < 0) consumption = 0.0;
+          // 1. 获取能耗数据
+          final energyRes = await _historyService.queryHopperEnergyHistory(
+            deviceId: deviceId,
+            start: dayStart,
+            end: dayEnd,
+          );
+
+          double firstEnergy = 0.0;
+          double lastEnergy = 0.0;
+          double consumption = 0.0;
+
+          if (energyRes.success &&
+              energyRes.hasData &&
+              energyRes.dataPoints != null &&
+              energyRes.dataPoints!.isNotEmpty) {
+            final points = energyRes.dataPoints!;
+            firstEnergy =
+                (points.first.fields['ImpEp'] as num?)?.toDouble() ?? 0.0;
+            lastEnergy =
+                (points.last.fields['ImpEp'] as num?)?.toDouble() ?? 0.0;
+            consumption = lastEnergy - firstEnergy;
+            if (consumption < 0) consumption = 0.0;
+          }
+
+          // 2. 获取投料数据 (使用去重逻辑)
+          final feedingRecs = await _historyService.queryHopperFeedingHistory(
+            deviceId: deviceId,
+            start: dayStart,
+            end: dayEnd,
+          );
+
+          // 应用去重过滤
+          final dedupedRecs = _deduplicateFeedingRecords(feedingRecs);
+          double totalFeeding = 0.0;
+          for (var rec in dedupedRecs) {
+            totalFeeding += rec.addedWeight;
+          }
+
+          rows.add([
+            dayLabel,
+            kilnName,
+            dateFormat.format(dayStart),
+            dateFormat.format(dayEnd),
+            firstEnergy.toStringAsFixed(2),
+            lastEnergy.toStringAsFixed(2),
+            consumption.toStringAsFixed(2),
+            totalFeeding.toStringAsFixed(2),
+          ]);
         }
 
-        // 2. 获取投料数据
-        final feedingRecs = await _historyService.queryHopperFeedingHistory(
-          deviceId: deviceId,
-          start: start,
-          end: end,
-        );
-
-        double totalFeeding = 0.0;
-        for (var rec in feedingRecs) {
-          totalFeeding += rec.addedWeight;
+        // 每天处理完后短暂延迟，避免请求过于密集
+        if (d < days - 1) {
+          await Future.delayed(const Duration(milliseconds: 100));
         }
-
-        rows.add([
-          kilnName,
-          dateFormat.format(start),
-          dateFormat.format(end),
-          firstEnergy.toStringAsFixed(2),
-          lastEnergy.toStringAsFixed(2),
-          consumption.toStringAsFixed(2),
-          totalFeeding.toStringAsFixed(2),
-        ]);
       }
 
       // 3. 生成 Excel
       var excelObj = Excel.createExcel();
       Sheet sheet = excelObj['Sheet1'];
 
-      // 添加行
       for (var row in rows) {
         List<CellValue> cellValues =
             row.map((e) => TextCellValue(e.toString())).toList();
@@ -370,24 +529,20 @@ class HistoryDataPageState extends State<HistoryDataPage>
       }
 
       // 设置列宽
-      for (int i = 0; i < 7; i++) {
-        sheet.setColumnWidth(i, 20.0);
+      for (int i = 0; i < 8; i++) {
+        sheet.setColumnWidth(i, 18.0);
       }
 
       // 4. 保存文件
       String desktopPath;
-      // 优先尝试获取 USERPROFILE (Windows通常有效)
       final userProfile = Platform.environment['USERPROFILE'];
       if (Platform.isWindows && userProfile != null) {
         desktopPath = p.join(userProfile, 'Desktop');
       } else {
-        // 后备路径
         desktopPath = Directory.current.path;
       }
 
-      // 确保目录存在
       if (!Directory(desktopPath).existsSync()) {
-        // 如果 USERPROFILE\Desktop 不存在，尝试硬编码路径 (仅作最后的尝试)
         if (Platform.isWindows) {
           final hardcoded = r'C:\Users\Admin\Desktop';
           if (Directory(hardcoded).existsSync()) {
@@ -396,8 +551,9 @@ class HistoryDataPageState extends State<HistoryDataPage>
         }
       }
 
-      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final filename = '回转窑报表_$timestamp.xlsx';
+      final startStr = dayFormat.format(startDate);
+      final endStr = dayFormat.format(endDate);
+      final filename = '回转窑报表_${startStr}_至_$endStr.xlsx';
       final savePath = p.join(desktopPath, filename);
 
       final bytes = excelObj.encode();
@@ -409,7 +565,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('已导出到: $savePath'),
+              content: Text('已导出 ${rows.length - 1} 行数据到: $savePath'),
               duration: const Duration(seconds: 5),
             ),
           );
@@ -423,6 +579,12 @@ class HistoryDataPageState extends State<HistoryDataPage>
         );
       }
     }
+  }
+
+  /// 导出回转窑报表 (旧方法，保留兼容)
+  Future<void> _exportHopperReport() async {
+    // 直接调用新的日期选择器
+    await _showExportDatePicker();
   }
 
   /// 加载回转窑温度历史数据
@@ -1159,11 +1321,27 @@ class HistoryDataPageState extends State<HistoryDataPage>
                 ),
                 // 4. 导出报表
                 const SizedBox(width: 8),
-                IconButton(
-                  icon:
-                      const Icon(Icons.download, color: TechColors.glowOrange),
-                  tooltip: '导出报表',
+                TextButton.icon(
+                  icon: const Icon(Icons.download,
+                      color: TechColors.glowOrange, size: 20),
+                  label: const Text(
+                    '导出数据',
+                    style: TextStyle(
+                      color: TechColors.glowOrange,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                   onPressed: _exportHopperReport,
+                  style: TextButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      side: BorderSide(
+                          color: TechColors.glowOrange.withOpacity(0.5)),
+                    ),
+                  ),
                 ),
               ],
               child: Column(
@@ -1278,7 +1456,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
                       // 1. SCR水泵面板
                       Expanded(
                         child: TechPanel(
-                          title: 'SCR设备',
+                          title: 'SCR',
                           accentColor: TechColors.glowGreen,
                           headerActions: [
                             // 切换数据显示类型 (功率/燃气)
@@ -1516,7 +1694,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
     );
   }
 
-  /// 🔧 投料累计曲线图
+  /// 🔧 投料累计曲线图（阶梯状，不使用平滑过渡）
   Widget _buildHopperFeedingChart() {
     return TechLineChart(
       title: '投料累计 (kg)',
@@ -1534,6 +1712,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
       getItemLabel: _getHopperLabel,
       selectorLabel: '选择回转窑',
       showSelector: false,
+      isCurved: false, // 🔧 取消平滑过渡，显示阶梯状曲线
       onItemSelect: (index) {},
     );
   }

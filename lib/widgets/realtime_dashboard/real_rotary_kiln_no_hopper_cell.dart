@@ -35,10 +35,14 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
     final currentB = data?.electricityMeter?.currentB ?? 0.0;
     final currentC = data?.electricityMeter?.currentC ?? 0.0;
 
+    // 🔧 窑1特殊处理：如果温度超过300度，显示时减去100度
+    final displayTemperature =
+        (index == 1 && temperature > 300) ? temperature - 100 : temperature;
+
     // 🔧 优化: 使用 context.read 而非 context.watch
     final configProvider = context.read<RealtimeConfigProvider>();
 
-    // 2, 根据温度阈值配置获取显示颜色
+    // 2, 根据温度阈值配置获取显示颜色（使用原始温度判断颜色）
     final tempColor = deviceId != null
         ? configProvider.getRotaryKilnTempColor(deviceId!, temperature)
         : ThresholdColors.normal;
@@ -155,7 +159,7 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                 child: Align(
                   alignment: const Alignment(0.4, -1.1),
                   child: Transform.translate(
-                    offset: const Offset(-22, 20), // 左移40px，上移20px
+                    offset: const Offset(-22, 10), // 左移22px，至顶部10px
                     child: Container(
                       padding: const EdgeInsets.only(
                         left: 4,
@@ -315,7 +319,7 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
                         const SizedBox(width: 2),
                         Flexible(
                           child: Text(
-                            '${temperature.toStringAsFixed(1)}°C',
+                            '${displayTemperature.toStringAsFixed(1)}°C',
                             style: TextStyle(
                               color: tempColor,
                               fontSize: 16,

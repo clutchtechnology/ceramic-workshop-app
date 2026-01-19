@@ -364,21 +364,33 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    // 回转窑容器尺寸
-    final rotaryKilnWidth = screenWidth * 0.77;
-    final rotaryKilnHeight = screenHeight * 0.54; // 增加高度 (0.5 -> 0.54)
+    // ═══════════════════════════════════════════════════════════════════════
+    // 新布局设计 (3区块):
+    // ┌─────────────────────────────────────────────────────────────────────┐
+    // │  回转窑第一行: 窑7, 6, 2, 8, 3, 9 (height 0.27, 全宽)
+    // ├───┬───────────────────────────────────┤
+    // │  回转窑第二行: 窑5, 4, 1        │  SCR上层: 氨泵1+燃气+风机2(表66)
+    // │  (height 0.27, width 0.50)      │  (height 0.365, width 0.40)       │
+    // ├─────────────────────────────────┤───────────────────────────────────┤
+    // │  辊道窑                          │  SCR下层: 氨泵2+燃气+风机1(表65)   │
+    // │  (height 0.46, width 0.60)      │  (height 0.365, width 0.40)       │
+    // └─────────────────────────────────┴───────────────────────────────────┘
+    // ═══════════════════════════════════════════════════════════════════════
 
-    // SCR容器尺寸
-    final scrWidth = screenWidth * 0.2;
-    final scrHeight = screenHeight * 0.54; // 增加高度 (0.5 -> 0.54)
+    // 回转窑第一行 (全宽，6个设备)
+    final rotaryRow1Width = screenWidth - 24; // 减去padding
+    final rotaryRow1Height = screenHeight * 0.27;
 
-    // 辊道窑容器尺寸
-    final rollerKilnWidth = screenWidth * 0.72;
-    final rollerKilnHeight = screenHeight * 0.35; // 减小高度 (0.39 -> 0.35)
+    // 辊道窑区域 (左边0.64宽度)
+    final rollerKilnWidth = (screenWidth - 24) * 0.64;
 
-    // 风机容器尺寸
-    final fanWidth = screenWidth * 0.25;
-    final fanHeight = screenHeight * 0.35; // 减小高度 (0.39 -> 0.35)
+    // 回转窑第二行 (与辊道窑同宽)
+    final rotaryRow2Width = rollerKilnWidth;
+    final rotaryRow2Height = screenHeight * 0.27;
+
+    // SCR+风机区域 (右边0.36宽度，从第二行开始)
+    final scrWidth = (screenWidth - 24) * 0.36 - 12; // 减去间距
+    final scrRowHeight = (screenHeight * 0.73 - 8) / 2; // 两行平分高度
 
     return Scaffold(
       backgroundColor: TechColors.bgDeep,
@@ -390,28 +402,44 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 顶部区域 - 回转窑 + SCR
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 左侧 - 回转窑区域
-                  _buildRotaryKilnSection(rotaryKilnWidth, rotaryKilnHeight),
-                  const SizedBox(width: 12),
-                  // 右侧 - SCR区域
-                  _buildScrSection(scrWidth, scrHeight),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // 底部区域 - 辊道窑 + 风机
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 左侧 - 辊道窑
-                  _buildRollerKilnSection(rollerKilnWidth, rollerKilnHeight),
-                  const SizedBox(width: 12),
-                  // 右侧 - 风机
-                  _buildFanSection(fanWidth, fanHeight),
-                ],
+              // ═══════════════════════════════════════════════════════════════
+              // 第一行: 回转窑 (窑7, 6, 2, 8, 3, 9) - 全宽
+              // ═══════════════════════════════════════════════════════════════
+              _buildRotaryKilnRow1(rotaryRow1Width, rotaryRow1Height),
+              const SizedBox(height: 8),
+
+              // ═══════════════════════════════════════════════════════════════
+              // 第二行 + 第三行: 左边回转窑+辊道窑，右边SCR区域
+              // ═══════════════════════════════════════════════════════════════
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 左侧区域: 回转窑第二行 + 辊道窑
+                    SizedBox(
+                      width: rollerKilnWidth,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 回转窑第二行 (窑5, 4, 1)
+                          _buildRotaryKilnRow2(
+                              rotaryRow2Width, rotaryRow2Height),
+                          const SizedBox(height: 8),
+                          // 辊道窑 - 使用 Expanded 填充剩余高度
+                          Expanded(
+                            child: _buildRollerKilnSectionExpanded(
+                                rollerKilnWidth),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // 右侧区域: SCR (上下两层，包含氨泵+燃气+风机)
+                    Expanded(
+                      child: _buildScrWithFanSection(scrWidth, scrRowHeight),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -420,7 +448,59 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     );
   }
 
-  /// 回转窑区域 - 5x2网格布局（9个容器）
+  /// 回转窑第一行 - 6个设备: 窑7, 6, 5, 4, 2, 1 (全宽)
+  Widget _buildRotaryKilnRow1(double width, double height) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: TechPanel(
+        accentColor: TechColors.glowOrange,
+        child: Padding(
+          padding: const EdgeInsets.all(4.0),
+          child: Row(
+            children: [
+              Expanded(flex: 6, child: _buildRotaryKilnCell(7)), // 短窑7
+              const SizedBox(width: 4),
+              Expanded(flex: 6, child: _buildRotaryKilnCell(6)), // 短窑6
+              const SizedBox(width: 4),
+              Expanded(flex: 6, child: _buildRotaryKilnCell(5)), // 短窑5
+              const SizedBox(width: 4),
+              Expanded(flex: 6, child: _buildRotaryKilnCell(4)), // 短窑4
+              const SizedBox(width: 4),
+              Expanded(flex: 5, child: _buildRotaryKilnNoHopperCell(2)), // 无料仓2
+              const SizedBox(width: 4),
+              Expanded(flex: 5, child: _buildRotaryKilnNoHopperCell(1)), // 无料仓1
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 回转窑第二行 - 3个设备: 窑8, 3, 9 (左边区域，长窑)
+  Widget _buildRotaryKilnRow2(double width, double height) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: TechPanel(
+        accentColor: TechColors.glowOrange,
+        child: Padding(
+          padding: const EdgeInsets.all(4.0),
+          child: Row(
+            children: [
+              Expanded(flex: 6, child: _buildRotaryKilnLongCell(8)), // 长窑8
+              const SizedBox(width: 4),
+              Expanded(flex: 6, child: _buildRotaryKilnLongCell(3)), // 长窑3
+              const SizedBox(width: 4),
+              Expanded(flex: 6, child: _buildRotaryKilnLongCell(9)), // 长窑9
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 原回转窑区域方法 - 保留但不再使用（兼容性）
   Widget _buildRotaryKilnSection(double width, double height) {
     return SizedBox(
       width: width,
@@ -582,6 +662,368 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     );
   }
 
+  /// ═══════════════════════════════════════════════════════════════════════
+  /// SCR+风机组合区域 (新布局)
+  /// 上层: 氨泵1(表63) + 燃气 + 风机2(表66)
+  /// 下层: 氨泵2(表64) + 燃气 + 风机1(表65)
+  /// ═══════════════════════════════════════════════════════════════════════
+  Widget _buildScrWithFanSection(double width, double rowHeight) {
+    // 3, 安全获取SCR数据
+    final scrDevices = _scrFanData?.scr.devices;
+    final scrDevice1 =
+        (scrDevices != null && scrDevices.isNotEmpty) ? scrDevices[0] : null;
+    final scrDevice2 =
+        (scrDevices != null && scrDevices.length > 1) ? scrDevices[1] : null;
+
+    // 3, 安全获取风机数据
+    final fanDevices = _scrFanData?.fan.devices;
+    final fan1 =
+        (fanDevices != null && fanDevices.isNotEmpty) ? fanDevices[0] : null;
+    final fan2 =
+        (fanDevices != null && fanDevices.length > 1) ? fanDevices[1] : null;
+
+    final configProvider = context.read<RealtimeConfigProvider>();
+
+    return Column(
+      children: [
+        // 上层: 氨泵1(表63) + 燃气 + 风机2(表66)
+        Expanded(
+          child: _buildScrWithFanRow(
+            scrDevice: scrDevice1,
+            scrIndex: 1,
+            fanDevice: fan2,
+            fanIndex: 2,
+            configProvider: configProvider,
+          ),
+        ),
+        const SizedBox(height: 8),
+        // 下层: 氨泵2(表64) + 燃气 + 风机1(表65)
+        Expanded(
+          child: _buildScrWithFanRow(
+            scrDevice: scrDevice2,
+            scrIndex: 2,
+            fanDevice: fan1,
+            fanIndex: 1,
+            configProvider: configProvider,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 单行SCR+风机组合: 氨泵 + 燃气 + 风机
+  Widget _buildScrWithFanRow({
+    required dynamic scrDevice,
+    required int scrIndex,
+    required dynamic fanDevice,
+    required int fanIndex,
+    required RealtimeConfigProvider configProvider,
+  }) {
+    // SCR数据
+    final scrPower = scrDevice?.elec?.pt ?? 0.0;
+    final scrEnergy = scrDevice?.elec?.impEp ?? 0.0;
+    final flowRate = scrDevice?.gas?.flowRate ?? 0.0;
+    final scrCurrentA = scrDevice?.elec?.currentA ?? 0.0;
+    final scrCurrentB = scrDevice?.elec?.currentB ?? 0.0;
+    final scrCurrentC = scrDevice?.elec?.currentC ?? 0.0;
+
+    final isPumpRunning = configProvider.isScrPumpRunning(scrIndex, scrPower);
+    final isGasRunning = configProvider.isScrGasRunning(scrIndex, flowRate);
+
+    // 风机数据
+    final fanPower = fanDevice?.elec?.pt ?? 0.0;
+    final fanEnergy = fanDevice?.elec?.impEp ?? 0.0;
+    final fanCurrentA = fanDevice?.elec?.currentA ?? 0.0;
+    final fanCurrentB = fanDevice?.elec?.currentB ?? 0.0;
+    final fanCurrentC = fanDevice?.elec?.currentC ?? 0.0;
+    final isFanRunning = configProvider.isFanRunning(fanIndex, fanPower);
+
+    return TechPanel(
+      accentColor: TechColors.glowBlue,
+      child: Padding(
+        padding: const EdgeInsets.all(6.0),
+        child: Row(
+          children: [
+            // 左侧 - 氨泵(水泵)组件 (占4份)
+            Expanded(
+              flex: 4,
+              child: WaterPumpCell(
+                index: scrIndex,
+                isRunning: isPumpRunning,
+                power: scrPower,
+                cumulativeEnergy: scrEnergy,
+                energyConsumption: scrEnergy,
+                currentA: scrCurrentA,
+                currentB: scrCurrentB,
+                currentC: scrCurrentC,
+              ),
+            ),
+            const SizedBox(width: 6),
+            // 中间 - 燃气管组件 (占2份)
+            Expanded(
+              flex: 2,
+              child: GasPipeCell(
+                index: scrIndex,
+                isRunning: isGasRunning,
+                flowRate: flowRate,
+                energyConsumption: scrDevice?.gas?.totalFlow ?? 0.0,
+              ),
+            ),
+            const SizedBox(width: 6),
+            // 右侧 - 风机组件 (占4份)
+            Expanded(
+              flex: 4,
+              child: FanCell(
+                index: fanIndex,
+                isRunning: isFanRunning,
+                power: fanPower,
+                cumulativeEnergy: fanEnergy,
+                currentA: fanCurrentA,
+                currentB: fanCurrentB,
+                currentC: fanCurrentC,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 辊道窑区域 (自适应高度版本) - 用于新布局
+  /// 布局：上方1-6号温区卡片，左下角总电表，背景图居中偏右
+  Widget _buildRollerKilnSectionExpanded(double width) {
+    // 2, 计算辊道窑6个温区的总能耗 (kWh)
+    final totalEnergy = _rollerKilnData?.zones.fold<double>(
+          0.0,
+          (sum, zone) => sum + zone.energy,
+        ) ??
+        0.0;
+
+    // 2, 计算辊道窑6个温区的总功率 (kW)
+    final totalPower = _rollerKilnData?.zones.fold<double>(
+          0.0,
+          (sum, zone) => sum + zone.power,
+        ) ??
+        0.0;
+
+    // 2, 计算辊道窑6个温区的三相总电流 (A)
+    final totalCurrentA = _rollerKilnData?.zones.fold<double>(
+          0.0,
+          (sum, zone) => sum + zone.currentA,
+        ) ??
+        0.0;
+    final totalCurrentB = _rollerKilnData?.zones.fold<double>(
+          0.0,
+          (sum, zone) => sum + zone.currentB,
+        ) ??
+        0.0;
+    final totalCurrentC = _rollerKilnData?.zones.fold<double>(
+          0.0,
+          (sum, zone) => sum + zone.currentC,
+        ) ??
+        0.0;
+
+    // 2, 安全获取温区列表，避免强制解包
+    final zones = _rollerKilnData?.zones;
+
+    return SizedBox(
+      width: width,
+      child: TechPanel(
+        accentColor: TechColors.glowGreen,
+        child: Stack(
+          children: [
+            // 背景图片 - 居中偏右60px显示
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 60), // 右移60px
+                child: Center(
+                  child: Image.asset(
+                    'assets/images/roller_kiln.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.image_not_supported,
+                              color: TechColors.textSecondary.withOpacity(0.5),
+                              size: 48,
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              '辊道窑设备图',
+                              style: TextStyle(
+                                color: TechColors.textSecondary,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+            // 叠加数据层 - 上方温区卡片 + 左下角总电表
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 上方：1-6号温区数据卡片 (水平排列)
+                  SizedBox(
+                    height: 95,
+                    child: Row(
+                      children: List.generate(
+                        6,
+                        (i) {
+                          final zoneIndex = i + 1;
+                          final zone = (zones != null && zones.length > i)
+                              ? zones[i]
+                              : null;
+                          return Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(left: i == 0 ? 0 : 4),
+                              child: _buildRollerKilnDataCard(
+                                '${zoneIndex}号温区',
+                                zone != null
+                                    ? '${zone.temperature.toStringAsFixed(0)}°C'
+                                    : '0°C',
+                                zone != null
+                                    ? '${zone.energy.toStringAsFixed(0)}kWh'
+                                    : '0kWh',
+                                zoneIndex: zoneIndex,
+                                temperatureValue: zone?.temperature,
+                                currentA: zone?.currentA,
+                                currentB: zone?.currentB,
+                                currentC: zone?.currentC,
+                                powerValue: zone?.power,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  // 中间留空，让背景图显示
+                  const Spacer(),
+                  // 左下角：总电表卡片（样式与温区卡片一致，字体+2）
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: TechColors.bgDeep.withOpacity(0.85),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: TechColors.glowCyan.withOpacity(0.4),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 功率
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const PowerIcon(
+                                size: 18, color: TechColors.glowCyan),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${totalPower.toStringAsFixed(1)}kW',
+                              style: const TextStyle(
+                                color: TechColors.glowCyan,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        // 能耗
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            EnergyIcon(size: 18, color: TechColors.glowOrange),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${totalEnergy.toStringAsFixed(1)}kWh',
+                              style: const TextStyle(
+                                color: TechColors.glowOrange,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        // A相电流
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CurrentIcon(color: TechColors.glowCyan, size: 18),
+                            Text(
+                              'A:${totalCurrentA.toStringAsFixed(1)}A',
+                              style: const TextStyle(
+                                color: TechColors.glowCyan,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        // B相电流
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CurrentIcon(color: TechColors.glowCyan, size: 18),
+                            Text(
+                              'B:${totalCurrentB.toStringAsFixed(1)}A',
+                              style: const TextStyle(
+                                color: TechColors.glowCyan,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        // C相电流
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CurrentIcon(color: TechColors.glowCyan, size: 18),
+                            Text(
+                              'C:${totalCurrentC.toStringAsFixed(1)}A',
+                              style: const TextStyle(
+                                color: TechColors.glowCyan,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Roboto Mono',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// 辊道窑区域 - 显示设备图片
   Widget _buildRollerKilnSection(double width, double height) {
     // 2, 计算辊道窑6个温区的总能耗 (kWh)
@@ -625,13 +1067,15 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
         accentColor: TechColors.glowGreen,
         child: Stack(
           children: [
-            // 背景图片 - 占满整个空间
-            Center(
+            // 背景图片 - 右移40px显示
+            Positioned(
+              right: -40,
+              top: 0,
+              bottom: 0,
+              left: 40,
               child: Image.asset(
                 'assets/images/roller_kiln.png',
                 fit: BoxFit.contain,
-                width: double.infinity,
-                height: double.infinity,
                 errorBuilder: (context, error, stackTrace) {
                   return Center(
                     child: Column(
@@ -662,7 +1106,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
               left: 0,
               right: 0,
               child: SizedBox(
-                height: 120,
+                height: 150,
                 // 2, 根据辊道窑温区数据渲染温度卡片
                 child: Row(
                   children: zones?.asMap().entries.map((entry) {
@@ -982,7 +1426,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                             CurrentIcon(color: TechColors.glowCyan, size: 16),
                             Flexible(
                               child: Text(
-                                'A:${currentA.toStringAsFixed(1)}',
+                                'A:${currentA.toStringAsFixed(1)}A',
                                 style: const TextStyle(
                                   color: TechColors.glowCyan,
                                   fontSize: 15,
@@ -1002,7 +1446,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                             CurrentIcon(color: TechColors.glowCyan, size: 16),
                             Flexible(
                               child: Text(
-                                'B:${currentB.toStringAsFixed(1)}',
+                                'B:${currentB.toStringAsFixed(1)}A',
                                 style: const TextStyle(
                                   color: TechColors.glowCyan,
                                   fontSize: 15,
@@ -1022,7 +1466,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                             CurrentIcon(color: TechColors.glowCyan, size: 16),
                             Flexible(
                               child: Text(
-                                'C:${currentC.toStringAsFixed(1)}',
+                                'C:${currentC.toStringAsFixed(1)}A',
                                 style: const TextStyle(
                                   color: TechColors.glowCyan,
                                   fontSize: 15,
