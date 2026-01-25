@@ -97,6 +97,11 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
     // 2, [CRITICAL] 取消时钟定时器，防止内存泄漏
     _clockTimer?.cancel();
     _clockTimer = null;
+
+    // 🔧 确保所有子页面的 Timer 都被取消
+    _pausePagePolling(0);
+    _pausePagePolling(2);
+
     windowManager.removeListener(this);
     super.dispose();
   }

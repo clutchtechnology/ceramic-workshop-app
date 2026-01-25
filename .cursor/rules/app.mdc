@@ -2,64 +2,108 @@
 alwaysApply: true
 ---
 
-# Flutter 工业监控应用模板
+# 磨料车间 Flutter 监控应用规范
 
-> **使用说明**: 复制此模板，修改 `[占位符]` 内容即可快速生成新项目的 AI 提示词。
+> **核心原则**: 奥卡姆剃刀 - 简单、直接、够用即可
 
 ---
 
-## 1. 项目定义 (必填)
+## 1. 项目定义
 
 ```yaml
-项目名称: [ceramic-workshop-app]
-应用类型: Windows 桌面工业监控
-目标分辨率: [1920×1080] 触摸屏
-数据源: [Siemens S7-1200 PLC / REST API / MQTT]
+项目名称: ceramic-workshop-app
+应用类型: Windows 桌面工业监控 (全屏触摸屏)
+目标分辨率: 1920×1080
+数据源: REST API (后端聚合 PLC 数据)
+后端地址: http://localhost:8080
 ```
 
 ---
 
-## 2. 监控设备清单 (按需修改)
+## 2. 监控设备清单
 
-| 设备名称 | 数量 | 分区/参数 | 数据块 |
-|---------|------|----------|--------|
-| [辊道窑] | [1台] | [3段: 温度+能耗] | [DB10] |
-| [回转窑] | [3台] | [每台8温区+下料+料仓] | [DB20] |
-| [SCR设备] | [2套] | [风机+氨水泵+燃气×2] | [DB30] |
+| 设备类型 | 数量 | 关键参数 | 数据块 | 刷新周期 |
+|---------|------|---------|--------|---------|
+| 回转窑 | 9台 | 温度+功率+料仓+下料 | DB3 | 5秒 |
+| 辊道窑 | 1台 | 6温区×(温度+功率+电流) | DB7 | 5秒 |
+| SCR设备 | 2套 | 功率+能耗+流量 | DB11 | 5秒 |
+| 风机 | 2台 | 功率+能耗+电流 | DB11 | 5秒 |
+
+**设备映射**:
+- 回转窑: 窑7,6,5,4 (短料仓) + 窑2,1 (无料仓) + 窑8,3,9 (长料仓)
+- 辊道窑: 6个温区 (zone1-zone6)
+- SCR: SCR1(表63) + SCR2(表64)
+- 风机: 风机1(表65) + 风机2(表66)
 
 ---
 
-## 3. 架构规范
+## 3. 架构规范 (奥卡姆剃刀)
 
 ### 目录结构
 ```
 lib/
-├── main.dart                 # 入口, 窗口初始化
-├── api/                      # HTTP/PLC 通信接口
-├── models/                   # 数据模型
-├── services/                 # 业务逻辑, 数据采集
-├── providers/                # 状态管理 (Provider)
-├── pages/                    # 页面
+├── main.dart                 # 入口 + 窗口初始化 + 全局资源管理
+├── api/
+│   ├── api.dart             # API 端点定义
+│   └── index.dart           # HTTP Client (单例)
+├── models/                   # 数据模型 (纯数据类)
+│   ├── hopper_model.dart    # 回转窑数据
+│   ├── roller_kiln_model.dart  # 辊道窑数据
+│   └── scr_fan_model.dart   # SCR+风机数据
+├── services/                 # 数据获取 (只负责 API 调用)
+│   ├── hopper_service.dart
+│   ├── roller_kiln_service.dart
+│   └── scr_fan_service.dart
+├── providers/                # 配置管理 (Provider)
+│   ├── realtime_config_provider.dart  # 阈值配置
+│   └── admin_provider.dart            # 管理员密码
+├── pages/                    # 页面 (4个)
+│   ├── top_bar.dart         # 顶部导航 + 页面切换
+│   ├── realtime_dashboard_page.dart  # 实时大屏
+│   ├── data_history_page.dart        # 历史数据
+│   ├── sensor_status_page.dart       # 状态监控
+│   └── settings_page.dart            # 系统配置
 ├── widgets/                  # 可复用组件
+│   ├── realtime_dashboard/  # 实时大屏组件
+│   ├── data_display/        # 历史数据组件
+│   └── icons/               # 自定义图标
 └── utils/                    # 工具类
+    ├── app_logger.dart      # 日志系统
+    ├── timer_manager.dart   # Timer 统一管理
+    ├── request_watchdog.dart  # 网络请求监控
+    └── performance_monitor.dart  # 性能监控
 ```
 
-### 数据流
+### 数据流 (单向流动)
 ```
-数据源 → api/ → services/ → providers/ → pages/widgets/
-              ↓
-        MockClient (开发模式)
+后端API → Service → ValueNotifier → UI
+         ↓
+      本地缓存 (离线恢复)
 ```
+
+**规则**:
+1. Service 只负责获取数据，不处理业务逻辑
+2. ValueNotifier 替代 setState，减少重建
+3. UI 只读取数据，不修改数据
+4. 缓存仅用于 App 重启恢复，不参与实时逻辑
 
 ### 核心依赖
 ```yaml
 dependencies:
-  flutter_riverpod: ^2.0.0    # 状态管理
-  fl_chart: ^0.65.0           # 图表
-  window_manager: ^0.3.0      # 窗口控制
-  dio: ^5.0.0                 # HTTP (如需)
-  # dart_snap7: ^x.x.x        # PLC通信 (如需)
+  provider: ^6.1.2           # 状态管理 (配置数据)
+  fl_chart: ^0.68.0          # 图表
+  window_manager: ^0.3.9     # 窗口控制
+  http: ^1.2.0               # HTTP Client
+  shared_preferences: ^2.2.3 # 本地存储
+  path_provider: ^2.1.3      # 文件路径
+  logger: ^2.3.0             # 日志
 ```
+
+**不使用**:
+- ❌ Riverpod (过度复杂)
+- ❌ Dio (http 包足够)
+- ❌ GetX (不符合 Flutter 规范)
+- ❌ BLoC (过度抽象)
 
 ---
 
@@ -127,82 +171,363 @@ blue: #2196f3, cyan: #00bcd4, orange: #ff9800, purple: #9c27b0
 
 ---
 
-## 6. 代码模式
+## 6. 状态管理 (2 层结构)
 
-### Service 模式
+### 层 1: 实时数据 (ValueNotifier)
+```dart
+// 页面级状态，5秒刷新
+final ValueNotifier<Map<String, HopperData>> _hopperDataNotifier = ValueNotifier({});
+final ValueNotifier<RollerKilnData?> _rollerKilnDataNotifier = ValueNotifier(null);
+final ValueNotifier<ScrFanBatchData?> _scrFanDataNotifier = ValueNotifier(null);
+```
+
+### 层 2: 配置数据 (Provider)
+```dart
+// 全局配置，启动时加载，手动保存
+RealtimeConfigProvider: 温度阈值、功率阈值、料仓容量
+AdminProvider: 管理员密码
+BackendConfigProvider: 后端地址
+```
+
+**规则**:
+- 实时数据用 ValueNotifier (频繁变化)
+- 配置数据用 Provider (偶尔变化)
+- 不混用，不嵌套
+
+---
+
+## 7. 代码模式 (3 个模板)
+
+### 模板 1: Service (数据获取)
 ```dart
 class DeviceService {
-  final String baseUrl;
-  DeviceService(this.baseUrl);
+  final ApiClient _client = ApiClient();
   
-  Future<DeviceData> fetchData() async {
-    // 实现数据获取
+  Future<DeviceData> getData() async {
+    try {
+      final response = await _client.get('/api/device');
+      if (response['success'] == true) {
+        return DeviceData.fromJson(response['data']);
+      }
+      return null;
+    } catch (e) {
+      logger.error('获取数据失败', e);
+      return null;
+    }
   }
 }
 ```
 
-### Provider 模式
+### 模板 2: Page (页面逻辑)
 ```dart
-final deviceProvider = StateNotifierProvider<DeviceNotifier, DeviceState>((ref) {
-  return DeviceNotifier(ref.read(deviceServiceProvider));
-});
-```
-
-### 页面模式
-```dart
-class MonitorPage extends ConsumerStatefulWidget {
+class DevicePage extends StatefulWidget {
   @override
-  ConsumerState<MonitorPage> createState() => _MonitorPageState();
+  State<DevicePage> createState() => _DevicePageState();
 }
 
-class _MonitorPageState extends ConsumerState<MonitorPage> {
-  Timer? _refreshTimer;
-  
+class _DevicePageState extends State<DevicePage> {
+  final ValueNotifier<DeviceData?> _dataNotifier = ValueNotifier(null);
+  late final RealtimeConfigProvider _config;
+
   @override
   void initState() {
     super.initState();
-    _startAutoRefresh();
+    // 🔧 缓存 Provider 引用
+    _config = context.read<RealtimeConfigProvider>();
+    
+    // 🔧 使用 TimerManager 管理定时器
+    TimerManager().register(
+      'device_page_polling',
+      Duration(seconds: 5),
+      _fetchData,
+      description: '设备数据轮询',
+    );
+    
+    _fetchData();
   }
-  
-  void _startAutoRefresh() {
-    _refreshTimer = Timer.periodic(Duration(seconds: 1), (_) {
-      ref.read(deviceProvider.notifier).refresh();
-    });
+
+  Future<void> _fetchData() async {
+    if (!mounted) return;
+    
+    final data = await DeviceService().getData();
+    if (mounted && data != null) {
+      _dataNotifier.value = data;
+    }
   }
-  
+
   @override
   void dispose() {
-    _refreshTimer?.cancel();
+    TimerManager().cancel('device_page_polling');
+    _dataNotifier.dispose();
     super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<DeviceData?>(
+      valueListenable: _dataNotifier,
+      builder: (context, data, child) {
+        return DeviceWidget(data: data, config: _config);
+      },
+    );
+  }
+}
+```
+
+### 模板 3: Widget (UI 组件)
+```dart
+class DeviceWidget extends StatelessWidget {
+  final DeviceData? data;
+  final RealtimeConfigProvider config;
+
+  const DeviceWidget({required this.data, required this.config});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = config.getColor(data?.value ?? 0);
+    return Container(
+      color: color,
+      child: Text('${data?.value ?? 0}'),
+    );
   }
 }
 ```
 
 ---
 
-## 7. 开发命令
+## 8. 业务规则 (3 条核心逻辑)
 
-```powershell
-flutter run -d windows          # 开发运行
-flutter build windows           # 生产构建
+### 规则 1: 设备运行判断
+```dart
+// 功率 >= 阈值 → 运行中
+bool isRunning = power >= config.normalMax;
+```
+
+### 规则 2: 状态颜色映射 (ISA-101 标准)
+```dart
+if (value <= normalMax) return Color(0xFF00e676);  // 绿色 - 正常
+if (value <= warningMax) return Color(0xFFffea00); // 黄色 - 警告
+return Color(0xFFff1744);                          // 红色 - 报警
+```
+
+### 规则 3: 料仓容量计算
+```dart
+// 当前重量 / 最大容量 × 100%
+double percentage = (currentWeight / maxCapacity) * 100;
 ```
 
 ---
 
-## 8. 常见问题
+## 9. 性能优化 (3 个关键点)
 
-| 问题 | 解决方案 |
-|-----|---------|
-| VS 2019 required | Flutter 3.22.x 需要 VS 2019 Build Tools |
-| DLL missing | 将依赖 DLL 放入 `build/windows/x64/runner/Debug/` |
-| 窗口不全屏 | 检查 `window_manager` 初始化顺序 |
+### 优化 1: 减少重建
+```dart
+// ❌ 错误: 整页 setState
+setState(() => data = newData);
+
+// ✅ 正确: 局部 ValueNotifier
+dataNotifier.value = newData;
+```
+
+### 优化 2: 缓存查找
+```dart
+// ❌ 错误: 每次 build 查找
+context.read<Provider>().getConfig(id);
+
+// ✅ 正确: initState 缓存
+late final provider = context.read<Provider>();
+```
+
+### 优化 3: Timer 管理
+```dart
+// ❌ 错误: 手动管理 Timer
+Timer? _timer;
+_timer = Timer.periodic(...);
+_timer?.cancel();
+
+// ✅ 正确: 使用 TimerManager
+TimerManager().register('id', Duration(seconds: 5), callback);
+TimerManager().cancel('id');
+```
 
 ---
 
-## 快速开始新项目
+## 10. 错误处理 (2 级容错)
 
-1. **复制此模板**到新项目 `.cursor/rules/app.mdc`
-2. **修改第1节**: 项目名称、数据源类型
-3. **修改第2节**: 设备清单、参数配置
-4. **保留第3-8节**: 通用架构和规范
-5. **开始开发**: AI 将按此规范生成代码
+### 级别 1: 静默失败 (保持旧数据)
+```dart
+try {
+  newData = await fetchData();
+  if (newData != null && newData.isValid) {
+    notifier.value = newData; // 更新
+  }
+  // 如果无效，保持旧数据不变
+} catch (e) {
+  logger.error('数据获取失败', e);
+  // 不清空数据，UI 继续显示旧值
+}
+```
+
+### 级别 2: 用户提示 (连续失败)
+```dart
+if (consecutiveFailures >= 3) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text('网络异常，请检查后端服务')),
+  );
+}
+```
+
+---
+
+## 11. 代码审查清单
+
+### 必查项
+- [ ] 所有 Timer 在 dispose 时取消
+- [ ] 所有 setState 前检查 mounted
+- [ ] 所有网络请求有超时控制 (10秒)
+- [ ] 所有 ValueNotifier 在 dispose 时释放
+- [ ] 所有 Provider 在 initState 时缓存
+
+### 禁止项
+- [ ] ❌ 在 build() 中调用 context.read()
+- [ ] ❌ 在 initState() 中调用 setState()
+- [ ] ❌ 在 dispose() 后访问 State
+- [ ] ❌ 在循环中创建 Widget
+- [ ] ❌ 在 Timer 回调中不检查 mounted
+
+---
+
+## 12. 开发命令
+
+```powershell
+# 开发运行
+flutter run -d windows
+
+# 生产构建
+flutter build windows --release
+
+# 代码分析
+flutter analyze
+
+# 诊断问题
+.\diagnose.ps1
+```
+
+---
+
+## 13. 常见问题
+
+| 问题 | 原因 | 解决方案 |
+|------|------|---------|
+| 应用卡死 | setState 过多 | 改用 ValueNotifier |
+| 内存泄漏 | Timer 未取消 | 使用 TimerManager |
+| 数据丢失 | 空数据覆盖 | 检查 isValid 再更新 |
+| 网络超时 | 后端慢/断开 | 增加超时 + 重试 |
+| UI 不更新 | 未用 Builder | 包裹 ValueListenableBuilder |
+| VS 2019 required | Flutter 版本 | 安装 VS 2019 Build Tools |
+| DLL missing | 依赖缺失 | 复制 DLL 到 Debug 目录 |
+
+---
+
+## 14. 禁止事项 (奥卡姆剃刀)
+
+### ❌ 过度设计
+```dart
+// 不需要: 复杂的状态机、事件总线、依赖注入框架
+// 只需要: ValueNotifier + Provider
+```
+
+### ❌ 过早优化
+```dart
+// 不需要: Isolate、缓存池、对象池
+// 只需要: 减少 setState、缓存 Provider
+```
+
+### ❌ 过度抽象
+```dart
+// 不需要: BaseService、BaseProvider、BaseWidget
+// 只需要: 3 个模板 (Service/Page/Widget)
+```
+
+### ❌ 过度配置
+```dart
+// 不需要: 环境变量、配置文件、特性开关
+// 只需要: 硬编码 + SharedPreferences
+```
+
+### ❌ 随意生成文档
+```
+// 禁止: 未经用户明确要求，主动创建 README.md、CHANGELOG.md、TODO.md 等文档
+// 原则: 只在用户明确要求时才创建文档文件
+// 例外: 代码注释和 inline 文档始终允许
+```
+
+**重要规则**:
+- ❌ 不要主动创建 `*.md` 文件（除非用户明确要求）
+- ❌ 不要主动创建 `docs/` 目录
+- ❌ 不要主动创建 `README.md`、`CHANGELOG.md`、`TODO.md`
+- ✅ 可以在代码中添加注释和文档字符串
+- ✅ 可以在对话中提供文档内容（但不写入文件）
+- ✅ 只有当用户明确说"创建文档"、"生成 README"时才创建
+
+**文档目录规范**:
+- 📁 所有项目文档统一存放在 `vdoc/` 目录
+- 📝 文档命名规则：小写字母 + 下划线（如 `performance_fixes.md`）
+- 📚 现有文档清单：
+  - `batch_api_integration.md` - 批量 API 集成文档
+  - `http_request_optimization.md` - HTTP 请求优化文档
+  - `performance_fixes.md` - 性能修复文档
+  - `testing_checklist.md` - 测试清单
+  - `widget_rebuild_optimization.md` - Widget 重建优化文档
+  - `refactor.md` - 重构记录
+  - `readme_solution.md` - 解决方案说明
+  - `plc_data_structure_analysis.md` - PLC 数据结构分析
+  - `plc_db40_data_structure.md` - PLC DB40 数据结构
+  - `rotary_kiln_ui_design_ascii.md` - 回转窑 UI 设计
+  - `pages_directory_structure.md` - 页面目录结构
+  - `pages_directory_organization_summary.md` - 页面目录组织总结
+
+---
+
+## 15. 快速参考
+
+### 数据刷新
+```dart
+// 启动轮询
+TimerManager().register('id', Duration(seconds: 5), callback);
+
+// 暂停轮询
+TimerManager().cancel('id');
+
+// 手动刷新
+await fetchData();
+```
+
+### 状态更新
+```dart
+// 更新数据
+dataNotifier.value = newData;
+
+// 监听数据
+ValueListenableBuilder(
+  valueListenable: dataNotifier,
+  builder: (context, data, child) => Widget(data),
+)
+```
+
+### 配置读取
+```dart
+// 缓存 Provider
+late final config = context.read<RealtimeConfigProvider>();
+
+// 读取配置
+final color = config.getRotaryKilnTempColor(deviceId, temperature);
+final isRunning = config.isRotaryKilnRunning(deviceId, power);
+```
+
+---
+
+**文档版本**: v2.0  
+**适用项目**: ceramic-workshop-app  
+**核心原则**: 奥卡姆剃刀 - 简单、直接、够用即可  
+**更新日期**: 2026-01-26

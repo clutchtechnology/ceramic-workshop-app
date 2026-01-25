@@ -1,0 +1,469 @@
+---
+alwaysApply: true
+---
+## 2. 数据流 (单向流动)
+
+```
+后端API → Service → ValueNotifier → UI
+         ↓
+      本地缓存 (离线恢复)
+```
+
+**规则**:
+1. Service 只负责获取数据，不处理业务逻辑
+2. ValueNotifier 替代 setState，减少重建
+3. UI 只读取数据，不修改数据
+4. 缓存仅用于 App 重启恢复，不参与实时逻辑
+
+---
+
+## 3. 状态管理 (2 层结构)
+
+### 层 1: 实时数据 (ValueNotifier)
+```dart
+// 页面级状态，5秒刷新
+ValueNotifier<Map<String, HopperData>> hopperData
+ValueNotifier<RollerKilnData?> rollerKilnData
+ValueNotifier<ScrFanBatchData?> scrFanData
+```
+
+### 层 2: 配置数据 (Provider)
+```dart
+// 全局配置，启动时加载，手动保存
+RealtimeConfigProvider: 温度阈值、功率阈值、料仓容量
+AdminProvider: 管理员密码
+BackendConfigProvider: 后端地址
+```
+
+**规则**:
+- 实时数据用 ValueNotifier (频繁变化)
+- 配置数据用 Provider (偶尔变化)
+- 不混用，不嵌套
+
+---
+
+## 4. 业务规则 (3 条核心逻辑)
+
+### 规则 1: 设备运行判断
+```dart
+// 功率 >= 阈值 → 运行中
+bool isRunning = power >= config.normalMax;
+```
+
+### 规则 2: 状态颜色映射
+```dart
+// 温度/功率 → 颜色 (ISA-101 标准)
+if (value <= normalMax) return GREEN;
+if (value <= warningMax) return YELLOW;
+return RED;
+```
+
+### 规则 3: 料仓容量计算
+```dart
+// 当前重量 / 最大容量 × 100%
+double percentage = (currentWeight / maxCapacity) * 100;
+```
+
+**禁止**:
+- ❌ 复杂的状态机
+- ❌ 多层条件嵌套
+- ❌ 业务逻辑分散在 UI 层
+
+---
+
+## 5. 数据刷新策略 (3 种模式)
+
+### 模式 1: 实时轮询 (5秒)
+```dart
+// 实时大屏、状态监控
+TimerManager.register('page_id', Duration(seconds: 5), fetchData);
+```
+
+### 模式 2: 按需查询 (用户触发)
+```dart
+// 历史数据页面
+onButtonPressed() => fetchHistoryData(startTime, endTime);
+```
+
+### 模式 3: 缓存恢复 (启动时)
+```dart
+// App 启动时加载上次数据
+await loadCache() → 显示旧数据 → fetchData() → 更新为新数据
+```
+
+**规则**:
+- 隐藏页面必须暂停轮询 (pausePolling)
+- 显示页面必须恢复轮询 (resumePolling)
+- 所有 Timer 必须在 dispose 时取消
+
+---
+
+## 6. 错误处理 (2 级容错)
+
+### 级别 1: 静默失败 (保持旧数据)
+```dart
+try {
+  newData = await fetchData();
+  if (newData.isValid) {
+    notifier.value = newData; // 更新
+  }
+  // 如果无效，保持旧数据不变
+} catch (e) {
+  logger.error(e);
+  // 不清空数据，UI 继续显示旧值
+}
+```
+
+### 级别 2: 用户提示 (连续失败)
+```dart
+if (consecutiveFailures >= 3) {
+  showSnackBar('网络异常，请检查后端服务');
+}
+```
+
+**规则**:
+- 单次失败 → 静默，保持旧数据
+- 连续失败 → 提示，但不阻塞 UI
+- 致命错误 → 记录日志，显示错误页
+
+---
+
+## 7. 性能优化 (3 个关键点)
+
+### 优化 1: 减少重建
+```dart
+// ❌ 错误: 整页 setState
+setState(() => data = newData);
+
+// ✅ 正确: 局部 ValueNotifier
+dataNotifier.value = newData;
+```
+
+### 优化 2: 缓存查找
+```dart
+// ❌ 错误: 每次 build 查找
+context.read<Provider>().getConfig(id);
+
+// ✅ 正确: initState 缓存
+late final provider = context.read<Provider>();
+```
+
+### 优化 3: 节流保存
+```dart
+// ❌ 错误: 每次数据变化都保存
+onDataChanged() => saveToFile();
+
+// ✅ 正确: 30秒节流
+if (now - lastSave > 30s) saveToFile();
+```
+
+---
+
+## 8. API 设计 (RESTful 简化版)
+
+### 端点规范
+```
+GET  /api/{device}/realtime/batch  → 批量实时数据
+GET  /api/{device}/{id}/history    → 单设备历史
+GET  /api/health                   → 健康检查
+POST /api/config/{type}            → 更新配置
+```
+
+### 响应格式
+```json
+{
+  "success": true,
+  "data": { ... },
+  "error": null,
+  "timestamp": "2026-01-26T10:30:00Z"
+}
+```
+
+**规则**:
+- 批量接口优先 (减少请求次数)
+- 统一响应格式 (简化解析)
+- 超时 10 秒 (防止卡死)
+
+---
+
+## 9. 代码模式 (3 个模板)
+
+### 模板 1: Service (数据获取)
+```dart
+class DeviceService {
+  Future<DeviceData> getData() async {
+    final response = await ApiClient().get('/api/device');
+    return DeviceData.fromJson(response['data']);
+  }
+}
+```
+
+### 模板 2: Page (页面逻辑)
+```dart
+class DevicePage extends StatefulWidget {
+  @override
+  State<DevicePage> createState() => _DevicePageState();
+}
+
+class _DevicePageState extends State<DevicePage> {
+  final ValueNotifier<DeviceData?> _dataNotifier = ValueNotifier(null);
+  late final ConfigProvider _config;
+
+  @override
+  void initState() {
+    super.initState();
+    _config = context.read<ConfigProvider>();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    final data = await DeviceService().getData();
+    _dataNotifier.value = data;
+  }
+
+  @override
+  void dispose() {
+    _dataNotifier.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<DeviceData?>(
+      valueListenable: _dataNotifier,
+      builder: (context, data, child) {
+        return DeviceWidget(data: data, config: _config);
+      },
+    );
+  }
+}
+```
+
+### 模板 3: Widget (UI 组件)
+```dart
+class DeviceWidget extends StatelessWidget {
+  final DeviceData? data;
+  final ConfigProvider config;
+
+  const DeviceWidget({required this.data, required this.config});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = config.getColor(data?.value ?? 0);
+    return Container(
+      color: color,
+      child: Text('${data?.value ?? 0}'),
+    );
+  }
+}
+```
+
+---
+
+## 10. 禁止事项 (奥卡姆剃刀)
+
+### ❌ 过度设计
+```dart
+// 不需要: 复杂的状态机、事件总线、依赖注入框架
+// 只需要: ValueNotifier + Provider
+```
+
+### ❌ 过早优化
+```dart
+// 不需要: Isolate、缓存池、对象池
+// 只需要: 减少 setState、缓存 Provider
+```
+
+### ❌ 过度抽象
+```dart
+// 不需要: BaseService、BaseProvider、BaseWidget
+// 只需要: 3 个模板 (Service/Page/Widget)
+```
+
+### ❌ 过度配置
+```dart
+// 不需要: 环境变量、配置文件、特性开关
+// 只需要: 硬编码 + SharedPreferences
+```
+
+### ❌ 随意生成文档
+```
+// 禁止: 未经用户明确要求，主动创建 README.md、CHANGELOG.md、TODO.md 等文档
+// 原则: 只在用户明确要求时才创建文档文件
+// 例外: 代码注释和 inline 文档始终允许
+```
+
+**重要规则**:
+- ❌ 不要主动创建 `*.md` 文件（除非用户明确要求）
+- ❌ 不要主动创建 `docs/` 目录
+- ❌ 不要主动创建 `README.md`、`CHANGELOG.md`、`TODO.md`
+- ✅ 可以在代码中添加注释和文档字符串
+- ✅ 可以在对话中提供文档内容（但不写入文件）
+- ✅ 只有当用户明确说"创建文档"、"生成 README"时才创建
+
+---
+
+## 11. 开发流程 (5 步)
+
+```
+1. 定义 Model (数据结构)
+   ↓
+2. 实现 Service (API 调用)
+   ↓
+3. 创建 Page (页面逻辑)
+   ↓
+4. 设计 Widget (UI 组件)
+   ↓
+5. 测试 (手动测试 + 日志)
+```
+
+**规则**:
+- 自顶向下 (先整体后细节)
+- 增量开发 (先核心后扩展)
+- 快速迭代 (先能用后优化)
+
+---
+
+## 12. 调试策略 (3 个工具)
+
+### 工具 1: 日志
+```dart
+logger.info('数据刷新: ${data.length} 条');
+logger.error('网络异常', error, stackTrace);
+```
+
+### 工具 2: 诊断脚本
+```powershell
+.\diagnose.ps1  # 检查进程、日志、网络
+```
+
+### 工具 3: 性能监控
+```dart
+PerformanceMonitor(
+  name: 'PageName',
+  child: YourWidget(),
+)
+```
+
+---
+
+## 13. 代码审查清单
+
+### 必查项
+- [ ] 所有 Timer 在 dispose 时取消
+- [ ] 所有 setState 前检查 mounted
+- [ ] 所有网络请求有超时控制
+- [ ] 所有 ValueNotifier 在 dispose 时释放
+- [ ] 所有 Provider 在 initState 时缓存
+
+### 禁止项
+- [ ] ❌ 在 build() 中调用 context.read()
+- [ ] ❌ 在 initState() 中调用 setState()
+- [ ] ❌ 在 dispose() 后访问 State
+- [ ] ❌ 在循环中创建 Widget
+- [ ] ❌ 在 Timer 回调中不检查 mounted
+
+---
+
+## 14. 快速参考
+
+### 数据刷新
+```dart
+// 启动轮询
+TimerManager().register('id', Duration(seconds: 5), callback);
+
+// 暂停轮询
+TimerManager().cancel('id');
+
+// 手动刷新
+await fetchData();
+```
+
+### 状态更新
+```dart
+// 更新数据
+dataNotifier.value = newData;
+
+// 监听数据
+ValueListenableBuilder(
+  valueListenable: dataNotifier,
+  builder: (context, data, child) => Widget(data),
+)
+```
+
+### 配置读取
+```dart
+// 缓存 Provider
+late final config = context.read<ConfigProvider>();
+
+// 读取配置
+final color = config.getColor(value);
+final threshold = config.getThreshold(deviceId);
+```
+
+---
+
+## 15. 常见问题速查
+
+| 问题 | 原因 | 解决方案 |
+|------|------|---------|
+| 卡死 | setState 过多 | 改用 ValueNotifier |
+| 内存泄漏 | Timer 未取消 | 使用 TimerManager |
+| 数据丢失 | 空数据覆盖 | 检查 isValid 再更新 |
+| 网络超时 | 后端慢/断开 | 增加超时 + 重试 |
+| UI 不更新 | 未用 Builder | 包裹 ValueListenableBuilder |
+
+---
+
+## 附录: 完整示例
+
+### 最小可用页面 (50 行)
+```dart
+import 'package:flutter/material.dart';
+
+class MinimalPage extends StatefulWidget {
+  @override
+  State<MinimalPage> createState() => _MinimalPageState();
+}
+
+class _MinimalPageState extends State<MinimalPage> {
+  final ValueNotifier<int> _counter = ValueNotifier(0);
+
+  @override
+  void initState() {
+    super.initState();
+    TimerManager().register(
+      'counter',
+      Duration(seconds: 1),
+      () => _counter.value++,
+    );
+  }
+
+  @override
+  void dispose() {
+    TimerManager().cancel('counter');
+    _counter.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: ValueListenableBuilder<int>(
+          valueListenable: _counter,
+          builder: (context, count, child) {
+            return Text('$count', style: TextStyle(fontSize: 48));
+          },
+        ),
+      ),
+    );
+  }
+}
+```
+
+---
+
+**文档版本**: v1.0  
+**适用项目**: ceramic-workshop-app  
+**核心原则**: 简单、直接、够用即可

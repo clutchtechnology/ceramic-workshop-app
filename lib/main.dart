@@ -9,6 +9,7 @@ import 'pages/top_bar.dart';
 import 'providers/realtime_config_provider.dart';
 import 'providers/admin_provider.dart';
 import 'utils/app_logger.dart';
+import 'utils/timer_manager.dart';
 import 'api/index.dart';
 
 void main() async {
@@ -123,13 +124,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     logger.lifecycle('开始清理资源...');
 
-    // 1. 关闭 HTTP Client
+    // 1. 🔧 [CRITICAL] 关闭所有 Timer（最优先）
+    TimerManager().shutdown();
+
+    // 2. 关闭 HTTP Client
     ApiClient.dispose();
 
-    // 2. 清理 Provider 资源（如果有）
+    // 3. 清理 Provider 资源（如果有）
     // widget.realtimeConfigProvider.dispose(); // 如果 Provider 有 dispose
 
-    // 3. 关闭日志系统（最后执行）
+    // 4. 关闭日志系统（最后执行）
     logger.lifecycle('资源清理完成');
     logger.close();
   }

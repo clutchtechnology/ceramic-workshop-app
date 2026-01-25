@@ -18,6 +18,7 @@ import '../widgets/realtime_dashboard/real_fan_cell.dart';
 import '../widgets/realtime_dashboard/real_water_pump_cell.dart';
 import '../widgets/realtime_dashboard/real_gas_pipe_cell.dart';
 import '../utils/app_logger.dart';
+import '../utils/timer_manager.dart';
 
 /// 实时大屏页面
 /// 用于展示实时生产数据和监控信息
@@ -38,7 +39,8 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   // 核心业务数据 (序号关联注释法)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Timer? _timer;
+  // 🔧 [CRITICAL] Timer ID 常量
+  static const String _timerIdRealtime = 'realtime_dashboard_polling';
 
   // 1, 料仓数据 - 9台回转窑 (短窑4台 + 无料仓2台 + 长窑3台)
   Map<String, HopperData> _hopperData = {};
@@ -57,11 +59,10 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   int _failCount = 0;
   DateTime? _lastSuccessTime;
   DateTime? _lastUIRefreshTime;
-  int _consecutiveSkips = 0;
 
   // 🔧 [CRITICAL] 防止 _isRefreshing 卡死的保护机制
   DateTime? _refreshStartTime; // 记录请求开始时间
-  static const int _maxRefreshDurationSeconds = 20; // 最大允许刷新时长
+  static const int _maxRefreshDurationSeconds = 15; // 🔧 缩短到 15 秒
 
   // 🔧 [CRITICAL] 网络异常时的退避策略
   int _consecutiveFailures = 0; // 连续失败次数
@@ -92,59 +93,57 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
 
   /// 🔧 暂停定时器（页面不可见时调用）
   void pausePolling() {
-    if (_timer != null && _timer!.isActive) {
-      _timer?.cancel();
-      _timer = null;
-      logger.info('RealtimeDashboardPage: 轮询已暂停');
-    }
+    TimerManager().pause(_timerIdRealtime);
+    logger.info('RealtimeDashboardPage: 轮询已暂停');
   }
 
   /// 🔧 恢复定时器（页面可见时调用）
   void resumePolling() {
-    if (_timer == null) {
+    if (!TimerManager().exists(_timerIdRealtime)) {
       _startPolling();
-      logger.info('RealtimeDashboardPage: 轮询已恢复');
-      // 立即刷新一次数据
-      _fetchData();
+    } else {
+      TimerManager().resume(_timerIdRealtime);
     }
+    logger.info('RealtimeDashboardPage: 轮询已恢复');
+    // 立即刷新一次数据
+    _fetchData();
   }
 
-  /// 🔧 [核心] 启动轮询定时器（提取公共逻辑，消除重复）
+  /// 🔧 [核心] 启动轮询定时器（使用 TimerManager 统一管理）
   /// 支持动态间隔：网络异常时自动延长轮询间隔，恢复后自动缩短
   void _startPolling() {
-    _timer?.cancel(); // 防止重复创建
-
     // 🔧 计算当前轮询间隔（指数退避）
     int intervalSeconds = _normalIntervalSeconds;
     if (_consecutiveFailures > 0) {
-      // 每失败一次，间隔翻倍，最大60秒
       intervalSeconds = (_normalIntervalSeconds * (1 << _consecutiveFailures))
           .clamp(_normalIntervalSeconds, _maxBackoffSeconds);
     }
 
-    _timer = Timer.periodic(Duration(seconds: intervalSeconds), (timer) async {
-      // 🔧 [CRITICAL] 必须检查 mounted，防止 Widget 销毁后继续执行
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
+    // 🔧 使用 TimerManager 注册 Timer
+    TimerManager().register(
+      _timerIdRealtime,
+      Duration(seconds: intervalSeconds),
+      () async {
+        if (!mounted) return;
 
-      try {
-        // 🔧 检测UI长时间未刷新（使用局部变量避免竞态）
-        final lastRefresh = _lastUIRefreshTime;
-        if (lastRefresh != null) {
-          final sinceLastRefresh = DateTime.now().difference(lastRefresh);
-          if (sinceLastRefresh.inSeconds > 60) {
-            logger.warning(
-                'UI超过60秒未刷新！上次刷新: $lastRefresh, isRefreshing=$_isRefreshing');
+        try {
+          // 🔧 检测UI长时间未刷新
+          final lastRefresh = _lastUIRefreshTime;
+          if (lastRefresh != null) {
+            final sinceLastRefresh = DateTime.now().difference(lastRefresh);
+            if (sinceLastRefresh.inSeconds > 60) {
+              logger.warning(
+                  'UI超过60秒未刷新！上次刷新: $lastRefresh, isRefreshing=$_isRefreshing');
+            }
           }
+          await _fetchData();
+        } catch (e, stack) {
+          logger.error('定时器回调异常', e, stack);
         }
-        await _fetchData();
-      } catch (e, stack) {
-        logger.error('定时器回调异常', e, stack);
-        // 异常不会导致定时器停止
-      }
-    });
+      },
+      description: '实时大屏数据轮询',
+      immediate: false,
+    );
   }
 
   /// 🔧 重启轮询（用于失败后调整间隔）
@@ -158,6 +157,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
       if (_consecutiveFailures > 0) {
         _consecutiveFailures = 0;
         logger.info('网络恢复，轮询间隔恢复为 ${_normalIntervalSeconds}s');
+        TimerManager().cancel(_timerIdRealtime);
         _startPolling(); // 重启以应用新间隔
       }
     } else {
@@ -172,6 +172,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
                 .clamp(_normalIntervalSeconds, _maxBackoffSeconds);
         logger.warning(
             '网络异常，轮询间隔延长至 ${newInterval}s (连续失败 $_consecutiveFailures 次)');
+        TimerManager().cancel(_timerIdRealtime);
         _startPolling(); // 重启以应用新间隔
       }
     }
@@ -185,8 +186,8 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _timer = null;
+    // 🔧 使用 TimerManager 取消 Timer
+    TimerManager().cancel(_timerIdRealtime);
     logger.info('RealtimeDashboardPage disposed, timer cancelled');
     super.dispose();
   }
@@ -223,8 +224,6 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   Future<void> _fetchData() async {
     // 🔧 [CRITICAL] 检测 _isRefreshing 是否卡死
     if (_isRefreshing) {
-      _consecutiveSkips++;
-
       // 检查是否超过最大允许刷新时长
       if (_refreshStartTime != null) {
         final duration =
@@ -236,11 +235,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
           _refreshStartTime = null;
           // 不 return，继续执行本次请求
         } else {
-          // 5, 连续跳过10次则记录警告
-          if (_consecutiveSkips >= 10) {
-            logger.warning(
-                'UI刷新被跳过 $_consecutiveSkips 次（_isRefreshing持续为true, 已等待${duration}s）');
-          }
+          // 正常跳过（请求进行中）
           return;
         }
       } else {
@@ -254,7 +249,6 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
       return;
     }
 
-    _consecutiveSkips = 0; // 5, 重置跳过计数
     _refreshStartTime = DateTime.now(); // 🔧 记录请求开始时间
 
     setState(() {

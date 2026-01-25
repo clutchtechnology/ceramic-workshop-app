@@ -4,6 +4,7 @@ import '../models/sensor_status_model.dart';
 import '../services/sensor_status_service.dart';
 import '../widgets/data_display/data_tech_line_widgets.dart';
 import '../utils/app_logger.dart';
+import '../utils/timer_manager.dart';
 
 /// 设备状态位显示页面 (单页面垂直布局)
 /// 同时显示 DB3(回转窑) / DB7(辊道窑) / DB11(SCR/风机) 的模块状态
@@ -21,6 +22,9 @@ class SensorStatusPageState extends State<SensorStatusPage> {
   // 常量定义
   // ============================================================
 
+  // 🔧 [CRITICAL] Timer ID 常量
+  static const String _timerIdSensor = 'sensor_status_polling';
+
   // 6, 每个DB区块内的列数
   static const int _columnCount = 3;
   // 7, 轮询间隔 (秒)
@@ -35,14 +39,14 @@ class SensorStatusPageState extends State<SensorStatusPage> {
   // 1, 状态位查询服务 (单例，内部管理HTTP Client)
   final SensorStatusService _statusService = SensorStatusService();
 
-  // 2, 5秒轮询定时器 (用于定期刷新状态)
-  Timer? _timer;
+  // 🔧 [优化] 使用 ValueNotifier 替代普通变量，减少不必要的 Widget 重建
   // 3, API响应数据 (包含db3/db7/db11三个状态列表 + summary统计)
-  AllStatusResponse? _response;
+  final ValueNotifier<AllStatusResponse?> _responseNotifier =
+      ValueNotifier(null);
   // 4, 防抖标志: 防止重复请求
-  bool _isRefreshing = false;
+  final ValueNotifier<bool> _isRefreshingNotifier = ValueNotifier(false);
   // 5, 错误信息 (用于UI显示网络/API错误)
-  String? _errorMessage;
+  final ValueNotifier<String?> _errorMessageNotifier = ValueNotifier(null);
 
   // 🔧 网络异常退避计数
   int _consecutiveFailures = 0;
@@ -65,9 +69,12 @@ class SensorStatusPageState extends State<SensorStatusPage> {
 
   @override
   void dispose() {
-    // 2, 取消定时器防止内存泄漏
-    _timer?.cancel();
-    _timer = null;
+    // 🔧 使用 TimerManager 取消 Timer
+    TimerManager().cancel(_timerIdSensor);
+    // 🔧 [CRITICAL] 释放 ValueNotifier 防止内存泄漏
+    _responseNotifier.dispose();
+    _isRefreshingNotifier.dispose();
+    _errorMessageNotifier.dispose();
     super.dispose();
   }
 
@@ -77,35 +84,35 @@ class SensorStatusPageState extends State<SensorStatusPage> {
 
   /// 暂停定时器（页面不可见时调用）
   void pausePolling() {
-    // 2, 取消定时器
-    if (_timer == null) return;
-    _timer?.cancel();
-    _timer = null;
+    TimerManager().pause(_timerIdSensor);
     logger.info('SensorStatusPage: 轮询已暂停');
   }
 
   /// 恢复定时器（页面可见时调用）
   void resumePolling() {
-    // 2, 防止重复创建定时器
-    if (_timer != null) return;
-
     // 重置退避计数
     _consecutiveFailures = 0;
 
     // 立即获取一次数据
     _fetchData();
 
-    // 2, 创建轮询定时器 (7, 使用常量间隔)
-    _startPollingWithInterval(_pollIntervalSeconds);
+    // 启动或恢复 Timer
+    if (!TimerManager().exists(_timerIdSensor)) {
+      _startPollingWithInterval(_pollIntervalSeconds);
+    } else {
+      TimerManager().resume(_timerIdSensor);
+    }
     logger.info('SensorStatusPage: 轮询已恢复');
   }
 
   /// 🔧 启动轮询定时器（支持动态间隔）
   void _startPollingWithInterval(int intervalSeconds) {
-    _timer?.cancel();
-    _timer = Timer.periodic(
+    TimerManager().cancel(_timerIdSensor); // 先取消旧的
+
+    TimerManager().register(
+      _timerIdSensor,
       Duration(seconds: intervalSeconds),
-      (_) async {
+      () async {
         if (!mounted) return;
         try {
           await _fetchData();
@@ -113,12 +120,14 @@ class SensorStatusPageState extends State<SensorStatusPage> {
           logger.error('状态位定时器回调异常', e, stack);
         }
       },
+      description: '设备状态位轮询',
+      immediate: false,
     );
   }
 
   /// 🔧 调整轮询间隔（网络异常时退避）
   void _adjustPollingInterval(bool wasSuccess) {
-    if (!mounted || _timer == null) return;
+    if (!mounted) return;
 
     if (wasSuccess) {
       if (_consecutiveFailures > 0) {
@@ -141,68 +150,64 @@ class SensorStatusPageState extends State<SensorStatusPage> {
   // ============================================================
 
   /// 获取状态数据
+  /// 🔧 [优化] 使用 ValueNotifier 更新数据，不触发整页重建
   Future<void> _fetchData() async {
     // 🔧 [CRITICAL] 检测 _isRefreshing 是否卡死
-    if (_isRefreshing) {
+    if (_isRefreshingNotifier.value) {
       if (_refreshStartTime != null) {
         final duration =
             DateTime.now().difference(_refreshStartTime!).inSeconds;
         if (duration > _maxRefreshDurationSeconds) {
           logger
               .error('SensorStatusPage: _isRefreshing 卡死超过 ${duration}s，强制重置！');
-          _isRefreshing = false;
+          _isRefreshingNotifier.value = false;
           _refreshStartTime = null;
         } else {
           return;
         }
       } else {
-        _isRefreshing = false;
+        _isRefreshingNotifier.value = false;
       }
     }
     if (!mounted) return;
 
     _refreshStartTime = DateTime.now();
-    setState(() {
-      _isRefreshing = true;
-      // 5, 清除旧错误
-      _errorMessage = null;
-    });
+
+    // 🔧 [优化] 使用 ValueNotifier 更新状态，不触发整页重建
+    _isRefreshingNotifier.value = true;
+    _errorMessageNotifier.value = null;
 
     try {
       // 3, 调用API获取所有DB状态
       final response = await _statusService.getAllStatus();
 
       if (!mounted) return;
-      setState(() {
-        if (response.success) {
-          // 3, 更新响应数据
-          _response = response;
-          // 🔧 成功时重置退避
-          _adjustPollingInterval(true);
-        } else {
-          // 5, 记录错误信息
-          _errorMessage = response.error ?? '获取状态失败';
-          // 🔧 失败时启动退避
-          _adjustPollingInterval(false);
-        }
-      });
+
+      // 🔧 [优化] 只更新 ValueNotifier，不调用 setState
+      if (response.success) {
+        // 3, 更新响应数据
+        _responseNotifier.value = response;
+        // 🔧 成功时重置退避
+        _adjustPollingInterval(true);
+      } else {
+        // 5, 记录错误信息
+        _errorMessageNotifier.value = response.error ?? '获取状态失败';
+        // 🔧 失败时启动退避
+        _adjustPollingInterval(false);
+      }
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        // 5, 记录网络错误
-        _errorMessage = '网络错误: $e';
-      });
+      // 5, 记录网络错误
+      _errorMessageNotifier.value = '网络错误: $e';
       // 🔧 网络异常时启动退避
       _adjustPollingInterval(false);
     } finally {
       // 🔧 [CRITICAL] 无论成功失败，都必须重置状态
       _refreshStartTime = null;
       if (mounted) {
-        setState(() {
-          _isRefreshing = false;
-        });
+        _isRefreshingNotifier.value = false;
       } else {
-        _isRefreshing = false;
+        _isRefreshingNotifier.value = false;
       }
     }
   }
@@ -210,7 +215,7 @@ class SensorStatusPageState extends State<SensorStatusPage> {
   /// 根据 DB 号获取状态列表
   List<ModuleStatus> _getStatusByDb(int dbNumber) {
     // 3, 从响应数据中提取对应DB的状态列表
-    return _response?.data?['db$dbNumber'] ?? [];
+    return _responseNotifier.value?.data?['db$dbNumber'] ?? [];
   }
 
   // ============================================================
@@ -225,10 +230,15 @@ class SensorStatusPageState extends State<SensorStatusPage> {
         children: [
           _buildHeader(),
           Expanded(
-            // 5, 有错误时显示错误界面，否则显示状态列表
-            child: _errorMessage != null
-                ? _buildErrorWidget()
-                : _buildVerticalLayout(),
+            // 🔧 [优化] 使用 ValueListenableBuilder 监听错误状态，只在错误变化时重建
+            child: ValueListenableBuilder<String?>(
+              valueListenable: _errorMessageNotifier,
+              builder: (context, errorMessage, child) {
+                return errorMessage != null
+                    ? _buildErrorWidget(errorMessage)
+                    : _buildVerticalLayout();
+              },
+            ),
           ),
         ],
       ),
@@ -236,38 +246,45 @@ class SensorStatusPageState extends State<SensorStatusPage> {
   }
 
   /// 垂直布局: 回转窑 → 辊道窑 → SCR/风机 (固定高度比例 2:1:1)
+  /// 🔧 [优化] 使用 ValueListenableBuilder 监听数据变化，只在数据变化时重建
   Widget _buildVerticalLayout() {
-    // 3, 获取各DB的状态列表
-    final db3List = _getStatusByDb(3);
-    final db7List = _getStatusByDb(7);
-    final db11List = _getStatusByDb(11);
+    return ValueListenableBuilder<AllStatusResponse?>(
+      valueListenable: _responseNotifier,
+      builder: (context, response, child) {
+        // 3, 获取各DB的状态列表
+        final db3List = response?.data?['db3'] ?? <ModuleStatus>[];
+        final db7List = response?.data?['db7'] ?? <ModuleStatus>[];
+        final db11List = response?.data?['db11'] ?? <ModuleStatus>[];
 
-    // 固定高度比例: 料仓(DB3) 1/2, 辊道窑(DB7) 1/4, SCR/风机(DB11) 1/4
-    const int db3Flex = 2; // 1/2
-    const int db7Flex = 1; // 1/4
-    const int db11Flex = 1; // 1/4
+        // 固定高度比例: 料仓(DB3) 1/2, 辊道窑(DB7) 1/4, SCR/风机(DB11) 1/4
+        const int db3Flex = 2; // 1/2
+        const int db7Flex = 1; // 1/4
+        const int db11Flex = 1; // 1/4
 
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        children: [
-          Expanded(
-            flex: db3Flex,
-            child: _buildDbSection('DB3 回转窑', db3List, TechColors.glowOrange),
+        return Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            children: [
+              Expanded(
+                flex: db3Flex,
+                child:
+                    _buildDbSection('DB3 回转窑', db3List, TechColors.glowOrange),
+              ),
+              const SizedBox(height: 6),
+              Expanded(
+                flex: db7Flex,
+                child: _buildDbSection('DB7 辊道窑', db7List, TechColors.glowCyan),
+              ),
+              const SizedBox(height: 6),
+              Expanded(
+                flex: db11Flex,
+                child: _buildDbSection(
+                    'DB11 SCR/风机', db11List, TechColors.glowGreen),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
-          Expanded(
-            flex: db7Flex,
-            child: _buildDbSection('DB7 辊道窑', db7List, TechColors.glowCyan),
-          ),
-          const SizedBox(height: 6),
-          Expanded(
-            flex: db11Flex,
-            child:
-                _buildDbSection('DB11 SCR/风机', db11List, TechColors.glowGreen),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -389,54 +406,65 @@ class SensorStatusPageState extends State<SensorStatusPage> {
   }
 
   /// 顶部状态栏
+  /// 🔧 [优化] 使用 ValueListenableBuilder 监听数据和刷新状态
   Widget _buildHeader() {
-    // 3, 从响应数据中获取统计摘要
-    final summary = _response?.summary;
+    return ValueListenableBuilder<AllStatusResponse?>(
+      valueListenable: _responseNotifier,
+      builder: (context, response, child) {
+        // 3, 从响应数据中获取统计摘要
+        final summary = response?.summary;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: TechColors.bgDark,
-        border: Border(
-          bottom: BorderSide(color: TechColors.borderDark.withOpacity(0.5)),
-        ),
-      ),
-      child: Row(
-        children: [
-          const Text(
-            '设备状态位监控',
-            style: TextStyle(
-              color: TechColors.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Roboto Mono',
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: TechColors.bgDark,
+            border: Border(
+              bottom: BorderSide(color: TechColors.borderDark.withOpacity(0.5)),
             ),
           ),
-          const Spacer(),
-          // 3, 统计信息显示
-          _buildStatChip('总计', summary?.total ?? 0, TechColors.glowCyan),
-          const SizedBox(width: 10),
-          _buildStatChip('正常', summary?.normal ?? 0, TechColors.glowGreen),
-          const SizedBox(width: 10),
-          _buildStatChip('异常', summary?.error ?? 0, TechColors.glowRed),
-          const SizedBox(width: 12),
-          // 4, 刷新按钮 (显示加载状态)
-          IconButton(
-            onPressed: _isRefreshing ? null : _fetchData,
-            icon: _isRefreshing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: TechColors.glowCyan,
-                    ),
-                  )
-                : const Icon(Icons.refresh,
-                    color: TechColors.glowCyan, size: 20),
+          child: Row(
+            children: [
+              const Text(
+                '设备状态位监控',
+                style: TextStyle(
+                  color: TechColors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Roboto Mono',
+                ),
+              ),
+              const Spacer(),
+              // 3, 统计信息显示
+              _buildStatChip('总计', summary?.total ?? 0, TechColors.glowCyan),
+              const SizedBox(width: 10),
+              _buildStatChip('正常', summary?.normal ?? 0, TechColors.glowGreen),
+              const SizedBox(width: 10),
+              _buildStatChip('异常', summary?.error ?? 0, TechColors.glowRed),
+              const SizedBox(width: 12),
+              // 🔧 [优化] 刷新按钮也使用 ValueListenableBuilder
+              ValueListenableBuilder<bool>(
+                valueListenable: _isRefreshingNotifier,
+                builder: (context, isRefreshing, child) {
+                  return IconButton(
+                    onPressed: isRefreshing ? null : _fetchData,
+                    icon: isRefreshing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: TechColors.glowCyan,
+                            ),
+                          )
+                        : const Icon(Icons.refresh,
+                            color: TechColors.glowCyan, size: 20),
+                  );
+                },
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -469,7 +497,7 @@ class SensorStatusPageState extends State<SensorStatusPage> {
   }
 
   /// 错误提示
-  Widget _buildErrorWidget() {
+  Widget _buildErrorWidget(String errorMessage) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -478,7 +506,7 @@ class SensorStatusPageState extends State<SensorStatusPage> {
           const SizedBox(height: 16),
           // 5, 显示错误信息
           Text(
-            _errorMessage ?? '未知错误',
+            errorMessage,
             style:
                 const TextStyle(color: TechColors.textSecondary, fontSize: 14),
           ),

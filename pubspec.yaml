@@ -54,7 +54,7 @@ dependencies:
   http: ^1.2.0
 
   # Utilities
-  intl: ^0.19.0
+  intl: ^0.20.2
   logger: ^2.3.0
   
   # Window Management (无边框全屏)
