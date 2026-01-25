@@ -1,0 +1,654 @@
+# 电炉监控系统部署指南
+
+> **奥卡姆剃刀原则**: 只包含必要信息，避免冗余步骤
+> **适用项目**: ceramic-electric-furnace-backend + ceramic-electric_furnace-flutter
+> **目标**: 向 AI 描述部署需求时使用本提示词
+
+---
+
+## 1. 部署环境信息
+
+### 1.1 工控机目录结构
+
+```
+D:\
+├── furnace-backend\                    # Python 后端运行目录
+│   ├── venv\                           # Python 虚拟环境
+│   ├── configs\                        # 配置文件
+│   │   ├── plc_modules.yaml
+│   │   ├── config_L3_P2_F2_C4.yaml
+│   │   ├── status_L3_P2_F2_C4.yaml
+│   │   └── db_mappings.yaml
+│   ├── app\                            # 应用代码
+│   │   ├── plc\
+│   │   ├── services\
+│   │   ├── routers\
+│   │   └── tools\
+│   ├── main.py                         # 入口文件
+│   ├── config.py                       # 全局配置
+│   ├── requirements.txt                # 依赖清单
+│   └── .env                            # 环境变量
+│
+├── deploy\                             # 部署包存档目录
+│   ├── 1.1.0\
+│   │   ├── furnace-backend-1.1.0.zip
+│   │   └── README.md
+│   ├── 1.1.8\
+│   │   ├── furnace-backend-1.1.8.zip
+│   │   └── README.md
+│   └── watchdog_simple.ps1             # 看门狗脚本
+│
+└── electric\                           # Flutter 前端部署目录
+    └── Release\
+        ├── ceramic_electric_furnace_flutter.exe
+        ├── flutter_windows.dll
+        ├── window_manager_plugin.dll
+        ├── screen_retriever_windows_plugin.dll
+        ├── data\
+        │   └── flutter_assets\
+        └── VC_redist.x64.exe
+```
+
+### 1.2 端口规划 (避免冲突)
+
+| 项目 | 后端端口 | InfluxDB 端口 |
+|------|----------|---------------|
+| 磨料车间 (workshop) | 8080 | 8086 |
+| 料仓 (hopper) | 8081 | 8088 |
+| **电炉 (furnace)** | **8082** | **8089** |
+| 水泵 (waterpump) | 8083 | 8090 |
+
+### 1.3 PLC 配置
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| IP | 192.168.1.10 | PLC IP 地址 |
+| Port | 102 | S7 协议端口 |
+| Rack | 0 | S7-1200 固定 |
+| Slot | 1 | S7-1200 固定 |
+
+### 1.4 InfluxDB 配置
+
+| 配置项 | 值 |
+|--------|-----|
+| URL | http://localhost:8089 |
+| 用户名 | admin |
+| 密码 | admin_password |
+| 组织 | furnace |
+| Bucket | sensor_data |
+| Token | furnace-token |
+
+---
+
+## 2. 后端部署流程
+
+### 2.1 开发机构建部署包
+
+```powershell
+# 进入项目目录
+cd C:\Users\20216\Documents\GitHub\Clutch\ceramic-electric-furnace-backend
+
+# 清理旧文件
+Remove-Item -Path "dist" -Recurse -Force -ErrorAction SilentlyContinue
+
+# 创建部署目录
+New-Item -Path "dist\furnace-backend" -ItemType Directory -Force
+
+# 复制应用代码
+Copy-Item -Path "app" -Destination "dist\furnace-backend\app" -Recurse
+Copy-Item -Path "configs" -Destination "dist\furnace-backend\configs" -Recurse
+Copy-Item -Path "main.py" -Destination "dist\furnace-backend\"
+Copy-Item -Path "config.py" -Destination "dist\furnace-backend\"
+Copy-Item -Path "requirements.txt" -Destination "dist\furnace-backend\"
+Copy-Item -Path ".env.example" -Destination "dist\furnace-backend\.env"
+
+# 创建虚拟环境 (可选，推荐在工控机创建)
+# python -m venv dist\furnace-backend\venv
+# .\dist\furnace-backend\venv\Scripts\Activate.ps1
+# pip install -r dist\furnace-backend\requirements.txt
+
+# 打包
+$Version = "1.1.8"
+Compress-Archive -Path "dist\furnace-backend\*" -DestinationPath "furnace-backend-$Version.zip" -Force
+
+Write-Host "部署包已生成: furnace-backend-$Version.zip"
+```
+
+### 2.2 工控机部署
+
+```powershell
+# 停止旧服务 (如果正在运行)
+$Backend = Get-WmiObject Win32_Process -Filter "name='python.exe'" | Where-Object { $_.CommandLine -like "*main.py*" }
+if ($Backend) {
+    Stop-Process -Id $Backend.ProcessId -Force
+    Write-Host "已停止旧后端服务"
+}
+
+# 备份旧版本 (可选)
+if (Test-Path "D:\furnace-backend") {
+    $BackupName = "furnace-backend-backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    Rename-Item -Path "D:\furnace-backend" -NewName $BackupName
+    Write-Host "已备份旧版本到: D:\$BackupName"
+}
+
+# 解压新版本
+Expand-Archive -Path "D:\deploy\1.1.8\furnace-backend-1.1.8.zip" -DestinationPath "D:\furnace-backend" -Force
+
+# 创建虚拟环境 (首次部署)
+cd D:\furnace-backend
+python -m venv venv
+
+# 安装依赖
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+# 配置环境变量 (编辑 .env 文件)
+# PLC_IP=192.168.1.10
+# INFLUX_URL=http://localhost:8089
+# SERVER_PORT=8082
+
+# 启动服务
+.\venv\Scripts\python.exe main.py
+```
+
+### 2.3 验证部署
+
+```powershell
+# 检查进程
+Get-WmiObject Win32_Process -Filter "name='python.exe'" | Where-Object { $_.CommandLine -like "*main.py*" }
+
+# 测试 API
+curl http://localhost:8082/api/health
+curl http://localhost:8082/api/health/plc
+curl http://localhost:8082/api/health/database
+
+# 查看日志
+Get-Content D:\furnace-backend\logs\app.log -Tail 50 -Wait
+```
+
+---
+
+## 3. 前端部署流程
+
+### 3.1 开发机构建
+
+```powershell
+# 进入项目目录
+cd C:\Users\20216\Documents\GitHub\Clutch\ceramic-electric_furnace-flutter
+
+# 清理旧构建
+flutter clean
+
+# 构建 Windows Release 版本
+flutter build windows --release
+
+# 构建产物位置
+# build\windows\x64\runner\Release\
+```
+
+### 3.2 工控机部署
+
+```powershell
+# 停止旧前端 (如果正在运行)
+$Flutter = Get-Process -Name "ceramic_electric_furnace_flutter" -ErrorAction SilentlyContinue
+if ($Flutter) {
+    Stop-Process -Id $Flutter.Id -Force
+    Write-Host "已停止旧前端应用"
+}
+
+# 复制文件清单 (从开发机 build\windows\x64\runner\Release\)
+# 目标目录: D:\electric\Release\
+
+# 必需文件:
+# - ceramic_electric_furnace_flutter.exe
+# - flutter_windows.dll
+# - window_manager_plugin.dll
+# - screen_retriever_windows_plugin.dll
+# - data\ (整个文件夹)
+
+# 首次部署: 安装 VC++ 运行时
+D:\electric\Release\VC_redist.x64.exe /install /quiet
+
+# 启动应用
+Start-Process "D:\electric\Release\ceramic_electric_furnace_flutter.exe"
+```
+
+### 3.3 验证部署
+
+```powershell
+# 检查进程
+Get-Process -Name "ceramic_electric_furnace_flutter" -ErrorAction SilentlyContinue
+
+# 检查后端连接 (在应用界面查看右上角健康指示灯)
+# 绿色: 正常
+# 红色: 后端不可达
+```
+
+---
+
+## 4. 看门狗自动重启
+
+### 4.1 创建看门狗脚本
+
+```powershell
+# 创建脚本文件
+$WatchdogPath = "D:\deploy\watchdog_simple.ps1"
+$WatchdogContent = @'
+# 电炉监控系统看门狗
+# 功能: 自动检测并重启后端和前端服务
+
+while ($true) {
+    # 检查后端进程
+    $Backend = Get-WmiObject Win32_Process -Filter "name='python.exe'" | Where-Object { $_.CommandLine -like "*main.py*" }
+    if (-not $Backend) {
+        Write-Host "[$(Get-Date)] 后端未运行，正在启动..."
+        Start-Process powershell.exe -ArgumentList '-NoExit', '-Command', 'cd D:\furnace-backend; .\venv\Scripts\python.exe main.py' -WindowStyle Hidden
+        Start-Sleep -Seconds 15
+    }
+    
+    # 检查前端进程
+    $Flutter = Get-Process -Name "ceramic_electric_furnace_flutter" -ErrorAction SilentlyContinue
+    if (-not $Flutter) {
+        Write-Host "[$(Get-Date)] 前端未运行，正在启动..."
+        Start-Process "D:\electric\Release\ceramic_electric_furnace_flutter.exe"
+        Start-Sleep -Seconds 10
+    } elseif (-not $Flutter.Responding) {
+        Write-Host "[$(Get-Date)] 前端无响应，正在重启..."
+        Stop-Process -Id $Flutter.Id -Force
+        Start-Sleep -Seconds 3
+        Start-Process "D:\electric\Release\ceramic_electric_furnace_flutter.exe"
+        Start-Sleep -Seconds 10
+    }
+    
+    # 每 10 秒检查一次
+    Start-Sleep -Seconds 10
+}
+'@
+
+New-Item -Path (Split-Path $WatchdogPath) -ItemType Directory -Force | Out-Null
+Set-Content -Path $WatchdogPath -Value $WatchdogContent -Encoding UTF8
+
+Write-Host "看门狗脚本已创建: $WatchdogPath"
+```
+
+### 4.2 创建开机自启动任务
+
+```powershell
+# 创建计划任务
+$Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"D:\deploy\watchdog_simple.ps1`""
+$Trigger = New-ScheduledTaskTrigger -AtStartup
+$Principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType Interactive -RunLevel Highest
+
+Register-ScheduledTask -TaskName "FurnaceWatchdog" -Action $Action -Trigger $Trigger -Principal $Principal -Description "电炉监控系统看门狗" -Force
+
+Write-Host "开机自启动任务已创建: FurnaceWatchdog"
+```
+
+### 4.3 手动启动看门狗
+
+```powershell
+# 启动计划任务
+Start-ScheduledTask -TaskName "FurnaceWatchdog"
+
+# 查看任务状态
+Get-ScheduledTask -TaskName "FurnaceWatchdog" | Get-ScheduledTaskInfo
+
+# 停止任务
+Stop-ScheduledTask -TaskName "FurnaceWatchdog"
+
+# 删除任务
+Unregister-ScheduledTask -TaskName "FurnaceWatchdog" -Confirm:$false
+```
+
+---
+
+## 5. InfluxDB 部署
+
+### 5.1 Docker 方式 (推荐)
+
+```powershell
+# 拉取镜像
+docker pull influxdb:2.7
+
+# 启动容器
+docker run -d `
+  --name furnace-influxdb `
+  -p 8089:8086 `
+  -v D:\docker-data\furnace\influxdb-data:/var/lib/influxdb2 `
+  -v D:\docker-data\furnace\influxdb-config:/etc/influxdb2 `
+  -e DOCKER_INFLUXDB_INIT_MODE=setup `
+  -e DOCKER_INFLUXDB_INIT_USERNAME=admin `
+  -e DOCKER_INFLUXDB_INIT_PASSWORD=admin_password `
+  -e DOCKER_INFLUXDB_INIT_ORG=furnace `
+  -e DOCKER_INFLUXDB_INIT_BUCKET=sensor_data `
+  -e DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=furnace-token `
+  influxdb:2.7
+
+# 验证
+docker ps | Select-String "furnace-influxdb"
+curl http://localhost:8089/health
+```
+
+### 5.2 本地安装方式
+
+```powershell
+# 下载 InfluxDB 2.7 Windows 版本
+# https://dl.influxdata.com/influxdb/releases/influxdb2-2.7.0-windows-amd64.zip
+
+# 解压到 D:\influxdb\
+
+# 启动服务
+cd D:\influxdb
+.\influxd.exe
+
+# 初始化 (首次运行)
+.\influx.exe setup `
+  --username admin `
+  --password admin_password `
+  --org furnace `
+  --bucket sensor_data `
+  --token furnace-token `
+  --force
+```
+
+---
+
+## 6. 常见问题排查
+
+### 6.1 后端无法启动
+
+**症状**: `python main.py` 报错
+
+**排查步骤**:
+```powershell
+# 1. 检查 Python 版本
+python --version  # 需要 3.11+
+
+# 2. 检查依赖
+.\venv\Scripts\Activate.ps1
+pip list
+
+# 3. 检查配置文件
+Get-Content D:\furnace-backend\.env
+
+# 4. 检查端口占用
+netstat -ano | Select-String "8082"
+
+# 5. 查看详细错误
+python main.py  # 不要后台运行，查看完整错误信息
+```
+
+### 6.2 PLC 连接失败
+
+**症状**: `/api/health/plc` 返回错误
+
+**排查步骤**:
+```powershell
+# 1. 检查网络连通性
+ping 192.168.1.10
+
+# 2. 检查 PLC 端口
+Test-NetConnection -ComputerName 192.168.1.10 -Port 102
+
+# 3. 检查 PLC 配置
+# 确认 Rack=0, Slot=1 (S7-1200 固定值)
+
+# 4. 检查 DB 块
+# 确认 DB32, DB30 存在且大小正确
+```
+
+### 6.3 InfluxDB 连接失败
+
+**症状**: `/api/health/database` 返回错误
+
+**排查步骤**:
+```powershell
+# 1. 检查 InfluxDB 是否运行
+docker ps | Select-String "influxdb"
+# 或
+Get-Process -Name "influxd" -ErrorAction SilentlyContinue
+
+# 2. 检查端口
+Test-NetConnection -ComputerName localhost -Port 8089
+
+# 3. 测试 API
+curl http://localhost:8089/health
+
+# 4. 检查认证信息
+# 确认 .env 中的 INFLUX_TOKEN, INFLUX_ORG, INFLUX_BUCKET 正确
+```
+
+### 6.4 前端显示"服务不可达"
+
+**症状**: Flutter 应用右上角红色指示灯
+
+**排查步骤**:
+```powershell
+# 1. 确认后端运行
+curl http://localhost:8082/api/health
+
+# 2. 检查前端 API 配置
+# 文件: lib/api/api.dart
+# 确认: static const String baseUrl = 'http://localhost:8082';
+
+# 3. 重新构建前端
+cd ceramic-electric_furnace-flutter
+flutter clean
+flutter build windows --release
+
+# 4. 检查防火墙
+netsh advfirewall firewall add rule name="Furnace Backend" dir=in action=allow protocol=TCP localport=8082
+```
+
+### 6.5 前端 VCRUNTIME140.dll 缺失
+
+**症状**: 启动 exe 报错 "找不到 VCRUNTIME140.dll"
+
+**解决方案**:
+```powershell
+# 方案 A: 安装 VC++ 运行时
+D:\electric\Release\VC_redist.x64.exe /install /quiet
+
+# 方案 B: 复制 DLL 文件
+# 从其他正常电脑的 C:\Windows\System32\ 复制以下文件到 D:\electric\Release\:
+# - msvcp140.dll
+# - vcruntime140.dll
+# - vcruntime140_1.dll
+```
+
+### 6.6 看门狗未自动启动
+
+**症状**: 重启后服务未运行
+
+**排查步骤**:
+```powershell
+# 1. 检查计划任务
+Get-ScheduledTask -TaskName "FurnaceWatchdog"
+
+# 2. 查看任务历史
+Get-ScheduledTask -TaskName "FurnaceWatchdog" | Get-ScheduledTaskInfo
+
+# 3. 手动启动测试
+Start-ScheduledTask -TaskName "FurnaceWatchdog"
+
+# 4. 检查脚本路径
+Test-Path "D:\deploy\watchdog_simple.ps1"
+```
+
+---
+
+## 7. 版本管理
+
+### 7.1 语义化版本号
+
+```
+格式: MAJOR.MINOR.PATCH
+
+MAJOR: 重大架构变更 (不兼容旧版本)
+MINOR: 新功能添加 (向后兼容)
+PATCH: Bug 修复 (向后兼容)
+
+示例:
+1.0.0  - 初始版本
+1.1.0  - 新增电表数据采集
+1.1.8  - 修复数据解析 Bug
+2.0.0  - 重构为微服务架构
+```
+
+### 7.2 部署目录命名
+
+```
+D:\deploy\
+├── 1.0.0\     # 首个生产版本
+├── 1.1.0\     # 历史版本
+├── 1.1.8\     # 当前稳定版本
+└── 1.2.0\     # 待部署版本 (测试中)
+```
+
+### 7.3 版本回滚
+
+```powershell
+# 停止当前服务
+$Backend = Get-WmiObject Win32_Process -Filter "name='python.exe'" | Where-Object { $_.CommandLine -like "*main.py*" }
+Stop-Process -Id $Backend.ProcessId -Force
+
+# 删除当前版本
+Remove-Item -Path "D:\furnace-backend" -Recurse -Force
+
+# 恢复旧版本
+Expand-Archive -Path "D:\deploy\1.1.0\furnace-backend-1.1.0.zip" -DestinationPath "D:\furnace-backend" -Force
+
+# 启动服务
+cd D:\furnace-backend
+.\venv\Scripts\python.exe main.py
+```
+
+---
+
+## 8. AI 助手快速指令
+
+### 指令 1: 构建新版本部署包
+
+```
+请帮我构建电炉后端版本 1.2.0 的部署包:
+1. 生成打包 PowerShell 脚本
+2. 准备 deploy/1.2.0/ 目录的文件清单
+3. 生成版本 README.md 说明文件
+4. 列出本次更新的主要变更
+```
+
+### 指令 2: 生成部署脚本
+
+```
+请生成 PowerShell 部署脚本 (deploy_furnace_v1.2.0.ps1):
+- 自动停止旧版本
+- 备份旧版本
+- 解压新版本
+- 安装依赖
+- 启动服务
+- 验证部署
+- 输出部署报告
+```
+
+### 指令 3: 排查连接问题
+
+```
+我的电炉后端 PLC 连接失败，请帮我排查:
+1. 生成网络诊断命令
+2. 检查配置文件
+3. 测试 S7 连接
+4. 查看错误日志
+5. 提供解决方案
+```
+
+### 指令 4: 构建 Flutter 前端
+
+```
+请帮我构建电炉 Flutter 前端并准备部署:
+1. flutter clean && flutter build windows --release
+2. 列出需要复制的文件清单
+3. 生成部署 PowerShell 脚本
+4. 验证前端启动和后端连接
+```
+
+### 指令 5: 配置看门狗
+
+```
+请帮我配置电炉监控系统看门狗:
+1. 生成看门狗脚本
+2. 创建计划任务
+3. 配置开机自启动
+4. 测试自动重启功能
+```
+
+---
+
+## 9. 关键路径速查
+
+| 项目 | 路径 |
+|------|------|
+| **后端运行目录** | `D:\furnace-backend\` |
+| **部署包存档** | `D:\deploy\{版本号}\` |
+| **前端运行目录** | `D:\electric\Release\` |
+| **看门狗脚本** | `D:\deploy\watchdog_simple.ps1` |
+| **后端 API** | `http://localhost:8082` |
+| **InfluxDB** | `http://localhost:8089` |
+| **开发机后端** | `C:\Users\20216\Documents\GitHub\Clutch\ceramic-electric-furnace-backend\` |
+| **开发机前端** | `C:\Users\20216\Documents\GitHub\Clutch\ceramic-electric_furnace-flutter\` |
+
+---
+
+## 10. 快捷命令参考
+
+### 后端管理
+
+```powershell
+# 启动后端
+cd D:\furnace-backend; .\venv\Scripts\python.exe main.py
+
+# 停止后端
+Get-WmiObject Win32_Process -Filter "name='python.exe'" | Where-Object { $_.CommandLine -like "*main.py*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+
+# 查看日志
+Get-Content D:\furnace-backend\logs\app.log -Tail 50 -Wait
+
+# 测试 API
+curl http://localhost:8082/api/health
+curl http://localhost:8082/api/health/plc
+curl http://localhost:8082/api/health/database
+```
+
+### 前端管理
+
+```powershell
+# 启动前端
+Start-Process "D:\electric\Release\ceramic_electric_furnace_flutter.exe"
+
+# 停止前端
+Get-Process -Name "ceramic_electric_furnace_flutter" | Stop-Process -Force
+
+# 检查进程
+Get-Process -Name "ceramic_electric_furnace_flutter" -ErrorAction SilentlyContinue
+```
+
+### InfluxDB 管理
+
+```powershell
+# 启动 InfluxDB (Docker)
+docker start furnace-influxdb
+
+# 停止 InfluxDB
+docker stop furnace-influxdb
+
+# 查看日志
+docker logs -f furnace-influxdb
+
+# 测试连接
+curl http://localhost:8089/health
+```
+
+---
+
+**最后更新**: 2026-01-24  
+**维护者**: 工控系统开发团队  
+**版本**: v1.0

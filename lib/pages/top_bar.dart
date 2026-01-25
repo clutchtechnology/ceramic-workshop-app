@@ -135,11 +135,10 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
     }
   }
 
-  /// 导航项点击处理
-  /// 1, 切换页面并管理各页面的定时器状态
-  void _onNavItemTap(int index) {
+  /// 统一页面切换逻辑
+  void _switchToPage(int index) {
     final previousIndex = _selectedNavIndex;
-    if (previousIndex == index) return; // 点击当前页面，无需操作
+    if (previousIndex == index) return;
 
     setState(() => _selectedNavIndex = index);
 
@@ -150,6 +149,12 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _resumePagePolling(index);
     });
+  }
+
+  /// 导航项点击处理
+  /// 1, 切换页面并管理各页面的定时器状态
+  void _onNavItemTap(int index) {
+    _switchToPage(index);
   }
 
   /// 暂停指定页面的轮询
@@ -544,7 +549,7 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
     if (result == true && mounted) {
       await Future.delayed(const Duration(milliseconds: 200));
       if (mounted) {
-        setState(() => _selectedNavIndex = 3);
+        _switchToPage(3);
       }
     }
   }
