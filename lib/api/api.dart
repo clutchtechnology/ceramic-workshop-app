@@ -19,7 +19,7 @@ class Api {
   static const String rollerInfo = '/api/roller/info';
   static const String rollerRealtime = '/api/roller/realtime';
   static const String rollerRealtimeFormatted =
-      '/api/roller/realtime/formatted';
+      '/api/roller/realtime/formatted'; // 批量接口：6个zone + total
   static const String rollerHistory = '/api/roller/history';
   static String rollerZone(String zoneId) => '/api/roller/zone/$zoneId';
 
@@ -45,4 +45,35 @@ class Api {
   static const String statusAll = '/api/status'; // 按DB分组
   static const String statusFlat = '/api/status/flat'; // 扁平列表
   static String statusDb(int dbNumber) => '/api/status/db/$dbNumber'; // 单个DB
+
+  // 数据导出（5个核心接口）
+  // ============================================================================
+  // 1. 运行时长统计 - 20个设备（除燃气表外的所有设备）
+  // ============================================================================
+  static const String exportRuntimeAll = '/api/export/runtime/all';
+
+  // ============================================================================
+  // 2. 燃气消耗统计 - 2个设备（仅SCR燃气表）
+  // ============================================================================
+  static const String exportGasConsumption = '/api/export/gas-consumption';
+
+  // ============================================================================
+  // 3. 投料量统计 - 7个设备（仅带料仓的回转窑）
+  // ============================================================================
+  static const String exportFeedingAmount = '/api/export/feeding-amount';
+
+  // ============================================================================
+  // 4. 电量统计 - 20个设备（除燃气表外的所有设备，含运行时长）
+  // ============================================================================
+  static const String exportElectricityAll = '/api/export/electricity/all';
+
+  // ============================================================================
+  // 5. 综合数据统计 - 20个设备（所有数据整合）
+  // ============================================================================
+  static const String exportComprehensive = '/api/export/comprehensive';
+
+  // ============================================================================
+  // 单个设备电量统计（备用接口，前端暂未使用）
+  // ============================================================================
+  static const String exportElectricity = '/api/export/electricity';
 }

@@ -17,7 +17,8 @@ class SensorStatusPage extends StatefulWidget {
 }
 
 /// 🔧 公开 State 类以便通过 GlobalKey 访问 (用于页面切换时暂停/恢复轮询)
-class SensorStatusPageState extends State<SensorStatusPage> {
+class SensorStatusPageState extends State<SensorStatusPage>
+    with WidgetsBindingObserver {
   // ============================================================
   // 常量定义
   // ============================================================
@@ -62,6 +63,8 @@ class SensorStatusPageState extends State<SensorStatusPage> {
   @override
   void initState() {
     super.initState();
+    // 🔧 [CRITICAL] 注册生命周期监听
+    WidgetsBinding.instance.addObserver(this);
     // 🔧 [CRITICAL] 不在 initState 中启动轮询！
     // 由 top_bar.dart 的 _onNavItemTap() 控制，避免 Offstage 中的隐藏页面也在轮询
     // resumePolling(); // 已移除
@@ -69,6 +72,8 @@ class SensorStatusPageState extends State<SensorStatusPage> {
 
   @override
   void dispose() {
+    // 🔧 [CRITICAL] 移除生命周期监听
+    WidgetsBinding.instance.removeObserver(this);
     // 🔧 使用 TimerManager 取消 Timer
     TimerManager().cancel(_timerIdSensor);
     // 🔧 [CRITICAL] 释放 ValueNotifier 防止内存泄漏
@@ -76,6 +81,45 @@ class SensorStatusPageState extends State<SensorStatusPage> {
     _isRefreshingNotifier.dispose();
     _errorMessageNotifier.dispose();
     super.dispose();
+  }
+
+  // ============================================================
+  // 应用生命周期监听 (处理窗口最小化/恢复)
+  // ============================================================
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        // 🔧 窗口恢复/激活 → 恢复轮询
+        logger.lifecycle('SensorStatusPage: 应用恢复 (resumed) - 恢复轮询');
+        if (TimerManager().exists(_timerIdSensor)) {
+          resumePolling();
+        }
+        break;
+      case AppLifecycleState.inactive:
+        // 🔧 窗口失去焦点 → 暂停轮询
+        logger.lifecycle('SensorStatusPage: 应用失去焦点 (inactive) - 暂停轮询');
+        pausePolling();
+        break;
+      case AppLifecycleState.paused:
+        // 🔧 窗口最小化 → 暂停轮询
+        logger.lifecycle('SensorStatusPage: 应用暂停 (paused) - 暂停轮询');
+        pausePolling();
+        break;
+      case AppLifecycleState.detached:
+        // 🔧 应用即将退出 → 清理资源
+        logger.lifecycle('SensorStatusPage: 应用即将退出 (detached)');
+        pausePolling();
+        break;
+      case AppLifecycleState.hidden:
+        // 🔧 窗口被隐藏 → 暂停轮询
+        logger.lifecycle('SensorStatusPage: 应用被隐藏 (hidden) - 暂停轮询');
+        pausePolling();
+        break;
+    }
   }
 
   // ============================================================

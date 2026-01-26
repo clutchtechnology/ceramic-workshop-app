@@ -29,7 +29,8 @@ class RealtimeDashboardPage extends StatefulWidget {
   State<RealtimeDashboardPage> createState() => RealtimeDashboardPageState();
 }
 
-class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
+class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
+    with WidgetsBindingObserver {
   final HopperService _hopperService = HopperService();
   final RollerKilnService _rollerKilnService = RollerKilnService();
   final ScrFanService _scrFanService = ScrFanService();
@@ -69,6 +70,9 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   static const int _maxBackoffSeconds = 60; // 最大退避间隔
   static const int _normalIntervalSeconds = 5; // 正常轮询间隔
 
+  // 🔧 [CRITICAL] 缓存 Provider 引用（防止 build() 中频繁查找导致卡死）
+  late RealtimeConfigProvider _configProvider;
+
   // 6, UI索引到设备ID的映射 (硬件布局决定)
   // 短窑: 7,6,5,4, 无料仓: 2,1, 长窑: 8,3,9
   final Map<int, String> _deviceMapping = {
@@ -99,6 +103,9 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
 
   /// 🔧 恢复定时器（页面可见时调用）
   void resumePolling() {
+    // 🔧 重置连续失败计数
+    _consecutiveFailures = 0;
+    
     if (!TimerManager().exists(_timerIdRealtime)) {
       _startPolling();
     } else {
@@ -107,6 +114,43 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     logger.info('RealtimeDashboardPage: 轮询已恢复');
     // 立即刷新一次数据
     _fetchData();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 应用生命周期监听 (处理窗口最小化/恢复)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        // 🔧 窗口恢复/激活 → 恢复轮询
+        logger.lifecycle('RealtimeDashboardPage: 应用恢复 (resumed) - 恢复轮询');
+        resumePolling();
+        break;
+      case AppLifecycleState.inactive:
+        // 🔧 窗口失去焦点（如切换到其他应用）→ 暂停轮询
+        logger.lifecycle('RealtimeDashboardPage: 应用失去焦点 (inactive) - 暂停轮询');
+        pausePolling();
+        break;
+      case AppLifecycleState.paused:
+        // 🔧 窗口最小化 → 暂停轮询
+        logger.lifecycle('RealtimeDashboardPage: 应用暂停 (paused) - 暂停轮询');
+        pausePolling();
+        break;
+      case AppLifecycleState.detached:
+        // 🔧 应用即将退出 → 清理资源
+        logger.lifecycle('RealtimeDashboardPage: 应用即将退出 (detached)');
+        pausePolling();
+        break;
+      case AppLifecycleState.hidden:
+        // 🔧 窗口被隐藏 → 暂停轮询
+        logger.lifecycle('RealtimeDashboardPage: 应用被隐藏 (hidden) - 暂停轮询');
+        pausePolling();
+        break;
+    }
   }
 
   /// 🔧 [核心] 启动轮询定时器（使用 TimerManager 统一管理）
@@ -181,11 +225,17 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   @override
   void initState() {
     super.initState();
+    // 🔧 [CRITICAL] 注册生命周期监听
+    WidgetsBinding.instance.addObserver(this);
+    // 🔧 [CRITICAL] 缓存 Provider 引用（防止 build() 中频繁查找）
+    _configProvider = context.read<RealtimeConfigProvider>();
     _initData();
   }
 
   @override
   void dispose() {
+    // 🔧 [CRITICAL] 移除生命周期监听
+    WidgetsBinding.instance.removeObserver(this);
     // 🔧 使用 TimerManager 取消 Timer
     TimerManager().cancel(_timerIdRealtime);
     logger.info('RealtimeDashboardPage disposed, timer cancelled');
@@ -621,10 +671,9 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     final currentB = scrDevice?.elec?.currentB ?? 0.0;
     final currentC = scrDevice?.elec?.currentC ?? 0.0;
 
-    // 3, 使用配置的阈值判断SCR氨泵和燃气运行状态
-    final configProvider = context.read<RealtimeConfigProvider>();
-    final isPumpRunning = configProvider.isScrPumpRunning(index, power);
-    final isGasRunning = configProvider.isScrGasRunning(index, flowRate);
+    // 3, 使用缓存的配置判断SCR氨泵和燃气运行状态
+    final isPumpRunning = _configProvider.isScrPumpRunning(index, power);
+    final isGasRunning = _configProvider.isScrGasRunning(index, flowRate);
 
     return Row(
       children: [
@@ -676,8 +725,6 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     final fan2 =
         (fanDevices != null && fanDevices.length > 1) ? fanDevices[1] : null;
 
-    final configProvider = context.read<RealtimeConfigProvider>();
-
     return Column(
       children: [
         // 上层: 氨泵1(表63) + 燃气 + 风机2(表66)
@@ -687,7 +734,6 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
             scrIndex: 1,
             fanDevice: fan2,
             fanIndex: 2,
-            configProvider: configProvider,
           ),
         ),
         const SizedBox(height: 8),
@@ -698,7 +744,6 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
             scrIndex: 2,
             fanDevice: fan1,
             fanIndex: 1,
-            configProvider: configProvider,
           ),
         ),
       ],
@@ -711,7 +756,6 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     required int scrIndex,
     required dynamic fanDevice,
     required int fanIndex,
-    required RealtimeConfigProvider configProvider,
   }) {
     // SCR数据
     final scrPower = scrDevice?.elec?.pt ?? 0.0;
@@ -721,8 +765,8 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     final scrCurrentB = scrDevice?.elec?.currentB ?? 0.0;
     final scrCurrentC = scrDevice?.elec?.currentC ?? 0.0;
 
-    final isPumpRunning = configProvider.isScrPumpRunning(scrIndex, scrPower);
-    final isGasRunning = configProvider.isScrGasRunning(scrIndex, flowRate);
+    final isPumpRunning = _configProvider.isScrPumpRunning(scrIndex, scrPower);
+    final isGasRunning = _configProvider.isScrGasRunning(scrIndex, flowRate);
 
     // 风机数据
     final fanPower = fanDevice?.elec?.pt ?? 0.0;
@@ -730,7 +774,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     final fanCurrentA = fanDevice?.elec?.currentA ?? 0.0;
     final fanCurrentB = fanDevice?.elec?.currentB ?? 0.0;
     final fanCurrentC = fanDevice?.elec?.currentC ?? 0.0;
-    final isFanRunning = configProvider.isFanRunning(fanIndex, fanPower);
+    final isFanRunning = _configProvider.isFanRunning(fanIndex, fanPower);
 
     return TechPanel(
       accentColor: TechColors.glowBlue,
@@ -786,36 +830,12 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
   /// 辊道窑区域 (自适应高度版本) - 用于新布局
   /// 布局：上方1-6号温区卡片，左下角总电表，背景图居中偏右
   Widget _buildRollerKilnSectionExpanded(double width) {
-    // 2, 计算辊道窑6个温区的总能耗 (kWh)
-    final totalEnergy = _rollerKilnData?.zones.fold<double>(
-          0.0,
-          (sum, zone) => sum + zone.energy,
-        ) ??
-        0.0;
-
-    // 2, 计算辊道窑6个温区的总功率 (kW)
-    final totalPower = _rollerKilnData?.zones.fold<double>(
-          0.0,
-          (sum, zone) => sum + zone.power,
-        ) ??
-        0.0;
-
-    // 2, 计算辊道窑6个温区的三相总电流 (A)
-    final totalCurrentA = _rollerKilnData?.zones.fold<double>(
-          0.0,
-          (sum, zone) => sum + zone.currentA,
-        ) ??
-        0.0;
-    final totalCurrentB = _rollerKilnData?.zones.fold<double>(
-          0.0,
-          (sum, zone) => sum + zone.currentB,
-        ) ??
-        0.0;
-    final totalCurrentC = _rollerKilnData?.zones.fold<double>(
-          0.0,
-          (sum, zone) => sum + zone.currentC,
-        ) ??
-        0.0;
+    // 2, 从后端获取总表数据（不再前端累加）
+    final totalPower = _rollerKilnData?.total.power ?? 0.0;
+    final totalEnergy = _rollerKilnData?.total.energy ?? 0.0;
+    final totalCurrentA = _rollerKilnData?.total.currentA ?? 0.0;
+    final totalCurrentB = _rollerKilnData?.total.currentB ?? 0.0;
+    final totalCurrentC = _rollerKilnData?.total.currentC ?? 0.0;
 
     // 2, 安全获取温区列表，避免强制解包
     final zones = _rollerKilnData?.zones;
@@ -1020,36 +1040,12 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
 
   /// 辊道窑区域 - 显示设备图片
   Widget _buildRollerKilnSection(double width, double height) {
-    // 2, 计算辊道窑6个温区的总能耗 (kWh)
-    final totalEnergy = _rollerKilnData?.zones.fold<double>(
-          0.0,
-          (sum, zone) => sum + zone.energy,
-        ) ??
-        0.0;
-
-    // 2, 计算辊道窑6个温区的总功率 (kW)
-    final totalPower = _rollerKilnData?.zones.fold<double>(
-          0.0,
-          (sum, zone) => sum + zone.power,
-        ) ??
-        0.0;
-
-    // 2, 计算辊道窑6个温区的三相总电流 (A)
-    final totalCurrentA = _rollerKilnData?.zones.fold<double>(
-          0.0,
-          (sum, zone) => sum + zone.currentA,
-        ) ??
-        0.0;
-    final totalCurrentB = _rollerKilnData?.zones.fold<double>(
-          0.0,
-          (sum, zone) => sum + zone.currentB,
-        ) ??
-        0.0;
-    final totalCurrentC = _rollerKilnData?.zones.fold<double>(
-          0.0,
-          (sum, zone) => sum + zone.currentC,
-        ) ??
-        0.0;
+    // 2, 从后端获取总表数据（不再前端累加）
+    final totalPower = _rollerKilnData?.total.power ?? 0.0;
+    final totalEnergy = _rollerKilnData?.total.energy ?? 0.0;
+    final totalCurrentA = _rollerKilnData?.total.currentA ?? 0.0;
+    final totalCurrentB = _rollerKilnData?.total.currentB ?? 0.0;
+    final totalCurrentC = _rollerKilnData?.total.currentC ?? 0.0;
 
     // 2, 安全获取温区列表，避免强制解包
     final zones = _rollerKilnData?.zones;
@@ -1283,10 +1279,9 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
       double? currentB,
       double? currentC,
       double? powerValue}) {
-    // 获取温度颜色配置
-    final configProvider = context.read<RealtimeConfigProvider>();
+    // 使用缓存的配置获取温度颜色
     final tempColor = (zoneIndex != null && temperatureValue != null)
-        ? configProvider.getRollerKilnTempColorByIndex(
+        ? _configProvider.getRollerKilnTempColorByIndex(
             zoneIndex, temperatureValue)
         : TechColors.glowRed;
 
@@ -1494,11 +1489,10 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
     final fan2 =
         (fanDevices != null && fanDevices.length > 1) ? fanDevices[1] : null;
 
-    final configProvider = context.read<RealtimeConfigProvider>();
     final fan1Power = fan1?.elec?.pt ?? 0.0;
     final fan2Power = fan2?.elec?.pt ?? 0.0;
-    final isFan1Running = configProvider.isFanRunning(1, fan1Power);
-    final isFan2Running = configProvider.isFanRunning(2, fan2Power);
+    final isFan1Running = _configProvider.isFanRunning(1, fan1Power);
+    final isFan2Running = _configProvider.isFanRunning(2, fan2Power);
 
     return SizedBox(
       width: width,

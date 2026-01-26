@@ -5,6 +5,7 @@ import '../widgets/data_display/data_time_range_selector.dart';
 import '../widgets/data_display/data_tech_line_chart.dart';
 import '../widgets/data_display/data_tech_bar_chart.dart';
 import '../services/history_data_service.dart';
+import '../utils/app_logger.dart';
 
 /// 历史数据页面
 /// 包含三个设备容器：回转窑、辊道窑、SCR设备
@@ -25,7 +26,7 @@ class HistoryDataPage extends StatefulWidget {
 
 /// HistoryDataPageState 的 State 类（公开以便通过 GlobalKey 访问）
 class HistoryDataPageState extends State<HistoryDataPage>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   // 🔧 [CRITICAL] 使用 KeepAlive 避免页面切换时重建，但需注意内存占用
   @override
   bool get wantKeepAlive => true;
@@ -142,13 +143,50 @@ class HistoryDataPageState extends State<HistoryDataPage>
   @override
   void initState() {
     super.initState();
+    // 🔧 [CRITICAL] 注册生命周期监听
+    WidgetsBinding.instance.addObserver(this);
     // 首次加载时强制刷新（异步初始化时间范围后加载数据）
     _refreshHistoryDataWithDebounce(forceRefresh: true);
   }
 
   @override
   void dispose() {
+    // 🔧 [CRITICAL] 移除生命周期监听
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  // ============================================================
+  // 应用生命周期监听 (处理窗口最小化/恢复)
+  // ============================================================
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        // 🔧 窗口恢复/激活 → 刷新数据
+        logger.lifecycle('DataDisplayPage: 应用恢复 (resumed) - 刷新数据');
+        _refreshHistoryDataWithDebounce(forceRefresh: false);
+        break;
+      case AppLifecycleState.inactive:
+        // 🔧 窗口失去焦点 → 无需操作（历史数据页面无轮询）
+        logger.lifecycle('DataDisplayPage: 应用失去焦点 (inactive)');
+        break;
+      case AppLifecycleState.paused:
+        // 🔧 窗口最小化 → 无需操作
+        logger.lifecycle('DataDisplayPage: 应用暂停 (paused)');
+        break;
+      case AppLifecycleState.detached:
+        // 🔧 应用即将退出
+        logger.lifecycle('DataDisplayPage: 应用即将退出 (detached)');
+        break;
+      case AppLifecycleState.hidden:
+        // 🔧 窗口被隐藏
+        logger.lifecycle('DataDisplayPage: 应用被隐藏 (hidden)');
+        break;
+    }
   }
 
   /// 页面进入时调用的刷新方法（由父组件调用）

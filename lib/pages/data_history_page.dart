@@ -1,9 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'dart:io';
-import 'package:excel/excel.dart' hide Border;
-import 'package:intl/intl.dart';
-import 'package:path/path.dart' as p;
 import '../widgets/data_display/data_tech_line_widgets.dart';
 import '../widgets/data_display/data_time_range_selector.dart';
 import '../widgets/data_display/data_tech_line_chart.dart';
@@ -11,6 +7,7 @@ import '../widgets/data_display/data_tech_bar_chart.dart';
 import '../widgets/data_display/quick_time_range_selector.dart';
 import '../widgets/data_display/data_single_select_dropdown.dart';
 import '../widgets/data_display/data_multi_select_dropdown.dart';
+import '../widgets/data_display/data_export_dialog.dart';
 import '../services/history_data_service.dart';
 
 /// 历史数据页面
@@ -282,309 +279,12 @@ class HistoryDataPageState extends State<HistoryDataPage>
     });
   }
 
-  /// 显示导出日期选择对话框
-  Future<void> _showExportDatePicker() async {
-    // 默认选择最近7天
-    DateTime startDate = DateTime.now().subtract(const Duration(days: 7));
-    DateTime endDate = DateTime.now();
-
-    final result = await showDialog<Map<String, DateTime>>(
+  /// 显示数据导出弹窗（新版）
+  void _showDataExportDialog() {
+    showDialog(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: TechColors.bgDark,
-              title: const Text(
-                '选择导出日期范围',
-                style: TextStyle(color: TechColors.textPrimary),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 起始日期
-                  ListTile(
-                    title: const Text('起始日期',
-                        style: TextStyle(color: TechColors.textSecondary)),
-                    subtitle: Text(
-                      DateFormat('yyyy-MM-dd').format(startDate),
-                      style: const TextStyle(
-                          color: TechColors.glowCyan, fontSize: 16),
-                    ),
-                    trailing: const Icon(Icons.calendar_today,
-                        color: TechColors.glowCyan),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: startDate,
-                        firstDate: DateTime(2024),
-                        lastDate: DateTime.now(),
-                        builder: (context, child) {
-                          return Theme(
-                            data: ThemeData.dark().copyWith(
-                              colorScheme: const ColorScheme.dark(
-                                primary: TechColors.glowCyan,
-                                surface: TechColors.bgDark,
-                              ),
-                            ),
-                            child: child!,
-                          );
-                        },
-                      );
-                      if (picked != null) {
-                        setDialogState(() => startDate = picked);
-                      }
-                    },
-                  ),
-                  const Divider(color: TechColors.bgMedium),
-                  // 结束日期
-                  ListTile(
-                    title: const Text('结束日期',
-                        style: TextStyle(color: TechColors.textSecondary)),
-                    subtitle: Text(
-                      DateFormat('yyyy-MM-dd').format(endDate),
-                      style: const TextStyle(
-                          color: TechColors.glowCyan, fontSize: 16),
-                    ),
-                    trailing: const Icon(Icons.calendar_today,
-                        color: TechColors.glowCyan),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: endDate,
-                        firstDate: DateTime(2024),
-                        lastDate: DateTime.now(),
-                        builder: (context, child) {
-                          return Theme(
-                            data: ThemeData.dark().copyWith(
-                              colorScheme: const ColorScheme.dark(
-                                primary: TechColors.glowCyan,
-                                surface: TechColors.bgDark,
-                              ),
-                            ),
-                            child: child!,
-                          );
-                        },
-                      );
-                      if (picked != null) {
-                        setDialogState(() => endDate = picked);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  // 预估行数提示
-                  Builder(
-                    builder: (context) {
-                      final days = endDate.difference(startDate).inDays + 1;
-                      final totalRows = days * 9;
-                      return Text(
-                        '预计导出 $days 天 × 9窑 = $totalRows 行数据',
-                        style: const TextStyle(
-                            color: TechColors.textSecondary, fontSize: 12),
-                      );
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('取消',
-                      style: TextStyle(color: TechColors.textSecondary)),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: TechColors.glowCyan),
-                  onPressed: () {
-                    if (endDate.isBefore(startDate)) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('结束日期不能早于起始日期')),
-                      );
-                      return;
-                    }
-                    Navigator.pop(
-                        context, {'start': startDate, 'end': endDate});
-                  },
-                  child: const Text('导出',
-                      style: TextStyle(color: TechColors.bgDeep)),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (context) => const DataExportDialog(),
     );
-
-    if (result != null) {
-      await _exportHopperReportByDays(result['start']!, result['end']!);
-    }
-  }
-
-  /// 按日导出回转窑报表
-  Future<void> _exportHopperReportByDays(
-      DateTime startDate, DateTime endDate) async {
-    if (!mounted) return;
-
-    final days = endDate.difference(startDate).inDays + 1;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('正在生成 $days 天的回转窑报表，请稍候...')),
-    );
-
-    try {
-      final rows = <List<dynamic>>[];
-      // 表头
-      rows.add([
-        '日期',
-        '窑编号',
-        '起始时间',
-        '终止时间',
-        '最初能耗(kWh)',
-        '最后能耗(kWh)',
-        '能耗消耗(kWh)',
-        '投料总量(kg)'
-      ]);
-
-      final dateFormat = DateFormat('yyyy-MM-dd HH:mm:ss');
-      final dayFormat = DateFormat('yyyy-MM-dd');
-
-      // 按日遍历
-      for (int d = 0; d < days; d++) {
-        final dayStart = DateTime(
-            startDate.year, startDate.month, startDate.day + d, 0, 0, 0);
-        final dayEnd = DateTime(
-            startDate.year, startDate.month, startDate.day + d, 23, 59, 59);
-        final dayLabel = dayFormat.format(dayStart);
-
-        debugPrint('📊 [Export] 正在处理: $dayLabel');
-
-        // 遍历 1-9 号窑
-        for (int i = 1; i <= 9; i++) {
-          final deviceId = HistoryDataService.hopperDeviceIds[i]!;
-          final kilnName = _getHopperLabel(i - 1);
-
-          // 1. 获取能耗数据
-          final energyRes = await _historyService.queryHopperEnergyHistory(
-            deviceId: deviceId,
-            start: dayStart,
-            end: dayEnd,
-          );
-
-          double firstEnergy = 0.0;
-          double lastEnergy = 0.0;
-          double consumption = 0.0;
-
-          if (energyRes.success &&
-              energyRes.hasData &&
-              energyRes.dataPoints != null &&
-              energyRes.dataPoints!.isNotEmpty) {
-            final points = energyRes.dataPoints!;
-            firstEnergy =
-                (points.first.fields['ImpEp'] as num?)?.toDouble() ?? 0.0;
-            lastEnergy =
-                (points.last.fields['ImpEp'] as num?)?.toDouble() ?? 0.0;
-            consumption = lastEnergy - firstEnergy;
-            if (consumption < 0) consumption = 0.0;
-          }
-
-          // 2. 获取投料数据 (使用去重逻辑)
-          final feedingRecs = await _historyService.queryHopperFeedingHistory(
-            deviceId: deviceId,
-            start: dayStart,
-            end: dayEnd,
-          );
-
-          // 应用去重过滤
-          final dedupedRecs = _deduplicateFeedingRecords(feedingRecs);
-          double totalFeeding = 0.0;
-          for (var rec in dedupedRecs) {
-            totalFeeding += rec.addedWeight;
-          }
-
-          rows.add([
-            dayLabel,
-            kilnName,
-            dateFormat.format(dayStart),
-            dateFormat.format(dayEnd),
-            firstEnergy.toStringAsFixed(2),
-            lastEnergy.toStringAsFixed(2),
-            consumption.toStringAsFixed(2),
-            totalFeeding.toStringAsFixed(2),
-          ]);
-        }
-
-        // 每天处理完后短暂延迟，避免请求过于密集
-        if (d < days - 1) {
-          await Future.delayed(const Duration(milliseconds: 100));
-        }
-      }
-
-      // 3. 生成 Excel
-      var excelObj = Excel.createExcel();
-      Sheet sheet = excelObj['Sheet1'];
-
-      for (var row in rows) {
-        List<CellValue> cellValues =
-            row.map((e) => TextCellValue(e.toString())).toList();
-        sheet.appendRow(cellValues);
-      }
-
-      // 设置列宽
-      for (int i = 0; i < 8; i++) {
-        sheet.setColumnWidth(i, 18.0);
-      }
-
-      // 4. 保存文件
-      String desktopPath;
-      final userProfile = Platform.environment['USERPROFILE'];
-      if (Platform.isWindows && userProfile != null) {
-        desktopPath = p.join(userProfile, 'Desktop');
-      } else {
-        desktopPath = Directory.current.path;
-      }
-
-      if (!Directory(desktopPath).existsSync()) {
-        if (Platform.isWindows) {
-          final hardcoded = r'C:\Users\Admin\Desktop';
-          if (Directory(hardcoded).existsSync()) {
-            desktopPath = hardcoded;
-          }
-        }
-      }
-
-      final startStr = dayFormat.format(startDate);
-      final endStr = dayFormat.format(endDate);
-      final filename = '回转窑报表_${startStr}_至_$endStr.xlsx';
-      final savePath = p.join(desktopPath, filename);
-
-      final bytes = excelObj.encode();
-      if (bytes != null) {
-        File(savePath)
-          ..createSync(recursive: true)
-          ..writeAsBytesSync(bytes);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('已导出 ${rows.length - 1} 行数据到: $savePath'),
-              duration: const Duration(seconds: 5),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      debugPrint('Export failed: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出失败: $e')),
-        );
-      }
-    }
-  }
-
-  /// 导出回转窑报表 (旧方法，保留兼容)
-  Future<void> _exportHopperReport() async {
-    // 直接调用新的日期选择器
-    await _showExportDatePicker();
   }
 
   /// 加载回转窑温度历史数据
@@ -684,49 +384,16 @@ class HistoryDataPageState extends State<HistoryDataPage>
     }
   }
 
-  /// 🔧 [FIX] 投料记录去重过滤器
-  /// 同一投料周期内（120分钟）的多条记录只保留第一条
-  /// 解决后端产生重复记录导致累计值虚高的问题
-  List<FeedingRecord> _deduplicateFeedingRecords(List<FeedingRecord> records) {
-    if (records.isEmpty) return records;
+  // 🔧 [REMOVED] 前端去重逻辑已删除，改为使用后端直接计算的投料记录
 
-    // 🔧 [CRITICAL] 去重窗口改为 120 分钟
-    // 原因：投料过程可能持续 30-60 分钟，后端在这期间可能产生多条记录
-    // 60分钟的窗口不够，比如 23:30 和 00:30 相差正好 60 分钟，会被误判为两次投料
-    const int dedupeWindowMins = 120;
-    List<FeedingRecord> result = [];
-    DateTime? lastAcceptedTime;
-
-    for (var record in records) {
-      if (lastAcceptedTime == null) {
-        // 第一条记录直接接受
-        result.add(record);
-        lastAcceptedTime = record.time;
-      } else {
-        // 检查与上一条接受记录的时间差
-        final diffMins =
-            record.time.difference(lastAcceptedTime).inMinutes.abs();
-        if (diffMins >= dedupeWindowMins) {
-          // 超过窗口，视为新的投料事件
-          result.add(record);
-          lastAcceptedTime = record.time;
-        } else {
-          // 在窗口内，视为重复，跳过
-          debugPrint('🔄 [Dedupe] 跳过重复记录: ${record.time} (距上一条 ${diffMins}分钟)');
-        }
-      }
-    }
-
-    return result;
-  }
-
-  /// 加载回转窑投料累计数据
-  /// 逻辑：获取投料事件 -> 去重过滤 -> 按时间累加 -> 生成阶梯图数据
+  /// 🔧 [REFACTORED] 加载回转窑投料记录数据
+  /// 逻辑：直接从后端查询投料记录 -> 显示在图表中（散点图）
+  /// 不再进行前端计算、去重、累加等操作
   Future<void> _loadHopperFeedingData() async {
     final deviceId =
         HistoryDataService.hopperDeviceIds[_selectedHopperIndex + 1]!;
 
-    // 1. 获取原始记录
+    // 1. 从后端查询投料记录（不设置聚合度，直接查询原始记录）
     final records = await _historyService.queryHopperFeedingHistory(
       deviceId: deviceId,
       start: _hopperChartStartTime,
@@ -738,25 +405,13 @@ class HistoryDataPageState extends State<HistoryDataPage>
     // 2. 排序（确保正序）
     records.sort((a, b) => a.time.compareTo(b.time));
 
-    // 🔧 [FIX] 前端去重过滤：同一小时内的多条记录只保留第一条
-    // 解决后端产生重复记录导致累计值虚高的问题
-    final deduplicatedRecords = _deduplicateFeedingRecords(records);
-    debugPrint(
-        '📊 [Feeding] 原始记录: ${records.length}, 去重后: ${deduplicatedRecords.length}');
+    debugPrint('📊 [Feeding] 后端返回投料记录: ${records.length} 条');
 
+    // 3. 直接将投料记录转换为散点数据（每条记录显示为一个点）
     List<FlSpot> spots = [];
-    double cumulativeWeight = 0;
 
-    // 起点：时间范围开始时，累计量默认为 0
-    // spots.add(FlSpot(_hopperChartStartTime.millisecondsSinceEpoch.toDouble(), 0));
-
-    // 如果数据点很少，为了画出漂亮的阶梯线，可以在每个点之前插一个点（维持上一个值）
-    // 或者直接画折线图（TechLineChart 默认是直线连接）。
-    // 用户需求是 "投料总量的变化"，所以直接连接点即可。
-
-    // 如果没有数据，显示一条 0 线 (前提是该设备必须有称重数据，即确实是"有料仓"的)
     if (records.isEmpty) {
-      // 检查是否有称重数据（验证是否为有效料仓）
+      // 如果没有投料记录，检查是否有称重数据（验证是否为有效料仓）
       final weightRes = await _historyService.queryHopperWeightHistory(
         deviceId: deviceId,
         start: _hopperChartStartTime,
@@ -764,7 +419,6 @@ class HistoryDataPageState extends State<HistoryDataPage>
       );
 
       // 只有在该设备有称重数据（说明是有效料仓）时，才显示 0 线
-      // 否则保持 spots 为空（即不显示曲线）
       if (weightRes.success &&
           weightRes.hasData &&
           weightRes.dataPoints != null &&
@@ -775,25 +429,13 @@ class HistoryDataPageState extends State<HistoryDataPage>
             FlSpot(_hopperChartEndTime.millisecondsSinceEpoch.toDouble(), 0));
       }
     } else {
-      // 遍历事件进行累加（使用去重后的记录）
-      // 为了让图表从左到右连贯，我们假设起点是0
-      // 如果第一个事件发生在中间，那么前面都是0
-      if (deduplicatedRecords.first.time.isAfter(_hopperChartStartTime)) {
-        spots.add(
-            FlSpot(_hopperChartStartTime.millisecondsSinceEpoch.toDouble(), 0));
-      }
-
-      for (var record in deduplicatedRecords) {
-        // 累加（使用去重后的记录）
-        cumulativeWeight += record.addedWeight;
+      // 将每条投料记录转换为一个数据点
+      // X轴：投料时间，Y轴：投料重量
+      for (var record in records) {
         spots.add(FlSpot(
-            record.time.millisecondsSinceEpoch.toDouble(), cumulativeWeight));
-      }
-
-      // 延伸到结束时间（保持最后一个累计值）
-      if (deduplicatedRecords.last.time.isBefore(_hopperChartEndTime)) {
-        spots.add(FlSpot(_hopperChartEndTime.millisecondsSinceEpoch.toDouble(),
-            cumulativeWeight));
+          record.time.millisecondsSinceEpoch.toDouble(),
+          record.addedWeight,
+        ));
       }
     }
 
@@ -803,194 +445,10 @@ class HistoryDataPageState extends State<HistoryDataPage>
         .toList();
 
     setState(() => _hopperFeedingData[_selectedHopperIndex] = spots);
-
-    // 🔧 [Fail-Safe] 前端双重验证：回填遗漏 + 删除多余
-    // 仅在查看范围接近 24 小时（即"最近1天"）时触发
-    final duration = _hopperChartEndTime.difference(_hopperChartStartTime);
-    if (duration.inHours >= 23 && duration.inHours <= 25) {
-      // 异步执行，不阻塞 UI
-      _verifySyncFeedingData(deviceId, records);
-    }
   }
 
-  /// [Fail-Safe] 验证并同步投料记录（双向同步：回填 + 删除）
-  Future<void> _verifySyncFeedingData(
-      String deviceId, List<FeedingRecord> backendRecords) async {
-    try {
-      // 1. 获取原始称重数据
-      final points = await _fetchRawWeightData(deviceId);
-      if (points == null || points.isEmpty) return;
-
-      // 2. 本地重新计算理想的投料事件
-      final localEvents = _detectLocalFeedingEvents(points);
-
-      // 3. 执行删除逻辑 (Backend有但Local无)
-      await _cleanupExtraFeedings(deviceId, backendRecords, localEvents);
-
-      // 4. 执行回填逻辑 (Local有但Backend无)
-      // 注意：传入最新的 backendRecords (如果刚才删除了应该排除，但简化起见用原列表也行，
-      // 因为已删除的在_cleanupExtraFeedings里处理了，这里主要看Backend缺少的)
-      await _backfillMissingFeedings(deviceId, localEvents, backendRecords);
-    } catch (e) {
-      debugPrint('⚠️ [Fail-Safe] 验证逻辑异常: $e');
-    }
-  }
-
-  /// 本地检测投料事件 (纯前端算法)
-  List<Map<String, dynamic>> _detectLocalFeedingEvents(
-      List<HistoryDataPoint> points) {
-    const double threshold = 10.0;
-    // 🔧 [FIX] 增大防抖时间到 60分钟 (解决 interval=30m 时连续两个点被识别为两次投料的问题)
-    const int debounceMins = 60;
-
-    List<Map<String, dynamic>> events = [];
-    DateTime? lastTriggerTime;
-
-    // 从索引1开始，如果索引0就是高值(400)，因为没有prev，自然不会触发 diff > 10
-    // 除非 points[0]=0, points[1]=400。
-    // 如果 points[0]=400，points[1]=399 -> diff = -1，不会触发。
-    // 所以只要确保不把"缺少前值"的情况当做0处理即可。
-    // _fetchRawWeightData 返回的是真实数据点，不包含补0点。
-
-    for (int i = 1; i < points.length; i++) {
-      // [关键] 忽略开头的前几个点，避免因为图表截断导致的"假上升"
-      // 比如数据是从昨天23:59开始的，如果刚巧在投料中，可能会被截断。
-      // 但通常我们不希望处理图表边缘的不完整事件。
-      if (i < 3) continue;
-
-      final prev = (points[i - 1].fields['weight'] as num?)?.toDouble() ?? 0.0;
-      final curr = (points[i].fields['weight'] as num?)?.toDouble() ?? 0.0;
-
-      // 过滤无效数据 (0值通常是采集错误)
-      if (prev < 1.0 || curr < 1.0) continue;
-
-      final diff = curr - prev;
-
-      if (diff > threshold) {
-        final eventTime = points[i].time;
-
-        // 防抖
-        // 🔧 [FIX] 这里使用 < debounceMins，如果 interval是30m，30 < 30是false，防抖失效
-        // 现在 debounceMins 改为 60 了，30 < 60 是true，防抖生效。
-        final actualEventTime =
-            points[i - 1].time; // [FIX] 使用 i-1 (上升开始点) 作为事件时间
-        if (lastTriggerTime != null &&
-            actualEventTime.difference(lastTriggerTime).inMinutes <
-                debounceMins) {
-          // 如果在防抖期内，忽略这次触发，但更新 lastTriggerTime 吗？
-          // 不，不更新 lastTriggerTime，因为我们要以"第一次触发"的时间为准
-          continue;
-        }
-
-        events.add({
-          'time': actualEventTime,
-          'weight': diff, // 粗略估算，主要用于时间匹配
-        });
-        lastTriggerTime = actualEventTime;
-
-        debugPrint(
-            '🔍 [Local Detect] 发现投料事件: Time=$actualEventTime, Diff=${diff.toStringAsFixed(1)}');
-      }
-    }
-
-    debugPrint(
-        '📊 [Local Detect] 本地共检测到 ${events.length} 个投料事件: ${events.map((e) => e['time']).toList()}');
-    return events;
-  }
-
-  /// 清理多余的投料记录 (Backend 有，但 Local 没检测到)
-  Future<void> _cleanupExtraFeedings(
-    String deviceId,
-    List<FeedingRecord> backendRecords,
-    List<Map<String, dynamic>> localEvents,
-  ) async {
-    const int matchWindowMins = 30; // [FIX] 匹配窗口扩大到 +/- 30分钟
-    debugPrint(
-        '🧹 [Cleanup Task] 开始比对: LocalEvents=${localEvents.length}, BackendRecords=${backendRecords.length}');
-
-    for (var record in backendRecords) {
-      // 检查这个 record 是否能匹配上任意一个 local event
-      bool isMatched = localEvents.any((local) {
-        final timeDiff =
-            record.time.difference(local['time'] as DateTime).inMinutes.abs();
-        return timeDiff <= matchWindowMins;
-      });
-
-      if (!isMatched) {
-        // [关键] 未匹配上，认为是多余/错误的记录
-        // 但是要做一个保护：如果 backend record 的 added_weight 很小（比如 < 10），
-        // 或者它发生在图表边缘（Local检测不到），则谨慎删除。
-        // 这里我们假设 Local 算法足够鲁棒。
-
-        // 保护：不要删除最近 1 小时内的记录（可能还在生成中）
-        if (DateTime.now().difference(record.time).inMinutes < 60) continue;
-
-        debugPrint(
-            '🗑️ [Fail-Safe] 发现多余投料记录，删除: ID=$deviceId, Time=${record.time}');
-        final success =
-            await _historyService.deleteFeedingRecord(deviceId, record.time);
-
-        // 🔧 [Fail-Safe] 电路熔断：如果删除失败（可能是后端不支持或网络问题），
-        // 立即停止后续删除操作，防止死循环刷日志
-        if (!success) {
-          debugPrint('⚠️ [Fail-Safe] 删除操作失败，触发熔断，停止本次清理任务');
-          break;
-        }
-      }
-    }
-  }
-
-  /// 回填缺失的投料记录 (Local 有，但 Backend 无)
-  Future<void> _backfillMissingFeedings(
-    String deviceId,
-    List<Map<String, dynamic>> localEvents,
-    List<FeedingRecord> backendRecords,
-  ) async {
-    const int matchWindowMins = 30; // [FIX] 回填逻辑也同步使用 +/- 30分钟窗口
-
-    for (var local in localEvents) {
-      final localTime = local['time'] as DateTime;
-
-      bool isRecorded = backendRecords.any((backend) {
-        final timeDiff = backend.time.difference(localTime).inMinutes.abs();
-        return timeDiff <= matchWindowMins;
-      });
-
-      if (!isRecorded) {
-        final weight = local['weight'] as double;
-        debugPrint(
-            '🛡️ [Fail-Safe] 发现遗漏投料记录，回填: ID=$deviceId, Time=$localTime');
-
-        await _historyService.backfillFeedingRecord(
-          deviceId,
-          {
-            'time': localTime.toUtc().toIso8601String(),
-            'added_weight': weight,
-          },
-        );
-      }
-    }
-  }
-
-  /// 获取原始称重数据（已排序）
-  Future<List<HistoryDataPoint>?> _fetchRawWeightData(String deviceId) async {
-    final result = await _historyService.queryHopperWeightHistory(
-      deviceId: deviceId,
-      start: _hopperChartStartTime,
-      end: _hopperChartEndTime,
-    );
-
-    if (!result.success || !result.hasData || result.dataPoints == null) {
-      return null;
-    }
-
-    final points = result.dataPoints!;
-    points.sort((a, b) => a.time.compareTo(b.time));
-    return points;
-  }
-
-  /// 检测投料事件并回填遗漏记录 (已废弃，由 _verifySyncFeedingData 替代)
-  // Future<void> _detectAndBackfillMissingFeedings ... (Deleted)
+  // 🔧 [REMOVED] 所有前端验证、回填、删除逻辑已删除
+  // 投料记录完全由后端 feeding_analysis_service_v3.py 负责生成和管理
 
   /// 加载辊道窑历史数据
   /// 🔧 [优化] 使用并行请求替代串行循环，大幅提升加载速度
@@ -1319,20 +777,20 @@ class HistoryDataPageState extends State<HistoryDataPage>
                   accentColor: TechColors.glowOrange,
                   compact: true,
                 ),
-                // 4. 导出报表
+                // 4. 数据导出（新版）
                 const SizedBox(width: 8),
                 TextButton.icon(
-                  icon: const Icon(Icons.download,
+                  icon: const Icon(Icons.file_download,
                       color: TechColors.glowOrange, size: 20),
                   label: const Text(
-                    '导出数据',
+                    '数据导出',
                     style: TextStyle(
                       color: TechColors.glowOrange,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  onPressed: _exportHopperReport,
+                  onPressed: _showDataExportDialog,
                   style: TextButton.styleFrom(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1694,12 +1152,13 @@ class HistoryDataPageState extends State<HistoryDataPage>
     );
   }
 
-  /// 🔧 投料累计曲线图（阶梯状，不使用平滑过渡）
+  /// 🔧 [REFACTORED] 投料记录散点图（显示每次投料事件）
+  /// 改为散点图模式，每个点代表一次投料事件
   Widget _buildHopperFeedingChart() {
     return TechLineChart(
-      title: '投料累计 (kg)',
+      title: '投料记录 (kg)',
       accentColor: TechColors.glowGreen,
-      yAxisLabel: '投料总量(kg)',
+      yAxisLabel: '投料重量(kg)',
       xAxisLabel: '',
       xInterval:
           _calculateXInterval(_hopperChartStartTime, _hopperChartEndTime),
@@ -1712,7 +1171,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
       getItemLabel: _getHopperLabel,
       selectorLabel: '选择回转窑',
       showSelector: false,
-      isCurved: false, // 🔧 取消平滑过渡，显示阶梯状曲线
+      isCurved: false, // 直线连接
       onItemSelect: (index) {},
     );
   }
