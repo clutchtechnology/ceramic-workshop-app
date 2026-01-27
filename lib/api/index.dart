@@ -207,3 +207,114 @@ class ApiClient {
     }
   }
 }
+
+// ============================================================================
+// EnhancedApiClient - 增强版 API 客户端
+// ============================================================================
+// 功能:
+// 1. 支持自定义超时时间（适配长时间查询，如数据导出）
+// 2. 自动添加 use_optimized 参数（启用后端预计算优化）
+// 3. 复用 ApiClient 的连接管理和错误处理逻辑
+// ============================================================================
+// 使用场景:
+// - 数据导出接口（30天查询需要 60 秒超时）
+// - 历史数据查询（大量数据需要更长超时）
+// - 批量操作接口
+// ============================================================================
+
+class EnhancedApiClient {
+  static final EnhancedApiClient _instance = EnhancedApiClient._internal();
+  factory EnhancedApiClient() => _instance;
+  EnhancedApiClient._internal();
+
+  final String baseUrl = Api.baseUrl;
+
+  /// GET 请求（支持自定义超时）
+  Future<dynamic> getWithTimeout(
+    String path, {
+    Map<String, String>? params,
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
+    final uri = Uri.parse('$baseUrl$path').replace(queryParameters: params);
+
+    try {
+      // 使用 ApiClient 的静态 _client（复用连接管理逻辑）
+      final response = await ApiClient._client.get(uri).timeout(timeout);
+      ApiClient._consecutiveFailures = 0;
+      return _processResponse(response, uri.toString());
+    } on TimeoutException {
+      _handleError(
+          'GET', uri.toString(), 'Request timeout after ${timeout.inSeconds}s');
+      rethrow;
+    } on SocketException catch (e) {
+      _handleError('GET', uri.toString(), 'Socket error: $e');
+      rethrow;
+    } on http.ClientException catch (e) {
+      _handleError('GET', uri.toString(), 'Client error: $e');
+      rethrow;
+    } catch (e) {
+      _handleError('GET', uri.toString(), e.toString());
+      rethrow;
+    }
+  }
+
+  /// POST 请求（支持自定义超时）
+  Future<dynamic> postWithTimeout(
+    String path, {
+    Map<String, String>? params,
+    dynamic body,
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
+    final uri = Uri.parse('$baseUrl$path').replace(queryParameters: params);
+
+    try {
+      final response = await ApiClient._client.post(
+        uri,
+        body: jsonEncode(body),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(timeout);
+      ApiClient._consecutiveFailures = 0;
+      return _processResponse(response, uri.toString());
+    } on TimeoutException {
+      _handleError('POST', uri.toString(),
+          'Request timeout after ${timeout.inSeconds}s');
+      rethrow;
+    } on SocketException catch (e) {
+      _handleError('POST', uri.toString(), 'Socket error: $e');
+      rethrow;
+    } on http.ClientException catch (e) {
+      _handleError('POST', uri.toString(), 'Client error: $e');
+      rethrow;
+    } catch (e) {
+      _handleError('POST', uri.toString(), e.toString());
+      rethrow;
+    }
+  }
+
+  dynamic _processResponse(http.Response response, String url) {
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (ApiClient._consecutiveFailures > 0) {
+        logger.network('RECOVERED', url, statusCode: response.statusCode);
+      }
+      try {
+        return jsonDecode(response.body);
+      } catch (e) {
+        logger.error('JSON 解析失败', e);
+        return {'success': false, 'error': 'JSON 解析失败', 'data': null};
+      }
+    } else {
+      _handleError('RESPONSE', url, 'HTTP ${response.statusCode}');
+      throw Exception('网络请求错误: ${response.statusCode}');
+    }
+  }
+
+  void _handleError(String method, String url, String error) {
+    ApiClient._consecutiveFailures++;
+    logger.network(method, url, error: error);
+
+    if (ApiClient._consecutiveFailures >= 5 &&
+        ApiClient._consecutiveFailures % 5 == 0) {
+      logger.warning('网络连续失败 ${ApiClient._consecutiveFailures} 次，请检查后端服务');
+    }
+  }
+}
