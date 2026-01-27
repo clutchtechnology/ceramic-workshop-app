@@ -72,7 +72,7 @@ class Api {
   // 数据导出（5个核心接口）- 使用优化版本（预计算数据）
   // ============================================================================
 
-  // 1. 运行时长统计 - 22个设备（所有设备）
+  // 1. 设备运行时长 - 22个设备（所有设备）
   // 超时: 60秒
   static const String exportRuntimeAll = '/api/export/runtime/all';
 
@@ -99,7 +99,7 @@ class Api {
     return '$exportGasConsumption?days=$days&device_ids=$deviceIds';
   }
 
-  // 3. 投料量统计 - 7个设备（仅带料仓的回转窑）
+  // 3. 累计投料量 - 7个设备（仅带料仓的回转窑）
   // 超时: 60秒
   static const String exportFeedingAmount = '/api/export/feeding-amount';
 
@@ -121,7 +121,7 @@ class Api {
     return '$exportElectricityAll?days=$days';
   }
 
-  // 5. 综合数据统计 - 22个设备（所有数据整合）
+  // 5. 全部数据 - 22个设备（所有数据整合）
   // 超时: 60秒
   // 性能: 使用优化版本（预计算数据），30天查询约8秒
   static const String exportComprehensive = '/api/export/comprehensive';

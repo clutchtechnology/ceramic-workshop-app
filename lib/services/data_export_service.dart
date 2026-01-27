@@ -13,16 +13,16 @@ import '../utils/device_name_mapper.dart';
 /// 5. 使用优化后的 API 客户端（60秒超时 + use_optimized=true）
 /// ============================================================================
 /// 导出类型及设备数量:
-/// - 运行时长统计: 20个设备（9回转窑 + 6辊道窑分区 + 1辊道窑合计 + 2SCR氨水泵 + 2风机）
+/// - 设备运行时长: 20个设备（9回转窑 + 6辊道窑分区 + 1辊道窑合计 + 2SCR氨水泵 + 2风机）
 /// - 燃气消耗统计: 2个设备（SCR北/南燃气表）
-/// - 投料量统计: 7个设备（带料仓的回转窑，不包含窑2和窑1）
-/// - 电量统计: 20个设备（同运行时长统计）
-/// - 综合数据统计: 20个设备（同运行时长统计）
+/// - 累计投料量: 7个设备（带料仓的回转窑，不包含窑2和窑1）
+/// - 电量统计: 20个设备（同设备运行时长）
+/// - 全部数据: 20个设备（同设备运行时长）
 /// ============================================================================
 /// 性能优化:
 /// - 使用 EnhancedApiClient（60秒超时，适配长时间查询）
-/// - 默认启用 use_optimized=true（使用后端预计算的每日汇总数据）
-/// - 30天查询从 23.59s 优化到 8.0s（66.1% 性能提升）
+/// - 默认使用 V3 版本（批量查询 + 并行计算 + 内存缓存）
+/// - 30天查询从 23.59s 优化到 0.78s（性能提升 30倍）
 /// ============================================================================
 
 class DataExportService {
@@ -41,14 +41,14 @@ class DataExportService {
   Future<Map<String, dynamic>> getAllDevicesRuntime({
     required DateTime startTime,
     required DateTime endTime,
-    bool useOptimized = true,
+    String version = 'v3',
   }) async {
     final response = await _client.getWithTimeout(
       Api.exportRuntimeAll,
       params: {
         'start_time': startTime.toUtc().toIso8601String(),
         'end_time': endTime.toUtc().toIso8601String(),
-        'use_optimized': useOptimized.toString(),
+        'version': version,
       },
       timeout: const Duration(seconds: 60),
     );
@@ -80,7 +80,7 @@ class DataExportService {
     required List<String> deviceIds,
     required DateTime startTime,
     required DateTime endTime,
-    bool useOptimized = true,
+    String version = 'v3',
   }) async {
     final response = await _client.getWithTimeout(
       Api.exportGasConsumption,
@@ -88,7 +88,7 @@ class DataExportService {
         'device_ids': deviceIds.join(','),
         'start_time': startTime.toUtc().toIso8601String(),
         'end_time': endTime.toUtc().toIso8601String(),
-        'use_optimized': useOptimized.toString(),
+        'version': version,
       },
       timeout: const Duration(seconds: 60),
     );
@@ -109,7 +109,7 @@ class DataExportService {
     }
   }
 
-  /// 获取投料量统计
+  /// 获取累计投料量
   ///
   /// 返回数据包含:
   /// - hoppers: 7个带料仓的回转窑
@@ -122,14 +122,14 @@ class DataExportService {
   Future<Map<String, dynamic>> getFeedingAmount({
     required DateTime startTime,
     required DateTime endTime,
-    bool useOptimized = true,
+    String version = 'v3',
   }) async {
     final response = await _client.getWithTimeout(
       Api.exportFeedingAmount,
       params: {
         'start_time': startTime.toUtc().toIso8601String(),
         'end_time': endTime.toUtc().toIso8601String(),
-        'use_optimized': useOptimized.toString(),
+        'version': version,
       },
       timeout: const Duration(seconds: 60),
     );
@@ -165,14 +165,14 @@ class DataExportService {
   Future<Map<String, dynamic>> getAllElectricity({
     required DateTime startTime,
     required DateTime endTime,
-    bool useOptimized = true,
+    String version = 'v3',
   }) async {
     final response = await _client.getWithTimeout(
       Api.exportElectricityAll,
       params: {
         'start_time': startTime.toUtc().toIso8601String(),
         'end_time': endTime.toUtc().toIso8601String(),
-        'use_optimized': useOptimized.toString(),
+        'version': version,
       },
       timeout: const Duration(seconds: 60),
     );
@@ -199,7 +199,7 @@ class DataExportService {
     required String deviceType,
     required DateTime startTime,
     required DateTime endTime,
-    bool useOptimized = true,
+    String version = 'v3',
   }) async {
     final response = await _client.getWithTimeout(
       Api.exportElectricity,
@@ -208,7 +208,7 @@ class DataExportService {
         'device_type': deviceType,
         'start_time': startTime.toUtc().toIso8601String(),
         'end_time': endTime.toUtc().toIso8601String(),
-        'use_optimized': useOptimized.toString(),
+        'version': version,
       },
       timeout: const Duration(seconds: 60),
     );
@@ -236,14 +236,14 @@ class DataExportService {
   Future<Map<String, dynamic>> getComprehensiveData({
     required DateTime startTime,
     required DateTime endTime,
-    bool useOptimized = true,
+    String version = 'v3',
   }) async {
     final response = await _client.getWithTimeout(
       Api.exportComprehensive,
       params: {
         'start_time': startTime.toUtc().toIso8601String(),
         'end_time': endTime.toUtc().toIso8601String(),
-        'use_optimized': useOptimized.toString(),
+        'version': version,
       },
       timeout: const Duration(seconds: 60),
     );

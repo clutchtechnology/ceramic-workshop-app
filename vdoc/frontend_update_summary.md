@@ -51,19 +51,19 @@ DeviceNameMapper.getHopperKilnIds()
 
 **5个核心导出接口**:
 ```dart
-// 1. 运行时长统计 - 20个设备
+// 1. 设备运行时长 - 20个设备
 static const String exportRuntimeAll = '/api/export/runtime/all';
 
 // 2. 燃气消耗统计 - 2个设备
 static const String exportGasConsumption = '/api/export/gas-consumption';
 
-// 3. 投料量统计 - 7个设备
+// 3. 累计投料量 - 7个设备
 static const String exportFeedingAmount = '/api/export/feeding-amount';
 
 // 4. 电量统计 - 20个设备
 static const String exportElectricityAll = '/api/export/electricity/all';
 
-// 5. 综合数据统计 - 20个设备
+// 5. 全部数据 - 20个设备
 static const String exportComprehensive = '/api/export/comprehensive';
 ```
 
@@ -165,7 +165,7 @@ import 'package:ceramic_workshop_app/utils/device_name_mapper.dart';
 // 获取设备显示名称
 String deviceName = DeviceNameMapper.getDeviceName(deviceId);
 
-// 示例：导出运行时长统计
+// 示例：导出设备运行时长
 void _exportRuntimeData(Map<String, dynamic> data) {
   // 遍历回转窑
   for (var hopper in data['hoppers']) {
@@ -235,7 +235,7 @@ try {
 ### 3. 获取设备列表
 
 ```dart
-// 获取所有带料仓的回转窑（用于投料量统计）
+// 获取所有带料仓的回转窑（用于累计投料量）
 List<String> hopperKilns = DeviceNameMapper.getHopperKilnIds();
 // 返回: ['short_hopper_1', 'short_hopper_2', 'short_hopper_3', 'short_hopper_4',
 //        'long_hopper_1', 'long_hopper_2', 'long_hopper_3']
@@ -253,7 +253,7 @@ List<String> zones = DeviceNameMapper.getRollerKilnZoneIds();
 
 ## 📝 数据结构说明
 
-### 1. 运行时长统计数据结构
+### 1. 设备运行时长数据结构
 
 ```dart
 {
@@ -335,7 +335,7 @@ List<String> zones = DeviceNameMapper.getRollerKilnZoneIds();
 }
 ```
 
-### 3. 投料量统计数据结构
+### 3. 累计投料量数据结构
 
 ```dart
 {
@@ -359,7 +359,7 @@ List<String> zones = DeviceNameMapper.getRollerKilnZoneIds();
 ### 4. 电量统计数据结构
 
 ```dart
-// 同运行时长统计，但每个 daily_record 包含更多字段:
+// 同设备运行时长，但每个 daily_record 包含更多字段:
 {
   "day": 1,
   "date": "2026-01-26",
@@ -372,7 +372,7 @@ List<String> zones = DeviceNameMapper.getRollerKilnZoneIds();
 }
 ```
 
-### 5. 综合数据统计数据结构
+### 5. 全部数据数据结构
 
 ```dart
 {
@@ -425,10 +425,10 @@ try {
 }
 ```
 
-### 3. 投料量统计不包含无料仓的窑
+### 3. 累计投料量不包含无料仓的窑
 
 ```dart
-// ❌ 投料量统计不包含 no_hopper_1 和 no_hopper_2
+// ❌ 累计投料量不包含 no_hopper_1 和 no_hopper_2
 // ✅ 只包含7个带料仓的回转窑
 List<String> hopperKilns = DeviceNameMapper.getHopperKilnIds();
 // 返回: ['short_hopper_1', ..., 'long_hopper_3'] (7个)
@@ -452,7 +452,7 @@ String frontendDate = DateFormat('yyyyMMdd').format(dt); // "20260126"
 ### 1. 测试设备数量验证
 
 ```dart
-// 测试运行时长统计（应该返回20个设备）
+// 测试设备运行时长（应该返回20个设备）
 final runtimeData = await _exportService.getAllDevicesRuntime(...);
 assert(runtimeData['hoppers'].length == 9);
 assert(runtimeData['roller_kiln_zones'].length == 6);
@@ -466,7 +466,7 @@ assert(gasData.length == 2);
 assert(gasData.containsKey('scr_1'));
 assert(gasData.containsKey('scr_2'));
 
-// 测试投料量统计（应该返回7个设备）
+// 测试累计投料量（应该返回7个设备）
 final feedingData = await _exportService.getFeedingAmount(...);
 assert(feedingData['hoppers'].length == 7);
 ```

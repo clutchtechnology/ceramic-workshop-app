@@ -16,11 +16,11 @@
 - **文件**: `app/routers/export.py`
 - **接口**:
   - `GET /api/export/gas-consumption` - 燃气消耗统计
-  - `GET /api/export/feeding-amount` - 投料量统计
+  - `GET /api/export/feeding-amount` - 累计投料量
   - `GET /api/export/electricity` - 单设备电量统计
   - `GET /api/export/electricity/all` - 所有设备电量统计
 
-#### 运行时长统计
+#### 设备运行时长
 - **文件**: `app/services/runtime_statistics_service.py`
 - **文件**: `app/routers/runtime.py`
 - **接口**:
@@ -43,7 +43,7 @@
 - **功能**:
   - `getAllDevicesRuntime()` - 获取所有设备运行时长
   - `getGasConsumption()` - 获取燃气消耗统计
-  - `getFeedingAmount()` - 获取投料量统计
+  - `getFeedingAmount()` - 获取累计投料量
   - `getAllElectricity()` - 获取所有设备电量统计
 
 #### 页面集成
@@ -55,7 +55,7 @@
 
 ## 📊 导出功能详情
 
-### 1. 运行时长统计
+### 1. 设备运行时长
 **导出内容**:
 - 设备类型
 - 设备名称
@@ -69,7 +69,7 @@
 - 2个SCR设备
 - 2个风机
 
-### 2. 燃气流量统计
+### 2. 燃气用量
 **导出内容**:
 - 日期
 - 设备
@@ -83,7 +83,7 @@
 - SCR_1
 - SCR_2
 
-### 3. 投料量统计
+### 3. 累计投料量
 **导出内容**:
 - 日期
 - 起始时间
@@ -93,7 +93,7 @@
 
 **数据来源**: feeding_records measurement
 
-### 4. 电表统计
+### 4. 用电量
 **导出内容**:
 - 日期
 - 设备
@@ -173,7 +173,7 @@ curl "http://localhost:8080/api/runtime/all?days=7"
 curl "http://localhost:8080/api/export/gas-consumption?days=7"
 ```
 
-### 3. 获取投料量统计
+### 3. 获取累计投料量
 ```bash
 curl "http://localhost:8080/api/export/feeding-amount?days=7"
 ```

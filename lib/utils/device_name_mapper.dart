@@ -48,7 +48,7 @@ class DeviceNameMapper {
     return deviceNameMap[deviceId] ?? deviceId;
   }
 
-  /// 判断是否有料仓（用于投料量统计）
+  /// 判断是否有料仓（用于累计投料量）
   static bool hasHopper(String deviceId) {
     return deviceId.startsWith('short_hopper_') ||
         deviceId.startsWith('long_hopper_');
@@ -203,17 +203,17 @@ class DeviceNameMapper {
     int expectedCount;
 
     switch (exportType) {
-      case 'runtime': // 运行时长统计
+      case 'runtime': // 设备运行时长
       case 'electricity': // 电量统计
         expectedCount = 20; // 9回转窑 + 6辊道窑分区 + 1辊道窑合计 + 2SCR氨水泵 + 2风机
         break;
-      case 'comprehensive': // 综合数据统计
+      case 'comprehensive': // 全部数据
         expectedCount = 22; // 9回转窑 + 6辊道窑分区 + 1辊道窑合计 + 2SCR燃气表 + 2SCR氨水泵 + 2风机
         break;
       case 'gas': // 燃气消耗统计
         expectedCount = 2; // 2个SCR燃气表
         break;
-      case 'feeding': // 投料量统计
+      case 'feeding': // 累计投料量
         expectedCount = 7; // 7个带料仓的回转窑
         break;
       default:
@@ -276,4 +276,3 @@ class DeviceNameMapper {
     }
   }
 }
-

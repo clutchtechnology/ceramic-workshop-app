@@ -63,12 +63,16 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
 
   // 🔧 [CRITICAL] 防止 _isRefreshing 卡死的保护机制
   DateTime? _refreshStartTime; // 记录请求开始时间
-  static const int _maxRefreshDurationSeconds = 15; // 🔧 缩短到 15 秒
+  static const int _maxRefreshDurationSeconds = 10; // 🔧 缩短到 10 秒（5秒超时 + 5秒缓冲）
 
   // 🔧 [CRITICAL] 网络异常时的退避策略
   int _consecutiveFailures = 0; // 连续失败次数
   static const int _maxBackoffSeconds = 60; // 最大退避间隔
   static const int _normalIntervalSeconds = 5; // 正常轮询间隔
+
+  // 🔧 [NEW] 后端服务状态标志
+  bool _isBackendAvailable = true; // 后端是否可用
+  String? _lastErrorMessage; // 最后一次错误信息
 
   // 🔧 [CRITICAL] 缓存 Provider 引用（防止 build() 中频繁查找导致卡死）
   late RealtimeConfigProvider _configProvider;
@@ -105,7 +109,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
   void resumePolling() {
     // 🔧 重置连续失败计数
     _consecutiveFailures = 0;
-    
+
     if (!TimerManager().exists(_timerIdRealtime)) {
       _startPolling();
     } else {
@@ -222,6 +226,24 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
     }
   }
 
+  /// 🔧 [NEW] 解析错误信息，返回用户友好的提示
+  String _getErrorMessage(dynamic error) {
+    final errorStr = error.toString();
+
+    if (errorStr.contains('SocketException') ||
+        errorStr.contains('远程计算机拒绝网络连接')) {
+      return '无法连接到后端服务 (端口 8080)';
+    } else if (errorStr.contains('TimeoutException')) {
+      return '请求超时，后端响应过慢';
+    } else if (errorStr.contains('Connection refused')) {
+      return '后端服务未启动';
+    } else if (errorStr.contains('API 返回空数据')) {
+      return '后端返回空数据';
+    } else {
+      return '网络异常';
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -306,15 +328,16 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
     });
 
     try {
-      // 1,2,3, 并行请求三类设备数据，添加15秒超时控制
+      // 1,2,3, 并行请求三类设备数据，添加8秒超时控制
+      // 🔧 [CRITICAL] 缩短批量超时时间（单个请求5秒 + 3秒缓冲）
       final results = await Future.wait([
         _hopperService.getHopperBatchData(), // 1, 料仓数据
         _rollerKilnService.getRollerKilnRealtimeFormatted(), // 2, 辊道窑数据
         _scrFanService.getScrFanBatchData(), // 3, SCR+风机数据
       ]).timeout(
-        const Duration(seconds: 15),
+        const Duration(seconds: 8), // 从 15 秒缩短到 8 秒
         onTimeout: () {
-          logger.warning('批量数据请求超时 (15秒)');
+          logger.warning('批量数据请求超时 (8秒)，后端服务可能不可用');
           throw TimeoutException('批量数据请求超时');
         },
       );
@@ -338,8 +361,17 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
       _successCount++;
       _lastSuccessTime = DateTime.now();
 
-      // 🔧 网络恢复，重置退避
+      // 🔧 网络恢复，重置退避和错误状态
       _restartPollingIfNeeded(true);
+
+      // 🔧 [NEW] 恢复后端可用状态
+      if (!_isBackendAvailable && mounted) {
+        setState(() {
+          _isBackendAvailable = true;
+          _lastErrorMessage = null;
+        });
+        logger.info('✅ 后端服务已恢复');
+      }
 
       // 5, 每500次成功记录一次日志（约42分钟），减少日志噪音
       if (_successCount % 500 == 0) {
@@ -376,6 +408,15 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
 
       // 🔧 网络异常，启动退避策略
       _restartPollingIfNeeded(false);
+
+      // 🔧 [NEW] 更新后端状态（连续失败3次后标记为不可用）
+      if (_consecutiveFailures >= 3 && _isBackendAvailable && mounted) {
+        setState(() {
+          _isBackendAvailable = false;
+          _lastErrorMessage = _getErrorMessage(e);
+        });
+        logger.warning('⚠️ 后端服务不可用（连续失败 $_consecutiveFailures 次）');
+      }
 
       // 请求失败时保持上一次成功的数据，不清空也不更新
       // 这样即使后端服务未启动或网络异常，UI也能显示最后一次成功获取的数据
@@ -438,56 +479,139 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
 
     return Scaffold(
       backgroundColor: TechColors.bgDeep,
-      body: AnimatedGridBackground(
-        gridColor: TechColors.borderDark.withOpacity(0.3),
-        gridSize: 40,
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ═══════════════════════════════════════════════════════════════
-              // 第一行: 回转窑 (窑7, 6, 2, 8, 3, 9) - 全宽
-              // ═══════════════════════════════════════════════════════════════
-              _buildRotaryKilnRow1(rotaryRow1Width, rotaryRow1Height),
-              const SizedBox(height: 8),
+      body: Stack(
+        children: [
+          // 主内容
+          AnimatedGridBackground(
+            gridColor: TechColors.borderDark.withOpacity(0.3),
+            gridSize: 40,
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ═══════════════════════════════════════════════════════════════
+                  // 第一行: 回转窑 (窑7, 6, 2, 8, 3, 9) - 全宽
+                  // ═══════════════════════════════════════════════════════════════
+                  _buildRotaryKilnRow1(rotaryRow1Width, rotaryRow1Height),
+                  const SizedBox(height: 8),
 
-              // ═══════════════════════════════════════════════════════════════
-              // 第二行 + 第三行: 左边回转窑+辊道窑，右边SCR区域
-              // ═══════════════════════════════════════════════════════════════
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 左侧区域: 回转窑第二行 + 辊道窑
-                    SizedBox(
-                      width: rollerKilnWidth,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // 回转窑第二行 (窑5, 4, 1)
-                          _buildRotaryKilnRow2(
-                              rotaryRow2Width, rotaryRow2Height),
-                          const SizedBox(height: 8),
-                          // 辊道窑 - 使用 Expanded 填充剩余高度
-                          Expanded(
-                            child: _buildRollerKilnSectionExpanded(
-                                rollerKilnWidth),
+                  // ═══════════════════════════════════════════════════════════════
+                  // 第二行 + 第三行: 左边回转窑+辊道窑，右边SCR区域
+                  // ═══════════════════════════════════════════════════════════════
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 左侧区域: 回转窑第二行 + 辊道窑
+                        SizedBox(
+                          width: rollerKilnWidth,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // 回转窑第二行 (窑5, 4, 1)
+                              _buildRotaryKilnRow2(
+                                  rotaryRow2Width, rotaryRow2Height),
+                              const SizedBox(height: 8),
+                              // 辊道窑 - 使用 Expanded 填充剩余高度
+                              Expanded(
+                                child: _buildRollerKilnSectionExpanded(
+                                    rollerKilnWidth),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 12),
+                        // 右侧区域: SCR (上下两层，包含氨泵+燃气+风机)
+                        Expanded(
+                          child:
+                              _buildScrWithFanSection(scrWidth, scrRowHeight),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    // 右侧区域: SCR (上下两层，包含氨泵+燃气+风机)
-                    Expanded(
-                      child: _buildScrWithFanSection(scrWidth, scrRowHeight),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // 🔧 [NEW] 后端不可用时的浮动提示
+          if (!_isBackendAvailable)
+            Positioned(
+              top: 16,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade900.withOpacity(0.95),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade400, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.red.withOpacity(0.3),
+                          blurRadius: 12,
+                          spreadRadius: 2,
+                        ),
+                      ],
                     ),
-                  ],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          color: Colors.red.shade200,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '⚠️ 后端服务不可用',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (_lastErrorMessage != null)
+                              Text(
+                                _lastErrorMessage!,
+                                style: TextStyle(
+                                  color: Colors.red.shade200,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            Text(
+                              '显示最后一次成功获取的数据',
+                              style: TextStyle(
+                                color: Colors.red.shade200,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 12),
+                        IconButton(
+                          icon: Icon(Icons.refresh, color: Colors.white),
+                          onPressed: () async {
+                            await refreshData();
+                          },
+                          tooltip: '手动重试',
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ],
-          ),
-        ),
+            ),
+        ],
       ),
     );
   }

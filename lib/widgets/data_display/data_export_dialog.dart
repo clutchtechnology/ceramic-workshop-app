@@ -12,15 +12,15 @@ import 'package:file_picker/file_picker.dart';
 /// ============================================================================
 /// 功能:
 /// 1. 选择时间范围（快速选择或自定义）
-/// 2. 选择导出类型（运行时长/燃气流量/投料量/电表统计/综合数据）
+/// 2. 选择导出类型（设备运行时长/燃气用量/累计投料量/用电量/全部数据）
 /// 3. 导出为Excel文件（使用文件选择器保存）
 ///
 /// ============================================================================
 /// 导出类型及表头说明
 /// ============================================================================
 ///
-/// 【1】运行时长统计 (ExportType.runtime)
-/// 文件名: 运行时长统计_YYYYMMDD_HHMMSS.xlsx
+/// 【1】设备运行时长 (ExportType.runtime)
+/// 文件名: 设备运行时长_YYYYMMDD_HHMMSS.xlsx
 /// 表头: 设备名称 | 日期 | 起始时间 | 终止时间 | 当日运行时长(h)
 /// 设备: 窑1-9, 辊道窑分区1-6, 辊道窑合计, SCR北/南_氨水泵, SCR北/南_风机
 /// 日期格式: yyyyMMdd
@@ -36,8 +36,8 @@ import 'package:file_picker/file_picker.dart';
 ///   SCR北_氨水泵  | 20260126 | 2026-01-26T00:00:00Z | 2026-01-26T23:59:59Z | 14.90
 ///   SCR北_风机    | 20260126 | 2026-01-26T00:00:00Z | 2026-01-26T23:59:59Z | 14.90
 ///
-/// 【2】燃气流量统计 (ExportType.gasConsumption)
-/// 文件名: 燃气流量统计_YYYYMMDD_HHMMSS.xlsx
+/// 【2】燃气用量统计 (ExportType.gasConsumption)
+/// 文件名: 燃气用量_YYYYMMDD_HHMMSS.xlsx
 /// 表头: 设备名称 | 日期 | 起始时间 | 终止时间 | 起始读数(m³) | 截止读数(m³) | 当日消耗(m³)
 /// 设备: SCR北_燃气表, SCR南_燃气表
 /// 日期格式: yyyyMMdd
@@ -46,15 +46,15 @@ import 'package:file_picker/file_picker.dart';
 ///
 /// 【3】投料量统计 (ExportType.feedingAmount)
 /// 文件名: 投料量统计_YYYYMMDD_HHMMSS.xlsx
-/// 表头: 设备名称 | 日期 | 起始时间 | 终止时间 | 当日投料量(kg) | 累计投料量(kg)
+/// 表头: 设备名称 | 日期 | 起始时间 | 终止时间 | 当日投料量(kg)
 /// 设备: 窑7,6,5,4,2,1,8,3,9（7个有料仓的窑）
 /// 日期格式: yyyyMMdd
 /// 示例数据:
-///   窑7 | 20260126 | 2026-01-26T00:00:00Z | 2026-01-26T23:59:59Z | 1250.50 | 1250.50
-///   窑7 | 20260127 | 2026-01-27T00:00:00Z | 2026-01-27T23:59:59Z | 1180.30 | 2430.80
+///   窑7 | 20260126 | 2026-01-26T00:00:00Z | 2026-01-26T23:59:59Z | 1250.50
+///   窑7 | 20260127 | 2026-01-27T00:00:00Z | 2026-01-27T23:59:59Z | 1180.30
 ///
-/// 【4】电表统计 (ExportType.electricityAll)
-/// 文件名: 电表统计_YYYYMMDD_HHMMSS.xlsx
+/// 【4】用电量 (ExportType.electricityAll)
+/// 文件名: 用电量_YYYYMMDD_HHMMSS.xlsx
 /// 表头: 设备名称 | 日期 | 起始时间 | 终止时间 | 起始读数(kWh) | 截止读数(kWh) | 当日消耗(kWh) | 运行时长(h)
 /// 设备: 窑1-9, 辊道窑分区1-6, 辊道窑合计, SCR北/南_氨水泵, SCR北/南_风机
 /// 日期格式: yyyyMMdd
@@ -69,9 +69,9 @@ import 'package:file_picker/file_picker.dart';
 ///   辊道窑合计    | 20260126 | 2026-01-26T00:00:00Z | 2026-01-26T23:59:59Z | 16464952.38 | 16494757.88 | 29805.50 | 7.03
 ///   SCR北_氨水泵  | 20260126 | 2026-01-26T00:00:00Z | 2026-01-26T23:59:59Z | 48515.60 | 48680.25 | 164.65 | 14.90
 ///
-/// 【5】综合数据统计 (ExportType.comprehensive)
-/// 文件名: 综合数据统计_YYYYMMDD_HHMMSS.xlsx
-/// Sheet1 - 综合数据统计（按天）:
+/// 【5】全部数据 (ExportType.comprehensive)
+/// 文件名: 全部数据_YYYYMMDD_HHMMSS.xlsx
+/// Sheet1 - 全部数据（按天）:
 ///   表头: 设备名称 | 日期 | 起始时间 | 终止时间 | 燃气当日消耗(m³) | 当日投料(kg) | 电能当日消耗(kWh) | 当日运行时间(h)
 /// Sheet2 - 用量总计:
 ///   表头: 设备名称 | 日期 | 起始时间 | 终止时间 | 能耗用量总计(kWh) | 投料总计(kg) | 燃气用量总计(m³) | 运行时长总计(h)
@@ -326,7 +326,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
     );
 
     final excel = Excel.createExcel();
-    final sheet = excel['运行时长统计'];
+    final sheet = excel['设备运行时长'];
 
     // 表头：设备名称、日期、起始时间、终止时间、当日运行时长(h)
     sheet.appendRow([
@@ -432,10 +432,10 @@ class _DataExportDialogState extends State<DataExportDialog> {
       }
     }
 
-    await _saveExcel(excel, '运行时长统计');
+    await _saveExcel(excel, '设备运行时长');
   }
 
-  /// 导出燃气流量统计
+  /// 导出燃气用量统计
   Future<void> _exportGasConsumption() async {
     final data = await _exportService.getGasConsumption(
       deviceIds: ['scr_1', 'scr_2'],
@@ -444,7 +444,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
     );
 
     final excel = Excel.createExcel();
-    final sheet = excel['燃气流量统计'];
+    final sheet = excel['燃气用量'];
 
     // 表头：设备名称、日期、起始时间、终止时间、起始读数(m³)、截止读数(m³)、当日消耗(m³)
     sheet.appendRow([
@@ -488,7 +488,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
       }
     }
 
-    await _saveExcel(excel, '燃气流量统计');
+    await _saveExcel(excel, '燃气用量');
   }
 
   /// 导出投料量统计
@@ -501,32 +501,29 @@ class _DataExportDialogState extends State<DataExportDialog> {
     final excel = Excel.createExcel();
     final sheet = excel['投料量统计'];
 
-    // 表头：设备名称、日期、起始时间、终止时间、当日投料量(kg)、累计投料量(kg)
+    // 表头：设备名称、日期、起始时间、终止时间、当日投料量(kg)
     sheet.appendRow([
       TextCellValue('设备名称'),
       TextCellValue('日期'),
       TextCellValue('起始时间'),
       TextCellValue('终止时间'),
       TextCellValue('当日投料量(kg)'),
-      TextCellValue('累计投料量(kg)'),
     ]);
 
-    // 设置列宽（设备名称、日期、起始时间、终止时间、当日投料量、累计投料量）
-    _setColumnWidths(sheet, [18, 15, 28, 28, 20, 20]);
+    // 设置列宽（设备名称、日期、起始时间、终止时间、当日投料量）
+    _setColumnWidths(sheet, [18, 15, 28, 28, 20]);
 
     // 删除默认的Sheet1（必须在创建新sheet之后）
     if (excel.sheets.containsKey('Sheet1')) {
       excel.delete('Sheet1');
     }
 
-    // 遍历所有料仓（每个料仓单独计算累计投料量）
+    // 遍历所有料仓
     for (var hopper in data['hoppers'] ?? []) {
       final deviceName = _getDeviceName(hopper['device_id'].toString());
-      double cumulativeAmount = 0.0;
 
       for (var record in hopper['daily_records'] ?? []) {
         final dailyAmount = record['feeding_amount']?.toDouble() ?? 0.0;
-        cumulativeAmount += dailyAmount;
 
         // 格式化日期为 yyyyMMdd
         final dateStr = record['date']?.toString() ?? '';
@@ -538,7 +535,6 @@ class _DataExportDialogState extends State<DataExportDialog> {
           TextCellValue(record['start_time']?.toString() ?? ''),
           TextCellValue(record['end_time']?.toString() ?? ''),
           DoubleCellValue(dailyAmount),
-          DoubleCellValue(cumulativeAmount),
         ]);
       }
     }
@@ -546,7 +542,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
     await _saveExcel(excel, '投料量统计');
   }
 
-  /// 导出所有电表统计
+  /// 导出所有用电量
   Future<void> _exportElectricityAll() async {
     final data = await _exportService.getAllElectricity(
       startTime: _startTime!,
@@ -554,7 +550,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
     );
 
     final excel = Excel.createExcel();
-    final sheet = excel['电表统计'];
+    final sheet = excel['用电量'];
 
     // 表头：设备名称、日期、起始时间、终止时间、起始读数(kWh)、截止读数(kWh)、当日消耗(kWh)、运行时长(h)
     sheet.appendRow([
@@ -679,7 +675,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
       }
     }
 
-    await _saveExcel(excel, '电表统计');
+    await _saveExcel(excel, '用电量');
   }
 
   /// 导出综合数据（全部数据）
@@ -691,8 +687,8 @@ class _DataExportDialogState extends State<DataExportDialog> {
 
     final excel = Excel.createExcel();
 
-    // ========== Sheet 1: 综合数据统计（按天） ==========
-    final sheet = excel['综合数据统计'];
+    // ========== Sheet 1: 全部数据（按天） ==========
+    final sheet = excel['全部数据'];
 
     // 表头：设备名称、日期、起始时间、终止时间、燃气当日消耗(m³)、当日投料(kg)、电能当日消耗(kWh)、当日运行时间(h)
     sheet.appendRow([
@@ -903,7 +899,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
       excel.delete('Sheet1');
     }
 
-    await _saveExcel(excel, '综合数据统计');
+    await _saveExcel(excel, '全部数据');
   }
 
   /// 保存Excel文件
@@ -1029,7 +1025,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
             '数据导出',
             style: TextStyle(
               color: TechColors.textPrimary,
-              fontSize: 16,
+              fontSize: 32,
               fontWeight: FontWeight.w600,
               letterSpacing: 1,
               shadows: [
@@ -1069,7 +1065,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
               '时间范围',
               style: TextStyle(
                 color: TechColors.textPrimary,
-                fontSize: 14,
+                fontSize: 28,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1077,15 +1073,17 @@ class _DataExportDialogState extends State<DataExportDialog> {
         ),
         const SizedBox(height: 12),
         // 快速选择按钮
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        Row(
           children: [
-            _buildQuickTimeButton('最近 1 天', 1),
-            _buildQuickTimeButton('最近 3 天', 3),
-            _buildQuickTimeButton('最近 5 天', 5),
-            _buildQuickTimeButton('最近 7 天', 7),
-            _buildQuickTimeButton('最近 30 天', 30),
+            Expanded(child: _buildQuickTimeButton('最近 1 天', 1)),
+            const SizedBox(width: 8),
+            Expanded(child: _buildQuickTimeButton('最近 3 天', 3)),
+            const SizedBox(width: 8),
+            Expanded(child: _buildQuickTimeButton('最近 5 天', 5)),
+            const SizedBox(width: 8),
+            Expanded(child: _buildQuickTimeButton('最近 7 天', 7)),
+            const SizedBox(width: 8),
+            Expanded(child: _buildQuickTimeButton('最近 30 天', 30)),
           ],
         ),
         const SizedBox(height: 16),
@@ -1114,7 +1112,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
     return GestureDetector(
       onTap: () => _updateTimeRange(days),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected
               ? TechColors.glowCyan.withOpacity(0.2)
@@ -1124,12 +1122,20 @@ class _DataExportDialogState extends State<DataExportDialog> {
           ),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? TechColors.glowCyan : TechColors.textSecondary,
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+        child: Container(
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.visible,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color:
+                  isSelected ? TechColors.glowCyan : TechColors.textSecondary,
+              fontSize: 18,
+              fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+            ),
           ),
         ),
       ),
@@ -1156,7 +1162,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
               label,
               style: const TextStyle(
                 color: TechColors.textSecondary,
-                fontSize: 11,
+                fontSize: 22,
               ),
             ),
             const SizedBox(height: 4),
@@ -1169,7 +1175,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
                   time != null ? dateFormat.format(time) : '选择时间',
                   style: const TextStyle(
                     color: TechColors.textPrimary,
-                    fontSize: 13,
+                    fontSize: 26,
                     fontFamily: 'Roboto Mono',
                   ),
                 ),
@@ -1199,7 +1205,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
               '导出类型',
               style: TextStyle(
                 color: TechColors.textPrimary,
-                fontSize: 14,
+                fontSize: 28,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1223,7 +1229,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
               dropdownColor: TechColors.bgMedium,
               style: const TextStyle(
                 color: TechColors.textPrimary,
-                fontSize: 13,
+                fontSize: 26,
               ),
               onChanged: (ExportType? value) {
                 if (value != null) {
@@ -1235,23 +1241,23 @@ class _DataExportDialogState extends State<DataExportDialog> {
               items: const [
                 DropdownMenuItem(
                   value: ExportType.runtime,
-                  child: Text('导出所有设备运行时长'),
+                  child: Text('设备运行时长'),
                 ),
                 DropdownMenuItem(
                   value: ExportType.gasConsumption,
-                  child: Text('导出燃气流量统计'),
+                  child: Text('燃气用量'),
                 ),
                 DropdownMenuItem(
                   value: ExportType.feedingAmount,
-                  child: Text('导出累计投料量统计'),
+                  child: Text('投料量统计'),
                 ),
                 DropdownMenuItem(
                   value: ExportType.electricityAll,
-                  child: Text('导出所有电表统计'),
+                  child: Text('用电量'),
                 ),
                 DropdownMenuItem(
                   value: ExportType.comprehensive,
-                  child: Text('导出全部数据（综合）'),
+                  child: Text('全部数据'),
                 ),
               ],
             ),
@@ -1263,7 +1269,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
           _getExportTypeDescription(),
           style: const TextStyle(
             color: TechColors.textMuted,
-            fontSize: 11,
+            fontSize: 22,
           ),
         ),
       ],
@@ -1274,13 +1280,13 @@ class _DataExportDialogState extends State<DataExportDialog> {
   String _getExportTypeDescription() {
     switch (_selectedExportType) {
       case ExportType.runtime:
-        return '导出所有设备（回转窑、辊道窑、SCR、风机）的运行时长统计';
+        return '导出所有设备（回转窑、辊道窑、SCR、风机）的设备运行时长';
       case ExportType.gasConsumption:
-        return '导出SCR设备的燃气流量统计（按天）';
+        return '导出SCR设备的燃气用量统计（按天）';
       case ExportType.feedingAmount:
         return '导出所有料仓的投料量统计（按天）';
       case ExportType.electricityAll:
-        return '导出所有设备的电表统计（按天，含运行时长）';
+        return '导出所有设备的用电量统计（按天，含运行时长）';
       case ExportType.comprehensive:
         return '导出所有设备的全部数据（燃气、投料、电量、运行时长），建议最多查询30天';
     }
@@ -1349,7 +1355,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
                       ? TechColors.textMuted
                       : TechColors.glowOrange)
                   : TechColors.textSecondary,
-              fontSize: 14,
+              fontSize: 28,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -1364,6 +1370,6 @@ enum ExportType {
   runtime, // 运行时长
   gasConsumption, // 燃气流量
   feedingAmount, // 投料量
-  electricityAll, // 所有电表
+  electricityAll, // 用电量
   comprehensive, // 综合导出全部数据
 }

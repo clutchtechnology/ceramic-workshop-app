@@ -24,8 +24,9 @@ class ApiClient {
   static bool _isDisposed = false;
 
   // 2, 超时配置（覆盖连接+响应全过程）
-  static const Duration _timeout = Duration(seconds: 10);
-  static const Duration _connectionTimeout = Duration(seconds: 5);
+  // 🔧 [CRITICAL] 缩短超时时间，防止 UI 卡死
+  static const Duration _timeout = Duration(seconds: 5); // 从 10 秒缩短到 5 秒
+  static const Duration _connectionTimeout = Duration(seconds: 3); // 从 5 秒缩短到 3 秒
 
   // 3, 连续失败计数（用于日志记录和诊断）
   static int _consecutiveFailures = 0; // 🔧 改为 static，全局共享
