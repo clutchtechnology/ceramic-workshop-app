@@ -23,7 +23,7 @@ void main() {
     FeedingRecord createFeedingRecord(DateTime time, double weight) {
       return FeedingRecord(
         time: time,
-        addedWeight: weight,
+        amount: weight,
         deviceId: 'test_hopper',
       );
     }

@@ -696,7 +696,7 @@ class _SettingsPageState extends State<SettingsPage> {
   // ============================================================================
 
   Widget _buildAdminSettings() {
-    // 🔧 [CRITICAL] 使用 context.watch 替代 Consumer
+    //  [CRITICAL] 使用 context.watch 替代 Consumer
     // 避免在页面切换时 '_dependents.isEmpty' 错误
     final AdminProvider adminProvider;
     try {
@@ -709,7 +709,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       );
     }
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

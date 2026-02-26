@@ -936,14 +936,14 @@ class _DataExportDialogState extends State<DataExportDialog> {
       final file = File(outputPath);
       await file.writeAsBytes(bytes);
 
-      print('✅ 文件已保存: $outputPath');
+      print(' 文件已保存: $outputPath');
 
       // 更新成功消息，显示保存路径
       if (mounted) {
         _showMessage('导出成功！文件已保存到: $outputPath', isError: false);
       }
     } catch (e) {
-      print('❌ 保存文件失败: $e');
+      print(' 保存文件失败: $e');
       rethrow;
     }
   }

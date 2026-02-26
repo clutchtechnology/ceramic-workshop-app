@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'app_logger.dart';
 
-/// 🔧 [CRITICAL] 统一 Timer 管理器
+///  [CRITICAL] 统一 Timer 管理器
 ///
 /// 解决的问题:
 /// 1. Timer 泄漏: 页面切换时未取消的 Timer 继续运行

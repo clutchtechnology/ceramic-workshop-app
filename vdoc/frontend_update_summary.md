@@ -5,18 +5,18 @@
 
 ---
 
-## ✅ 完成的工作
+##  完成的工作
 
-### 1. 创建设备名称映射工具类 ✅
+### 1. 创建设备名称映射工具类 
 
 **文件**: `lib/utils/device_name_mapper.dart`
 
 **功能**:
-- ✅ 设备ID到显示名称的映射（22个设备）
-- ✅ 设备类型判断方法（是否有料仓、是否是燃气表等）
-- ✅ 设备排序权重（用于导出时排序）
-- ✅ 设备数量验证（自动验证返回的设备数量是否正确）
-- ✅ 设备分组获取（获取所有回转窑、辊道窑分区等）
+-  设备ID到显示名称的映射（22个设备）
+-  设备类型判断方法（是否有料仓、是否是燃气表等）
+-  设备排序权重（用于导出时排序）
+-  设备数量验证（自动验证返回的设备数量是否正确）
+-  设备分组获取（获取所有回转窑、辊道窑分区等）
 
 **核心方法**:
 ```dart
@@ -41,13 +41,13 @@ DeviceNameMapper.getHopperKilnIds()
 
 ---
 
-### 2. 更新 API 定义 ✅
+### 2. 更新 API 定义 
 
 **文件**: `lib/api/api.dart`
 
 **改动**:
-- ✅ 添加详细的注释说明每个接口的用途和设备数量
-- ✅ 保持接口路径不变（已经是正确的）
+-  添加详细的注释说明每个接口的用途和设备数量
+-  保持接口路径不变（已经是正确的）
 
 **5个核心导出接口**:
 ```dart
@@ -69,15 +69,15 @@ static const String exportComprehensive = '/api/export/comprehensive';
 
 ---
 
-### 3. 更新数据导出服务 ✅
+### 3. 更新数据导出服务 
 
 **文件**: `lib/services/data_export_service.dart`
 
 **改动**:
-- ✅ 导入 `DeviceNameMapper` 工具类
-- ✅ 为每个方法添加详细的注释说明
-- ✅ 添加自动设备数量验证
-- ✅ 如果设备数量不匹配，抛出异常
+-  导入 `DeviceNameMapper` 工具类
+-  为每个方法添加详细的注释说明
+-  添加自动设备数量验证
+-  如果设备数量不匹配，抛出异常
 
 **示例**:
 ```dart
@@ -96,7 +96,7 @@ Future<Map<String, dynamic>> getAllDevicesRuntime({
   if (response['success'] == true) {
     final data = response['data'] as Map<String, dynamic>;
     
-    // ✅ 自动验证设备数量
+    //  自动验证设备数量
     if (!DeviceNameMapper.validateDeviceCount(data, 'runtime')) {
       throw Exception(
         '设备数量不匹配！预期: ${DeviceNameMapper.getDeviceCountDescription('runtime')}',
@@ -112,19 +112,19 @@ Future<Map<String, dynamic>> getAllDevicesRuntime({
 
 ---
 
-## 📊 设备映射速查表
+##  设备映射速查表
 
 ### 回转窑（9个）
 ```dart
-'short_hopper_1' → '窑7'  ✅有料仓
-'short_hopper_2' → '窑6'  ✅有料仓
-'short_hopper_3' → '窑5'  ✅有料仓
-'short_hopper_4' → '窑4'  ✅有料仓
-'no_hopper_1'    → '窑2'  ❌无料仓
-'no_hopper_2'    → '窑1'  ❌无料仓
-'long_hopper_1'  → '窑8'  ✅有料仓
-'long_hopper_2'  → '窑3'  ✅有料仓
-'long_hopper_3'  → '窑9'  ✅有料仓
+'short_hopper_1' → '窑7'  有料仓
+'short_hopper_2' → '窑6'  有料仓
+'short_hopper_3' → '窑5'  有料仓
+'short_hopper_4' → '窑4'  有料仓
+'no_hopper_1'    → '窑2'  无料仓
+'no_hopper_2'    → '窑1'  无料仓
+'long_hopper_1'  → '窑8'  有料仓
+'long_hopper_2'  → '窑3'  有料仓
+'long_hopper_3'  → '窑9'  有料仓
 ```
 
 ### 辊道窑（7个）
@@ -135,13 +135,13 @@ Future<Map<String, dynamic>> getAllDevicesRuntime({
 'zone4'              → '辊道窑分区4'
 'zone5'              → '辊道窑分区5'
 'zone6'              → '辊道窑分区6'
-'roller_kiln_total'  → '辊道窑合计' ⚠️运行时长为平均值
+'roller_kiln_total'  → '辊道窑合计' 运行时长为平均值
 ```
 
 ### SCR设备（4个）
 ```dart
-'scr_1'       → 'SCR北_燃气表'  🔥仅燃气数据
-'scr_2'       → 'SCR南_燃气表'  🔥仅燃气数据
+'scr_1'       → 'SCR北_燃气表'  仅燃气数据
+'scr_2'       → 'SCR南_燃气表'  仅燃气数据
 'scr_1_pump'  → 'SCR北_氨水泵'  ⚡仅电量数据
 'scr_2_pump'  → 'SCR南_氨水泵'  ⚡仅电量数据
 ```
@@ -154,7 +154,7 @@ Future<Map<String, dynamic>> getAllDevicesRuntime({
 
 ---
 
-## 🎯 使用示例
+##  使用示例
 
 ### 1. 在导出对话框中使用设备名称映射
 
@@ -220,12 +220,12 @@ try {
     endTime: endTime,
   );
   
-  // ✅ 如果设备数量不匹配，会自动抛出异常
+  //  如果设备数量不匹配，会自动抛出异常
   // 可以安全地使用数据
   _exportToExcel(data);
   
 } catch (e) {
-  // ❌ 捕获异常并显示错误信息
+  //  捕获异常并显示错误信息
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(content: Text('导出失败: $e')),
   );
@@ -251,7 +251,7 @@ List<String> zones = DeviceNameMapper.getRollerKilnZoneIds();
 
 ---
 
-## 📝 数据结构说明
+##  数据结构说明
 
 ### 1. 设备运行时长数据结构
 
@@ -402,12 +402,12 @@ List<String> zones = DeviceNameMapper.getRollerKilnZoneIds();
 
 ---
 
-## ⚠️ 重要提示
+##  重要提示
 
 ### 1. 辊道窑合计运行时长
 
 ```dart
-// ⚠️ 辊道窑合计的运行时长是6个分区的平均值，不是总和！
+//  辊道窑合计的运行时长是6个分区的平均值，不是总和！
 var total = data['roller_kiln_total'];
 var totalRuntime = total['daily_records'][0]['runtime_hours']; // 这是平均值
 ```
@@ -415,7 +415,7 @@ var totalRuntime = total['daily_records'][0]['runtime_hours']; // 这是平均�
 ### 2. 设备数量验证
 
 ```dart
-// ✅ 所有导出方法都会自动验证设备数量
+//  所有导出方法都会自动验证设备数量
 // 如果数量不匹配，会抛出异常
 try {
   final data = await _exportService.getAllDevicesRuntime(...);
@@ -428,8 +428,8 @@ try {
 ### 3. 累计投料量不包含无料仓的窑
 
 ```dart
-// ❌ 累计投料量不包含 no_hopper_1 和 no_hopper_2
-// ✅ 只包含7个带料仓的回转窑
+//  累计投料量不包含 no_hopper_1 和 no_hopper_2
+//  只包含7个带料仓的回转窑
 List<String> hopperKilns = DeviceNameMapper.getHopperKilnIds();
 // 返回: ['short_hopper_1', ..., 'long_hopper_3'] (7个)
 ```
@@ -514,13 +514,13 @@ assert(DeviceNameMapper.isGasMeter('scr_1_pump') == false);
 
 ---
 
-## ✅ 总结
+##  总结
 
 前端代码已全部更新完成，主要改动：
 
-1. ✅ 创建了 `DeviceNameMapper` 工具类（22个设备映射）
-2. ✅ 更新了 `api.dart`（添加详细注释）
-3. ✅ 更新了 `data_export_service.dart`（添加设备数量验证）
+1.  创建了 `DeviceNameMapper` 工具类（22个设备映射）
+2.  更新了 `api.dart`（添加详细注释）
+3.  更新了 `data_export_service.dart`（添加设备数量验证）
 
 **下一步**: 在 `data_export_dialog.dart` 中使用 `DeviceNameMapper` 进行设备名称映射和导出。
 

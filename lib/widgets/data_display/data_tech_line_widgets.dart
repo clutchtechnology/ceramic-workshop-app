@@ -261,6 +261,8 @@ class _ScanLinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+
     final paint = Paint()
       ..shader = LinearGradient(
         begin: isVertical ? Alignment.topCenter : Alignment.centerLeft,
@@ -828,6 +830,8 @@ class _CircularProgressPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+
     final center = Offset(size.width / 2, size.height / 2);
     final radius = (size.width - 8) / 2;
 
@@ -1096,6 +1100,9 @@ class _GridPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // [CRITICAL] 窗口最小化/恢复过程中 size 可能为 0，跳过绘制防止异常
+    if (size.width <= 0 || size.height <= 0) return;
+
     final paint = Paint()
       ..color = color
       ..strokeWidth = 0.5;
@@ -1198,6 +1205,8 @@ class _DataFlowPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+
     // 背景线
     final bgPaint = Paint()
       ..color = color.withOpacity(0.2)

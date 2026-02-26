@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../models/sensor_status_model.dart';
 import '../services/sensor_status_service.dart';
+import '../services/websocket_service.dart';
 import '../widgets/data_display/data_tech_line_widgets.dart';
 import '../utils/app_logger.dart';
 import '../utils/timer_manager.dart';
@@ -16,21 +17,21 @@ class SensorStatusPage extends StatefulWidget {
   State<SensorStatusPage> createState() => SensorStatusPageState();
 }
 
-/// 🔧 公开 State 类以便通过 GlobalKey 访问 (用于页面切换时暂停/恢复轮询)
+///  公开 State 类以便通过 GlobalKey 访问 (用于页面切换时暂停/恢复轮询)
 class SensorStatusPageState extends State<SensorStatusPage>
     with WidgetsBindingObserver {
   // ============================================================
   // 常量定义
   // ============================================================
 
-  // 🔧 [CRITICAL] Timer ID 常量
+  //  [CRITICAL] Timer ID 常量
   static const String _timerIdSensor = 'sensor_status_polling';
 
   // 6, 每个DB区块内的列数
   static const int _columnCount = 3;
   // 7, 轮询间隔 (秒)
   static const int _pollIntervalSeconds = 5;
-  // 🔧 网络异常退避配置
+  //  网络异常退避配置
   static const int _maxBackoffSeconds = 60;
 
   // ============================================================
@@ -39,8 +40,10 @@ class SensorStatusPageState extends State<SensorStatusPage>
 
   // 1, 状态位查询服务 (单例，内部管理HTTP Client)
   final SensorStatusService _statusService = SensorStatusService();
+  final WebSocketService _wsService = WebSocketService();
+  StreamSubscription<AllStatusResponse>? _wsSubscription;
 
-  // 🔧 [优化] 使用 ValueNotifier 替代普通变量，减少不必要的 Widget 重建
+  //  [优化] 使用 ValueNotifier 替代普通变量，减少不必要的 Widget 重建
   // 3, API响应数据 (包含db3/db7/db11三个状态列表 + summary统计)
   final ValueNotifier<AllStatusResponse?> _responseNotifier =
       ValueNotifier(null);
@@ -49,10 +52,10 @@ class SensorStatusPageState extends State<SensorStatusPage>
   // 5, 错误信息 (用于UI显示网络/API错误)
   final ValueNotifier<String?> _errorMessageNotifier = ValueNotifier(null);
 
-  // 🔧 网络异常退避计数
+  //  网络异常退避计数
   int _consecutiveFailures = 0;
 
-  // 🔧 [CRITICAL] 防止 _isRefreshing 卡死
+  //  [CRITICAL] 防止 _isRefreshing 卡死
   DateTime? _refreshStartTime;
   static const int _maxRefreshDurationSeconds = 15;
 
@@ -63,20 +66,26 @@ class SensorStatusPageState extends State<SensorStatusPage>
   @override
   void initState() {
     super.initState();
-    // 🔧 [CRITICAL] 注册生命周期监听
+    //  [CRITICAL] 注册生命周期监听
     WidgetsBinding.instance.addObserver(this);
-    // 🔧 [CRITICAL] 不在 initState 中启动轮询！
-    // 由 top_bar.dart 的 _onNavItemTap() 控制，避免 Offstage 中的隐藏页面也在轮询
-    // resumePolling(); // 已移除
+    _wsSubscription = _wsService.deviceStatusStream.listen(_handleStatusWsData);
+    // [CRITICAL] 在 initState 中订阅 WebSocket，生命周期内始终保持
+    // 即使页面在 Offstage 中，Stream 数据仍会更新 ValueNotifier
+    _wsService.subscribeDeviceStatus().catchError((e) {
+      // 订阅失败不影响页面初始化，WebSocket 断线重连后自动重新订阅
+    });
   }
 
   @override
   void dispose() {
-    // 🔧 [CRITICAL] 移除生命周期监听
+    //  [CRITICAL] 移除生命周期监听
     WidgetsBinding.instance.removeObserver(this);
-    // 🔧 使用 TimerManager 取消 Timer
+    //  使用 TimerManager 取消 Timer
     TimerManager().cancel(_timerIdSensor);
-    // 🔧 [CRITICAL] 释放 ValueNotifier 防止内存泄漏
+    _wsService.unsubscribeDeviceStatus();
+    _wsSubscription?.cancel();
+    _wsSubscription = null;
+    //  [CRITICAL] 释放 ValueNotifier 防止内存泄漏
     _responseNotifier.dispose();
     _isRefreshingNotifier.dispose();
     _errorMessageNotifier.dispose();
@@ -90,66 +99,41 @@ class SensorStatusPageState extends State<SensorStatusPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-
-    switch (state) {
-      case AppLifecycleState.resumed:
-        // 🔧 窗口恢复/激活 → 恢复轮询
-        logger.lifecycle('SensorStatusPage: 应用恢复 (resumed) - 恢复轮询');
-        if (TimerManager().exists(_timerIdSensor)) {
-          resumePolling();
-        }
-        break;
-      case AppLifecycleState.inactive:
-        // 🔧 窗口失去焦点 → 暂停轮询
-        logger.lifecycle('SensorStatusPage: 应用失去焦点 (inactive) - 暂停轮询');
-        pausePolling();
-        break;
-      case AppLifecycleState.paused:
-        // 🔧 窗口最小化 → 暂停轮询
-        logger.lifecycle('SensorStatusPage: 应用暂停 (paused) - 暂停轮询');
-        pausePolling();
-        break;
-      case AppLifecycleState.detached:
-        // 🔧 应用即将退出 → 清理资源
-        logger.lifecycle('SensorStatusPage: 应用即将退出 (detached)');
-        pausePolling();
-        break;
-      case AppLifecycleState.hidden:
-        // 🔧 窗口被隐藏 → 暂停轮询
-        logger.lifecycle('SensorStatusPage: 应用被隐藏 (hidden) - 暂停轮询');
-        pausePolling();
-        break;
-    }
+    // [工业监控] 7x24h运行，WebSocket订阅始终保持活跃
+    // 不因窗口状态变化影响数据接收，资源释放统一由 dispose() 负责
+    logger.lifecycle('SensorStatusPage: 生命周期变化 ($state)');
   }
 
   // ============================================================
   // 轮询控制 (供外部通过GlobalKey调用)
   // ============================================================
 
-  /// 暂停定时器（页面不可见时调用）
+  // 暂停HTTP备用定时器（页面不可见时调用）
+  // [CRITICAL] WebSocket订阅始终保持活跃，仅暂停HTTP备用定时器
   void pausePolling() {
     TimerManager().pause(_timerIdSensor);
-    logger.info('SensorStatusPage: 轮询已暂停');
+    logger.info('SensorStatusPage: HTTP备用定时器已暂停（WebSocket订阅保持活跃）');
   }
 
   /// 恢复定时器（页面可见时调用）
+  /// [CRITICAL] WebSocket订阅始终保持活跃，仅恢复HTTP备用定时器
   void resumePolling() {
     // 重置退避计数
     _consecutiveFailures = 0;
 
-    // 立即获取一次数据
+    // 立即获取一次数据（首次切换到此页面时的冷启动）
     _fetchData();
 
-    // 启动或恢复 Timer
+    // 启动或恢复 HTTP 备用 Timer
     if (!TimerManager().exists(_timerIdSensor)) {
       _startPollingWithInterval(_pollIntervalSeconds);
     } else {
       TimerManager().resume(_timerIdSensor);
     }
-    logger.info('SensorStatusPage: 轮询已恢复');
+    logger.info('SensorStatusPage: HTTP备用定时器已恢复（WebSocket订阅保持活跃）');
   }
 
-  /// 🔧 启动轮询定时器（支持动态间隔）
+  ///  启动轮询定时器（支持动态间隔）
   void _startPollingWithInterval(int intervalSeconds) {
     TimerManager().cancel(_timerIdSensor); // 先取消旧的
 
@@ -158,6 +142,7 @@ class SensorStatusPageState extends State<SensorStatusPage>
       Duration(seconds: intervalSeconds),
       () async {
         if (!mounted) return;
+        if (_wsService.isConnected) return;
         try {
           await _fetchData();
         } catch (e, stack) {
@@ -169,7 +154,7 @@ class SensorStatusPageState extends State<SensorStatusPage>
     );
   }
 
-  /// 🔧 调整轮询间隔（网络异常时退避）
+  ///  调整轮询间隔（网络异常时退避）
   void _adjustPollingInterval(bool wasSuccess) {
     if (!mounted) return;
 
@@ -194,9 +179,9 @@ class SensorStatusPageState extends State<SensorStatusPage>
   // ============================================================
 
   /// 获取状态数据
-  /// 🔧 [优化] 使用 ValueNotifier 更新数据，不触发整页重建
+  ///  [优化] 使用 ValueNotifier 更新数据，不触发整页重建
   Future<void> _fetchData() async {
-    // 🔧 [CRITICAL] 检测 _isRefreshing 是否卡死
+    //  [CRITICAL] 检测 _isRefreshing 是否卡死
     if (_isRefreshingNotifier.value) {
       if (_refreshStartTime != null) {
         final duration =
@@ -217,7 +202,7 @@ class SensorStatusPageState extends State<SensorStatusPage>
 
     _refreshStartTime = DateTime.now();
 
-    // 🔧 [优化] 使用 ValueNotifier 更新状态，不触发整页重建
+    //  [优化] 使用 ValueNotifier 更新状态，不触发整页重建
     _isRefreshingNotifier.value = true;
     _errorMessageNotifier.value = null;
 
@@ -227,26 +212,26 @@ class SensorStatusPageState extends State<SensorStatusPage>
 
       if (!mounted) return;
 
-      // 🔧 [优化] 只更新 ValueNotifier，不调用 setState
+      //  [优化] 只更新 ValueNotifier，不调用 setState
       if (response.success) {
         // 3, 更新响应数据
         _responseNotifier.value = response;
-        // 🔧 成功时重置退避
+        //  成功时重置退避
         _adjustPollingInterval(true);
       } else {
         // 5, 记录错误信息
         _errorMessageNotifier.value = response.error ?? '获取状态失败';
-        // 🔧 失败时启动退避
+        //  失败时启动退避
         _adjustPollingInterval(false);
       }
     } catch (e) {
       if (!mounted) return;
       // 5, 记录网络错误
       _errorMessageNotifier.value = '网络错误: $e';
-      // 🔧 网络异常时启动退避
+      //  网络异常时启动退避
       _adjustPollingInterval(false);
     } finally {
-      // 🔧 [CRITICAL] 无论成功失败，都必须重置状态
+      //  [CRITICAL] 无论成功失败，都必须重置状态
       _refreshStartTime = null;
       if (mounted) {
         _isRefreshingNotifier.value = false;
@@ -254,6 +239,15 @@ class SensorStatusPageState extends State<SensorStatusPage>
         _isRefreshingNotifier.value = false;
       }
     }
+  }
+
+  void _handleStatusWsData(AllStatusResponse response) {
+    if (!mounted) return;
+    if (!response.success) return;
+
+    _responseNotifier.value = response;
+    _errorMessageNotifier.value = null;
+    _adjustPollingInterval(true);
   }
 
   /// 根据 DB 号获取状态列表
@@ -274,7 +268,7 @@ class SensorStatusPageState extends State<SensorStatusPage>
         children: [
           _buildHeader(),
           Expanded(
-            // 🔧 [优化] 使用 ValueListenableBuilder 监听错误状态，只在错误变化时重建
+            //  [优化] 使用 ValueListenableBuilder 监听错误状态，只在错误变化时重建
             child: ValueListenableBuilder<String?>(
               valueListenable: _errorMessageNotifier,
               builder: (context, errorMessage, child) {
@@ -290,7 +284,7 @@ class SensorStatusPageState extends State<SensorStatusPage>
   }
 
   /// 垂直布局: 回转窑 → 辊道窑 → SCR/风机 (固定高度比例 2:1:1)
-  /// 🔧 [优化] 使用 ValueListenableBuilder 监听数据变化，只在数据变化时重建
+  ///  [优化] 使用 ValueListenableBuilder 监听数据变化，只在数据变化时重建
   Widget _buildVerticalLayout() {
     return ValueListenableBuilder<AllStatusResponse?>(
       valueListenable: _responseNotifier,
@@ -450,7 +444,7 @@ class SensorStatusPageState extends State<SensorStatusPage>
   }
 
   /// 顶部状态栏
-  /// 🔧 [优化] 使用 ValueListenableBuilder 监听数据和刷新状态
+  ///  [优化] 使用 ValueListenableBuilder 监听数据和刷新状态
   Widget _buildHeader() {
     return ValueListenableBuilder<AllStatusResponse?>(
       valueListenable: _responseNotifier,
@@ -485,7 +479,7 @@ class SensorStatusPageState extends State<SensorStatusPage>
               const SizedBox(width: 10),
               _buildStatChip('异常', summary?.error ?? 0, TechColors.glowRed),
               const SizedBox(width: 12),
-              // 🔧 [优化] 刷新按钮也使用 ValueListenableBuilder
+              //  [优化] 刷新按钮也使用 ValueListenableBuilder
               ValueListenableBuilder<bool>(
                 valueListenable: _isRefreshingNotifier,
                 builder: (context, isRefreshing, child) {

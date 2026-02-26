@@ -8,7 +8,7 @@ import '../icons/icons.dart';
 /// 无料仓回转窑单元组件
 /// 用于显示单个无料仓回转窑设备
 ///
-/// 🔧 性能优化:
+///  性能优化:
 /// - 使用 context.read 替代 context.watch（父组件已 watch，此处只需读取）
 class RotaryKilnNoHopperCell extends StatelessWidget {
   /// 窑编号
@@ -35,10 +35,10 @@ class RotaryKilnNoHopperCell extends StatelessWidget {
     final currentB = data?.electricityMeter?.currentB ?? 0.0;
     final currentC = data?.electricityMeter?.currentC ?? 0.0;
 
-    // 🔧 优化: 使用 context.read 而非 context.watch
+    //  优化: 使用 context.read 而非 context.watch
     final configProvider = context.read<RealtimeConfigProvider>();
 
-    // 🔧 根据配置决定是否在温度>300时减去100度显示
+    //  根据配置决定是否在温度>300时减去100度显示
     final shouldSubtract = deviceId != null
         ? configProvider.shouldSubtractTemp100(deviceId!)
         : false;

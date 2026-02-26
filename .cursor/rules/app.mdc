@@ -4,7 +4,7 @@ alwaysApply: true
 
 # 磨料车间 Flutter 监控应用规范
 
-> **核心原则**: 奥卡姆剃刀 - 简单、直接、够用即可
+> **核心原则**: WebSocket 实时通信 + 奥卡姆剃刀 - 简单、直接、够用即可
 
 ---
 
@@ -14,8 +14,9 @@ alwaysApply: true
 项目名称: ceramic-workshop-app
 应用类型: Windows 桌面工业监控 (全屏触摸屏)
 目标分辨率: 1920×1080
-数据源: REST API (后端聚合 PLC 数据)
-后端地址: http://localhost:8080
+数据源: WebSocket 实时推送 (主要) + HTTP API (降级)
+后端地址: http://localhost:8080 (HTTP) / ws://localhost:8080/ws/realtime (WebSocket)
+核心理念: WebSocket 0.1s 推送 + 工业风格 UI + 固定分辨率设计
 ```
 
 ---
@@ -37,7 +38,7 @@ alwaysApply: true
 
 ---
 
-## 3. 架构规范 (奥卡姆剃刀)
+## 3. 架构规范 (WebSocket + 奥卡姆剃刀)
 
 ### 目录结构
 ```
@@ -49,11 +50,14 @@ lib/
 ├── models/                   # 数据模型 (纯数据类)
 │   ├── hopper_model.dart    # 回转窑数据
 │   ├── roller_kiln_model.dart  # 辊道窑数据
-│   └── scr_fan_model.dart   # SCR+风机数据
-├── services/                 # 数据获取 (只负责 API 调用)
-│   ├── hopper_service.dart
-│   ├── roller_kiln_service.dart
-│   └── scr_fan_service.dart
+│   ├── scr_fan_model.dart   # SCR+风机数据
+│   └── ws_messages.dart     # ★ WebSocket 消息模型
+├── services/                 # 数据获取层
+│   ├── websocket_service.dart        # ★ WebSocket 服务 (核心)
+│   ├── hopper_service.dart           # 回转窑服务 (HTTP 降级)
+│   ├── roller_kiln_service.dart      # 辊道窑服务 (HTTP 降级)
+│   ├── scr_fan_service.dart          # SCR/风机服务 (HTTP 降级)
+│   └── history_data_service.dart     # 历史数据服务 (HTTP)
 ├── providers/                # 配置管理 (Provider)
 │   ├── realtime_config_provider.dart  # 阈值配置
 │   └── admin_provider.dart            # 管理员密码
@@ -69,23 +73,27 @@ lib/
 │   └── icons/               # 自定义图标
 └── utils/                    # 工具类
     ├── app_logger.dart      # 日志系统
-    ├── timer_manager.dart   # Timer 统一管理
-    ├── request_watchdog.dart  # 网络请求监控
-    └── performance_monitor.dart  # 性能监控
+    └── constants.dart       # 常量定义
 ```
 
-### 数据流 (单向流动)
+### 数据流架构 (WebSocket 优先)
+
 ```
-后端API → Service → ValueNotifier → UI
-         ↓
-      本地缓存 (离线恢复)
+Backend WebSocket (0.1s) → WebSocketService (单例) → Callbacks → UI Update
+                                                    ↓
+                                            ValueNotifier
+                                                    ↓
+                                            本地缓存 (离线恢复)
+
+Backend HTTP API → Service → ValueNotifier → UI (历史数据查询)
 ```
 
-**规则**:
-1. Service 只负责获取数据，不处理业务逻辑
-2. ValueNotifier 替代 setState，减少重建
-3. UI 只读取数据，不修改数据
-4. 缓存仅用于 App 重启恢复，不参与实时逻辑
+**核心规则**:
+1. **实时数据**: 必须使用 WebSocket，0.1s 推送间隔
+2. **历史数据**: 使用 HTTP API 按需查询
+3. **单例模式**: WebSocketService 全局唯一，避免多连接
+4. **状态管理**: ValueNotifier 替代 setState，减少重建
+5. **资源释放**: dispose 中清理回调，但不断开 WebSocket（全局共享）
 
 ### 核心依赖
 ```yaml
@@ -93,17 +101,19 @@ dependencies:
   provider: ^6.1.2           # 状态管理 (配置数据)
   fl_chart: ^0.68.0          # 图表
   window_manager: ^0.3.9     # 窗口控制
-  http: ^1.2.0               # HTTP Client
+  web_socket_channel: ^2.4.0 # ★ WebSocket 客户端
+  http: ^1.2.0               # HTTP Client (降级)
   shared_preferences: ^2.2.3 # 本地存储
   path_provider: ^2.1.3      # 文件路径
   logger: ^2.3.0             # 日志
 ```
 
 **不使用**:
-- ❌ Riverpod (过度复杂)
-- ❌ Dio (http 包足够)
-- ❌ GetX (不符合 Flutter 规范)
-- ❌ BLoC (过度抽象)
+- [禁止] Riverpod (过度复杂)
+- [禁止] Dio (http 包足够)
+- [禁止] GetX (不符合 Flutter 规范)
+- [禁止] BLoC (过度抽象)
+- [禁止] Socket.IO (使用原生 WebSocket)
 
 ---
 
@@ -147,38 +157,61 @@ blue: #2196f3, cyan: #00bcd4, orange: #ff9800, purple: #9c27b0
 
 ---
 
-## 5. 数据采集规范
+## 5. WebSocket 通信规范
 
-### 刷新周期
-| 数据类型 | 周期 | 说明 |
-|---------|------|-----|
-| 温度/能耗/流速 | 1秒 | 实时监控 |
-| 累计量 | 1秒 | 持续累加 |
-| 历史查询 | 按需 | 用户触发 |
+### 1. WebSocket 优先策略
 
-### 趋势图表
-- 默认窗口: 60秒 (60个数据点)
+- **实时通信**: 使用 WebSocket 替代 HTTP 轮询，实现 0.1s 级别的数据推送
+- **自动重连**: 指数退避重连策略 (1s → 2s → 4s → 8s → 16s → 30s)
+- **心跳保活**: 客户端每 15s 发送心跳，防止连接超时
+- **消息订阅**: 支持 `realtime` (实时数据) 和 `device_status` (设备状态) 两个频道
+
+### 2. WebSocket 服务层
+
+**文件**: `lib/services/websocket_service.dart`
+
+- **单例模式**: 全局唯一的 WebSocket 连接管理器
+- **连接状态**: `disconnected`, `connecting`, `connected`, `reconnecting`
+- **消息类型**: 
+  - `realtime_data`: 实时数据推送 (9台回转窑 + 1台辊道窑 + 2套SCR + 2台风机)
+  - `device_status`: 设备通信状态
+  - `heartbeat`: 心跳消息
+  - `error`: 错误消息
+- **回调机制**:
+  - `onRealtimeDataUpdate`: 实时数据更新回调
+  - `onDeviceStatusUpdate`: 设备状态更新回调
+  - `onStateChanged`: 连接状态变化回调
+  - `onError`: 错误回调
+
+### 3. 数据推送周期
+
+| 数据类型 | 推送方式 | 周期 | 说明 |
+|---------|---------|------|-----|
+| 实时数据 | WebSocket 推送 | 0.1秒 | 温度/功率/流量/重量 |
+| 设备状态 | WebSocket 推送 | 0.1秒 | 通信状态/故障标志 |
+| 历史数据 | HTTP 查询 | 按需 | 用户触发查询 |
+
+### 4. 趋势图表
+- 默认窗口: 60秒 (600个数据点，0.1s间隔)
 - 刷新方式: 滚动更新 (FIFO)
 - Y轴: 自适应范围
-
-### Mock 数据 (开发模式)
-```dart
-// 模拟工业数据特性
-- 连续性: 基于上一值 ± 小幅波动
-- 合理性: 温度 800-1200°C, 电压 380V±10V
-- 趋势性: 可模拟升温/降温/稳定阶段
-```
+- 数据来源: WebSocket 实时推送
 
 ---
 
 ## 6. 状态管理 (2 层结构)
 
-### 层 1: 实时数据 (ValueNotifier)
+### 层 1: 实时数据 (ValueNotifier + WebSocket)
 ```dart
-// 页面级状态，5秒刷新
-final ValueNotifier<Map<String, HopperData>> _hopperDataNotifier = ValueNotifier({});
-final ValueNotifier<RollerKilnData?> _rollerKilnDataNotifier = ValueNotifier(null);
-final ValueNotifier<ScrFanBatchData?> _scrFanDataNotifier = ValueNotifier(null);
+// 页面级状态，WebSocket 0.1s 推送
+final ValueNotifier<WorkshopRealtimeData?> _realtimeDataNotifier = ValueNotifier(null);
+
+// WebSocket 回调更新
+_wsService.onRealtimeDataUpdate = (data) {
+  if (mounted) {
+    _realtimeDataNotifier.value = data;
+  }
+};
 ```
 
 ### 层 2: 配置数据 (Provider)
@@ -190,84 +223,144 @@ BackendConfigProvider: 后端地址
 ```
 
 **规则**:
-- 实时数据用 ValueNotifier (频繁变化)
+- 实时数据用 ValueNotifier + WebSocket 回调 (0.1s 推送)
 - 配置数据用 Provider (偶尔变化)
+- 历史数据用 FutureBuilder + HTTP API (按需查询)
 - 不混用，不嵌套
 
 ---
 
 ## 7. 代码模式 (3 个模板)
 
-### 模板 1: Service (数据获取)
+### 模板 1: WebSocket Service (核心)
 ```dart
-class DeviceService {
-  final ApiClient _client = ApiClient();
+// lib/services/websocket_service.dart
+class WebSocketService {
+  static final WebSocketService _instance = WebSocketService._internal();
+  factory WebSocketService() => _instance;
   
-  Future<DeviceData> getData() async {
+  WebSocketChannel? _channel;
+  WebSocketState _state = WebSocketState.disconnected;
+  
+  // 回调函数
+  Function(WorkshopRealtimeData)? onRealtimeDataUpdate;
+  Function(DeviceStatusData)? onDeviceStatusUpdate;
+  Function(WebSocketState)? onStateChanged;
+  Function(String)? onError;
+  
+  // 1. 连接到服务器
+  Future<void> connect() async {
+    if (_state == WebSocketState.connected) return;
+    
     try {
-      final response = await _client.get('/api/device');
-      if (response['success'] == true) {
-        return DeviceData.fromJson(response['data']);
-      }
-      return null;
+      _state = WebSocketState.connecting;
+      onStateChanged?.call(_state);
+      
+      _channel = WebSocketChannel.connect(
+        Uri.parse('ws://localhost:8080/ws/realtime'),
+      );
+      
+      _channel!.stream.listen(
+        _handleMessage,
+        onError: _handleError,
+        onDone: _handleDisconnect,
+      );
+      
+      _state = WebSocketState.connected;
+      onStateChanged?.call(_state);
+      
+      // 启动心跳
+      _startHeartbeat();
     } catch (e) {
-      logger.error('获取数据失败', e);
-      return null;
+      _handleError(e);
+    }
+  }
+  
+  // 2. 订阅实时数据
+  void subscribeRealtime() {
+    send({'type': 'subscribe', 'channel': 'realtime'});
+  }
+  
+  // 3. 处理消息
+  void _handleMessage(dynamic message) {
+    final data = jsonDecode(message);
+    switch (data['type']) {
+      case 'realtime_data':
+        onRealtimeDataUpdate?.call(WorkshopRealtimeData.fromJson(data['data']));
+        break;
+      case 'device_status':
+        onDeviceStatusUpdate?.call(DeviceStatusData.fromJson(data['data']));
+        break;
+    }
+  }
+  
+  // 4. 发送消息
+  void send(Map<String, dynamic> message) {
+    if (_state == WebSocketState.connected) {
+      _channel?.sink.add(jsonEncode(message));
     }
   }
 }
 ```
 
-### 模板 2: Page (页面逻辑)
+### 模板 2: Page (WebSocket 订阅)
 ```dart
-class DevicePage extends StatefulWidget {
+class RealtimeDashboardPage extends StatefulWidget {
   @override
-  State<DevicePage> createState() => _DevicePageState();
+  State<RealtimeDashboardPage> createState() => _RealtimeDashboardPageState();
 }
 
-class _DevicePageState extends State<DevicePage> {
-  final ValueNotifier<DeviceData?> _dataNotifier = ValueNotifier(null);
+class _RealtimeDashboardPageState extends State<RealtimeDashboardPage> {
+  final ValueNotifier<WorkshopRealtimeData?> _dataNotifier = ValueNotifier(null);
+  late final WebSocketService _wsService;
   late final RealtimeConfigProvider _config;
 
   @override
   void initState() {
     super.initState();
-    // 🔧 缓存 Provider 引用
+    
+    // 1. 缓存 Provider 引用
     _config = context.read<RealtimeConfigProvider>();
     
-    // 🔧 使用 TimerManager 管理定时器
-    TimerManager().register(
-      'device_page_polling',
-      Duration(seconds: 5),
-      _fetchData,
-      description: '设备数据轮询',
-    );
-    
-    _fetchData();
+    // 2. 初始化 WebSocket
+    _wsService = WebSocketService();
+    _wsService.onRealtimeDataUpdate = _handleRealtimeData;
+    _wsService.onStateChanged = _handleStateChanged;
+    _wsService.connect();
+    _wsService.subscribeRealtime();
   }
 
-  Future<void> _fetchData() async {
-    if (!mounted) return;
-    
-    final data = await DeviceService().getData();
-    if (mounted && data != null) {
+  // 3. 处理实时数据更新
+  void _handleRealtimeData(WorkshopRealtimeData data) {
+    if (mounted) {
       _dataNotifier.value = data;
+    }
+  }
+  
+  // 4. 处理连接状态变化
+  void _handleStateChanged(WebSocketState state) {
+    if (mounted) {
+      setState(() {
+        _connectionState = state;
+      });
     }
   }
 
   @override
   void dispose() {
-    TimerManager().cancel('device_page_polling');
+    // 清理回调，但不断开 WebSocket（全局共享）
+    _wsService.onRealtimeDataUpdate = null;
+    _wsService.onStateChanged = null;
     _dataNotifier.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<DeviceData?>(
+    return ValueListenableBuilder<WorkshopRealtimeData?>(
       valueListenable: _dataNotifier,
       builder: (context, data, child) {
-        return DeviceWidget(data: data, config: _config);
+        return WorkshopDashboard(data: data, config: _config);
       },
     );
   }
@@ -276,18 +369,29 @@ class _DevicePageState extends State<DevicePage> {
 
 ### 模板 3: Widget (UI 组件)
 ```dart
-class DeviceWidget extends StatelessWidget {
-  final DeviceData? data;
+class WorkshopDashboard extends StatelessWidget {
+  final WorkshopRealtimeData? data;
   final RealtimeConfigProvider config;
 
-  const DeviceWidget({required this.data, required this.config});
+  const WorkshopDashboard({required this.data, required this.config});
 
   @override
   Widget build(BuildContext context) {
-    final color = config.getColor(data?.value ?? 0);
-    return Container(
-      color: color,
-      child: Text('${data?.value ?? 0}'),
+    if (data == null) {
+      return Center(child: CircularProgressIndicator());
+    }
+    
+    return Row(
+      children: [
+        Expanded(
+          flex: 60,
+          child: HopperGrid(hoppers: data!.hoppers, config: config),
+        ),
+        Expanded(
+          flex: 40,
+          child: RollerKilnPanel(kiln: data!.rollerKiln, config: config),
+        ),
+      ],
     );
   }
 }
@@ -318,62 +422,113 @@ double percentage = (currentWeight / maxCapacity) * 100;
 
 ---
 
-## 9. 性能优化 (3 个关键点)
+## 9. 性能优化 (4 个关键点)
 
-### 优化 1: 减少重建
+### 优化 1: WebSocket 连接管理
 ```dart
-// ❌ 错误: 整页 setState
-setState(() => data = newData);
+// [正确] 单例模式，全局共享连接
+final wsService = WebSocketService();
 
-// ✅ 正确: 局部 ValueNotifier
-dataNotifier.value = newData;
+// [正确] 页面切换时不断开连接
+@override
+void dispose() {
+  // 只清理回调，不调用 wsService.disconnect()
+  wsService.onRealtimeDataUpdate = null;
+  super.dispose();
+}
+
+// [错误] 每个页面创建新连接
+final wsService = WebSocketService()..connect();  // 会创建多个连接
 ```
 
-### 优化 2: 缓存查找
+### 优化 2: 减少重建
 ```dart
-// ❌ 错误: 每次 build 查找
+// [正确] 使用 ValueNotifier 减少重建
+final ValueNotifier<WorkshopRealtimeData?> _dataNotifier = ValueNotifier(null);
+
+// WebSocket 回调更新
+_wsService.onRealtimeDataUpdate = (data) {
+  if (mounted) {
+    _dataNotifier.value = data;  // 只重建监听的 Widget
+  }
+};
+
+// [错误] 频繁调用 setState 重建整个页面
+void _updateData(data) {
+  setState(() {  // 重建整个页面
+    _allData = data;
+  });
+}
+```
+
+### 优化 3: 缓存查找
+```dart
+// [正确] initState 缓存 Provider
+late final config = context.read<RealtimeConfigProvider>();
+
+// [错误] 每次 build 查找
 context.read<Provider>().getConfig(id);
-
-// ✅ 正确: initState 缓存
-late final provider = context.read<Provider>();
 ```
 
-### 优化 3: Timer 管理
+### 优化 4: 图表性能优化
 ```dart
-// ❌ 错误: 手动管理 Timer
-Timer? _timer;
-_timer = Timer.periodic(...);
-_timer?.cancel();
-
-// ✅ 正确: 使用 TimerManager
-TimerManager().register('id', Duration(seconds: 5), callback);
-TimerManager().cancel('id');
+// [正确] 限制数据点数量
+List<FlSpot> _prepareChartData(List<RealtimePoint> data) {
+  if (data.length > 600) {
+    // 采样：每 N 个点取 1 个
+    final step = data.length ~/ 600;
+    return data
+        .where((point) => data.indexOf(point) % step == 0)
+        .map((point) => FlSpot(point.x, point.y))
+        .toList();
+  }
+  return data.map((point) => FlSpot(point.x, point.y)).toList();
+}
 ```
 
 ---
 
-## 10. 错误处理 (2 级容错)
+## 10. 错误处理 (3 级容错)
 
-### 级别 1: 静默失败 (保持旧数据)
+### 级别 1: WebSocket 自动重连
 ```dart
-try {
-  newData = await fetchData();
-  if (newData != null && newData.isValid) {
-    notifier.value = newData; // 更新
-  }
-  // 如果无效，保持旧数据不变
-} catch (e) {
-  logger.error('数据获取失败', e);
-  // 不清空数据，UI 继续显示旧值
+// WebSocketService 内部处理
+void _handleDisconnect() {
+  _state = WebSocketState.reconnecting;
+  onStateChanged?.call(_state);
+  
+  // 指数退避重连
+  _reconnectAttempts++;
+  final delay = min(30, pow(2, _reconnectAttempts).toInt());
+  
+  Future.delayed(Duration(seconds: delay), () {
+    if (_state == WebSocketState.reconnecting) {
+      connect();
+    }
+  });
 }
 ```
 
-### 级别 2: 用户提示 (连续失败)
+### 级别 2: 静默失败 (保持旧数据)
 ```dart
-if (consecutiveFailures >= 3) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text('网络异常，请检查后端服务')),
-  );
+// WebSocket 回调中处理
+void _handleRealtimeData(WorkshopRealtimeData data) {
+  if (mounted && data.isValid) {
+    _dataNotifier.value = data; // 更新
+  }
+  // 如果无效，保持旧数据不变
+}
+```
+
+### 级别 3: 用户提示 (连接失败)
+```dart
+// 显示连接状态
+void _handleStateChanged(WebSocketState state) {
+  if (state == WebSocketState.disconnected) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('WebSocket 连接断开，正在重连...')),
+    );
+  }
 }
 ```
 
@@ -382,18 +537,21 @@ if (consecutiveFailures >= 3) {
 ## 11. 代码审查清单
 
 ### 必查项
-- [ ] 所有 Timer 在 dispose 时取消
+- [ ] WebSocket 回调在 dispose 时清理（设为 null）
 - [ ] 所有 setState 前检查 mounted
-- [ ] 所有网络请求有超时控制 (10秒)
+- [ ] WebSocket 连接使用单例模式
 - [ ] 所有 ValueNotifier 在 dispose 时释放
 - [ ] 所有 Provider 在 initState 时缓存
+- [ ] WebSocket 错误有重连机制
 
 ### 禁止项
-- [ ] ❌ 在 build() 中调用 context.read()
-- [ ] ❌ 在 initState() 中调用 setState()
-- [ ] ❌ 在 dispose() 后访问 State
-- [ ] ❌ 在循环中创建 Widget
-- [ ] ❌ 在 Timer 回调中不检查 mounted
+- [ ] [禁止] 在 build() 中调用 context.read()
+- [ ] [禁止] 在 initState() 中调用 setState()
+- [ ] [禁止] 在 dispose() 后访问 State
+- [ ] [禁止] 在循环中创建 Widget
+- [ ] [禁止] 在 WebSocket 回调中不检查 mounted
+- [ ] [禁止] 每个页面创建新的 WebSocket 连接
+- [ ] [禁止] 在 dispose 中断开 WebSocket（全局共享）
 
 ---
 
@@ -419,43 +577,44 @@ flutter analyze
 
 | 问题 | 原因 | 解决方案 |
 |------|------|---------|
-| 应用卡死 | setState 过多 | 改用 ValueNotifier |
-| 内存泄漏 | Timer 未取消 | 使用 TimerManager |
+| WebSocket 连接失败 | 后端未启动/URL错误 | 检查后端服务，确认 ws://localhost:8080/ws/realtime |
+| 数据不更新 | 未订阅频道 | 调用 wsService.subscribeRealtime() |
+| 应用卡死 | setState 过多 | 改用 ValueNotifier + WebSocket 回调 |
+| 内存泄漏 | 回调未清理 | dispose 中设置回调为 null |
 | 数据丢失 | 空数据覆盖 | 检查 isValid 再更新 |
-| 网络超时 | 后端慢/断开 | 增加超时 + 重试 |
+| 连接频繁断开 | 心跳超时 | 检查心跳间隔 < 45s |
 | UI 不更新 | 未用 Builder | 包裹 ValueListenableBuilder |
-| VS 2019 required | Flutter 版本 | 安装 VS 2019 Build Tools |
-| DLL missing | 依赖缺失 | 复制 DLL 到 Debug 目录 |
+| 多个连接 | 未用单例 | 使用 WebSocketService() 单例 |
 
 ---
 
 ## 14. 禁止事项 (奥卡姆剃刀)
 
-### ❌ 过度设计
+### [禁止] 过度设计
 ```dart
 // 不需要: 复杂的状态机、事件总线、依赖注入框架
 // 只需要: ValueNotifier + Provider
 ```
 
-### ❌ 过早优化
+### [禁止] 过早优化
 ```dart
 // 不需要: Isolate、缓存池、对象池
 // 只需要: 减少 setState、缓存 Provider
 ```
 
-### ❌ 过度抽象
+### [禁止] 过度抽象
 ```dart
 // 不需要: BaseService、BaseProvider、BaseWidget
 // 只需要: 3 个模板 (Service/Page/Widget)
 ```
 
-### ❌ 过度配置
+### [禁止] 过度配置
 ```dart
 // 不需要: 环境变量、配置文件、特性开关
 // 只需要: 硬编码 + SharedPreferences
 ```
 
-### ❌ 随意生成文档
+### [禁止] 随意生成文档
 ```
 // 禁止: 未经用户明确要求，主动创建 README.md、CHANGELOG.md、TODO.md 等文档
 // 原则: 只在用户明确要求时才创建文档文件
@@ -463,16 +622,61 @@ flutter analyze
 ```
 
 **重要规则**:
-- ❌ 不要主动创建 `*.md` 文件（除非用户明确要求）
-- ❌ 不要主动创建 `docs/` 目录
-- ❌ 不要主动创建 `README.md`、`CHANGELOG.md`、`TODO.md`
-- ✅ 可以在代码中添加注释和文档字符串
-- ✅ 可以在对话中提供文档内容（但不写入文件）
-- ✅ 只有当用户明确说"创建文档"、"生成 README"时才创建
+- [禁止] 不要主动创建 `*.md` 文件（除非用户明确要求）
+- [禁止] 不要主动创建 `docs/` 目录
+- [禁止] 不要主动创建 `README.md`、`CHANGELOG.md`、`TODO.md`
+- [允许] 可以在代码中添加注释和文档字符串
+- [允许] 可以在对话中提供文档内容（但不写入文件）
+- [允许] 只有当用户明确说"创建文档"、"生成 README"时才创建
+
+### [严格禁止] 在代码注释中使用 Emoji 表情符号
+
+**原则**: 所有代码文件（包括 .dart、.py、.yaml、.md 等）的注释中，严格禁止使用任何 emoji 图标或表情符号。
+
+**禁止的符号示例**:
+```
+禁止使用:           等任何 emoji
+```
+
+**正确的注释风格**:
+```dart
+// [正确] 初始化 WebSocket 服务
+// [错误] 连接失败
+// [注意] 这里需要检查连接状态
+// [警告] 不要在主线程执行耗时操作
+// [成功] 数据加载完成
+```
+
+**错误的注释风格（严格禁止）**:
+```dart
+//  初始化 WebSocket 服务  // 禁止
+//  连接失败              // 禁止
+//  注意事项              // 禁止
+//  启动服务              // 禁止
+```
+
+**原因说明**:
+1. **编码兼容性**: Emoji 可能在某些编辑器或终端中显示异常
+2. **代码审查**: 纯文本注释更易于代码审查和搜索
+3. **专业性**: 工业控制系统代码应保持严谨的专业风格
+4. **版本控制**: Emoji 在 Git diff 中可能显示为乱码
+5. **跨平台**: 不同操作系统对 Emoji 的支持程度不同
+6. **可读性**: 纯文本注释在所有环境下都能正确显示
+
+**替代方案**:
+- 使用 `[正确]` 替代 ``
+- 使用 `[错误]` 替代 ``
+- 使用 `[注意]` 替代 ``
+- 使用 `[警告]` 替代 ``
+- 使用 `[成功]` 替代 ``
+- 使用 `[禁止]` 替代 ``
+- 使用 `[允许]` 替代 ``
+- 使用 `[重要]` 替代 ``
+- 使用 `[提示]` 替代 ``
 
 **文档目录规范**:
-- 📁 所有项目文档统一存放在 `vdoc/` 目录
-- 📝 文档命名规则：小写字母 + 下划线（如 `performance_fixes.md`）
+-  所有项目文档统一存放在 `vdoc/` 目录
+-  文档命名规则：小写字母 + 下划线（如 `performance_fixes.md`）
 - 📚 现有文档清单：
   - `batch_api_integration.md` - 批量 API 集成文档
   - `http_request_optimization.md` - HTTP 请求优化文档
@@ -491,26 +695,34 @@ flutter analyze
 
 ## 15. 快速参考
 
-### 数据刷新
+### WebSocket 连接
 ```dart
-// 启动轮询
-TimerManager().register('id', Duration(seconds: 5), callback);
+// 初始化 WebSocket
+final wsService = WebSocketService();
+wsService.onRealtimeDataUpdate = _handleRealtimeData;
+wsService.connect();
+wsService.subscribeRealtime();
 
-// 暂停轮询
-TimerManager().cancel('id');
-
-// 手动刷新
-await fetchData();
+// 清理回调
+@override
+void dispose() {
+  wsService.onRealtimeDataUpdate = null;
+  super.dispose();
+}
 ```
 
 ### 状态更新
 ```dart
-// 更新数据
-dataNotifier.value = newData;
+// WebSocket 回调更新
+void _handleRealtimeData(WorkshopRealtimeData data) {
+  if (mounted) {
+    _dataNotifier.value = data;
+  }
+}
 
 // 监听数据
 ValueListenableBuilder(
-  valueListenable: dataNotifier,
+  valueListenable: _dataNotifier,
   builder: (context, data, child) => Widget(data),
 )
 ```

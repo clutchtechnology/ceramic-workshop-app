@@ -1,6 +1,6 @@
 # 页面目录整理总结
 
-## ✅ 已完成的目录整理
+##  已完成的目录整理
 
 ### 目录结构
 
@@ -91,36 +91,36 @@ import 'presentation/pages/navigation/main_navigation_page.dart';
 - **位置**：`navigation/home_page.dart`
 - **说明**：如果不再使用，可以考虑删除
 
-## 📝 命名规范
+##  命名规范
 
 ### 目录命名
-- ✅ 小写字母 + 下划线：`rotary_kiln`, `workshop_monitor`
-- ❌ 避免：`RotaryKiln`, `rotary-kiln`, `rotaryKiln`
+-  小写字母 + 下划线：`rotary_kiln`, `workshop_monitor`
+-  避免：`RotaryKiln`, `rotary-kiln`, `rotaryKiln`
 
 ### 文件命名
-- ✅ 小写字母 + 下划线：`rotary_kiln_page_fixed.dart`
-- ✅ 版本后缀：`_v2`, `_fixed` 表示不同版本
-- ❌ 避免：`RotaryKilnPage.dart`, `rotary-kiln-page.dart`
+-  小写字母 + 下划线：`rotary_kiln_page_fixed.dart`
+-  版本后缀：`_v2`, `_fixed` 表示不同版本
+-  避免：`RotaryKilnPage.dart`, `rotary-kiln-page.dart`
 
 ### 类命名
-- ✅ 大驼峰：`RotaryKilnPageFixed`
-- ✅ 与文件名对应：文件名 `rotary_kiln_page_fixed.dart` → 类名 `RotaryKilnPageFixed`
+-  大驼峰：`RotaryKilnPageFixed`
+-  与文件名对应：文件名 `rotary_kiln_page_fixed.dart` → 类名 `RotaryKilnPageFixed`
 
 ## 🔄 导入路径更新
 
 所有导入路径已更新为相对路径：
 
 ```dart
-// ✅ 正确：使用相对路径
+//  正确：使用相对路径
 import 'workshop_monitor/workshop_monitor_page.dart';
 import 'grinding_workshop/grinding_workshop_page.dart';
 import 'common/digital_twin_page.dart';
 
-// ❌ 错误：旧路径（已更新）
+//  错误：旧路径（已更新）
 import 'workshop_monitor_page.dart';
 ```
 
-## 📊 模块分类说明
+##  模块分类说明
 
 | 模块 | 目录 | 说明 |
 |------|------|------|
@@ -132,7 +132,7 @@ import 'workshop_monitor_page.dart';
 | **导航** | `navigation/` | 导航相关页面 |
 | **入口** | 根目录 | 应用入口页面 |
 
-## ✅ 整理完成检查清单
+##  整理完成检查清单
 
 - [x] 创建新目录结构
 - [x] 移动文件到对应目录
@@ -141,7 +141,7 @@ import 'workshop_monitor_page.dart';
 - [x] 验证文件路径正确性
 - [x] 创建文档说明
 
-## 🎯 后续建议
+##  后续建议
 
 1. **删除废弃页面**：如果 `home_page.dart` 不再使用，可以考虑删除
 2. **统一版本管理**：考虑统一使用 `_v2` 版本，逐步废弃旧版本

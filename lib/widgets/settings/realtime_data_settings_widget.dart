@@ -122,7 +122,7 @@ class _RealtimeDataSettingsWidgetState
 
   @override
   Widget build(BuildContext context) {
-    // 🔧 [CRITICAL] 使用 context.watch 替代 Consumer
+    //  [CRITICAL] 使用 context.watch 替代 Consumer
     // Consumer 在 IndexedStack/Offstage 环境中会导致 '_dependents.isEmpty' 错误
     // 因为 Consumer 的依赖关系在页面隐藏时不会被正确清理
     final RealtimeConfigProvider provider;

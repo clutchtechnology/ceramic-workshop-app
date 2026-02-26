@@ -9,6 +9,7 @@ import '../services/hopper_service.dart';
 import '../services/roller_kiln_service.dart';
 import '../services/scr_fan_service.dart';
 import '../services/realtime_data_cache_service.dart';
+import '../services/websocket_service.dart';
 import '../widgets/data_display/data_tech_line_widgets.dart';
 import '../widgets/icons/icons.dart';
 import '../widgets/realtime_dashboard/real_rotary_kiln_cell.dart';
@@ -35,12 +36,14 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
   final RollerKilnService _rollerKilnService = RollerKilnService();
   final ScrFanService _scrFanService = ScrFanService();
   final RealtimeDataCacheService _cacheService = RealtimeDataCacheService();
+  final WebSocketService _wsService = WebSocketService();
+  StreamSubscription<RealtimeWsData>? _wsSubscription;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 核心业务数据 (序号关联注释法)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // 🔧 [CRITICAL] Timer ID 常量
+  //  [CRITICAL] Timer ID 常量
   static const String _timerIdRealtime = 'realtime_dashboard_polling';
 
   // 1, 料仓数据 - 9台回转窑 (短窑4台 + 无料仓2台 + 长窑3台)
@@ -61,20 +64,20 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
   DateTime? _lastSuccessTime;
   DateTime? _lastUIRefreshTime;
 
-  // 🔧 [CRITICAL] 防止 _isRefreshing 卡死的保护机制
+  //  [CRITICAL] 防止 _isRefreshing 卡死的保护机制
   DateTime? _refreshStartTime; // 记录请求开始时间
-  static const int _maxRefreshDurationSeconds = 10; // 🔧 缩短到 10 秒（5秒超时 + 5秒缓冲）
+  static const int _maxRefreshDurationSeconds = 10; //  缩短到 10 秒（5秒超时 + 5秒缓冲）
 
-  // 🔧 [CRITICAL] 网络异常时的退避策略
+  //  [CRITICAL] 网络异常时的退避策略
   int _consecutiveFailures = 0; // 连续失败次数
   static const int _maxBackoffSeconds = 60; // 最大退避间隔
   static const int _normalIntervalSeconds = 5; // 正常轮询间隔
 
-  // 🔧 [NEW] 后端服务状态标志
+  //  [NEW] 后端服务状态标志
   bool _isBackendAvailable = true; // 后端是否可用
   String? _lastErrorMessage; // 最后一次错误信息
 
-  // 🔧 [CRITICAL] 缓存 Provider 引用（防止 build() 中频繁查找导致卡死）
+  //  [CRITICAL] 缓存 Provider 引用（防止 build() 中频繁查找导致卡死）
   late RealtimeConfigProvider _configProvider;
 
   // 6, UI索引到设备ID的映射 (硬件布局决定)
@@ -99,15 +102,17 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
     await _fetchData();
   }
 
-  /// 🔧 暂停定时器（页面不可见时调用）
+  // 暂停HTTP备用定时器（页面不可见时调用）
+  // [CRITICAL] WebSocket订阅始终保持活跃，仅暂停HTTP备用定时器
   void pausePolling() {
     TimerManager().pause(_timerIdRealtime);
-    logger.info('RealtimeDashboardPage: 轮询已暂停');
+    logger.info('RealtimeDashboardPage: HTTP备用定时器已暂停（WebSocket订阅保持活跃）');
   }
 
-  /// 🔧 恢复定时器（页面可见时调用）
+  // 恢复HTTP备用定时器（页面可见时调用）
+  // [CRITICAL] WebSocket订阅始终保持活跃，仅恢复HTTP备用定时器
   void resumePolling() {
-    // 🔧 重置连续失败计数
+    // 重置连续失败计数
     _consecutiveFailures = 0;
 
     if (!TimerManager().exists(_timerIdRealtime)) {
@@ -115,9 +120,8 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
     } else {
       TimerManager().resume(_timerIdRealtime);
     }
-    logger.info('RealtimeDashboardPage: 轮询已恢复');
-    // 立即刷新一次数据
-    _fetchData();
+
+    logger.info('RealtimeDashboardPage: HTTP备用定时器已恢复（WebSocket订阅保持活跃）');
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -127,55 +131,33 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-
-    switch (state) {
-      case AppLifecycleState.resumed:
-        // 🔧 窗口恢复/激活 → 恢复轮询
-        logger.lifecycle('RealtimeDashboardPage: 应用恢复 (resumed) - 恢复轮询');
-        resumePolling();
-        break;
-      case AppLifecycleState.inactive:
-        // 🔧 窗口失去焦点（如切换到其他应用）→ 暂停轮询
-        logger.lifecycle('RealtimeDashboardPage: 应用失去焦点 (inactive) - 暂停轮询');
-        pausePolling();
-        break;
-      case AppLifecycleState.paused:
-        // 🔧 窗口最小化 → 暂停轮询
-        logger.lifecycle('RealtimeDashboardPage: 应用暂停 (paused) - 暂停轮询');
-        pausePolling();
-        break;
-      case AppLifecycleState.detached:
-        // 🔧 应用即将退出 → 清理资源
-        logger.lifecycle('RealtimeDashboardPage: 应用即将退出 (detached)');
-        pausePolling();
-        break;
-      case AppLifecycleState.hidden:
-        // 🔧 窗口被隐藏 → 暂停轮询
-        logger.lifecycle('RealtimeDashboardPage: 应用被隐藏 (hidden) - 暂停轮询');
-        pausePolling();
-        break;
-    }
+    // [工业监控] 7x24h运行，WebSocket订阅始终保持活跃
+    // 不因窗口最小化/恢复/失焦等状态变化影响数据接收
+    // 资源释放统一由 dispose() 负责
+    logger.lifecycle('RealtimeDashboardPage: 生命周期变化 ($state)');
   }
 
-  /// 🔧 [核心] 启动轮询定时器（使用 TimerManager 统一管理）
+  ///  [核心] 启动轮询定时器（使用 TimerManager 统一管理）
   /// 支持动态间隔：网络异常时自动延长轮询间隔，恢复后自动缩短
   void _startPolling() {
-    // 🔧 计算当前轮询间隔（指数退避）
+    //  计算当前轮询间隔（指数退避）
     int intervalSeconds = _normalIntervalSeconds;
     if (_consecutiveFailures > 0) {
       intervalSeconds = (_normalIntervalSeconds * (1 << _consecutiveFailures))
           .clamp(_normalIntervalSeconds, _maxBackoffSeconds);
     }
 
-    // 🔧 使用 TimerManager 注册 Timer
+    //  使用 TimerManager 注册 Timer
     TimerManager().register(
       _timerIdRealtime,
       Duration(seconds: intervalSeconds),
       () async {
         if (!mounted) return;
 
+        if (_wsService.isConnected) return;
+
         try {
-          // 🔧 检测UI长时间未刷新
+          //  检测UI长时间未刷新
           final lastRefresh = _lastUIRefreshTime;
           if (lastRefresh != null) {
             final sinceLastRefresh = DateTime.now().difference(lastRefresh);
@@ -194,7 +176,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
     );
   }
 
-  /// 🔧 重启轮询（用于失败后调整间隔）
+  ///  重启轮询（用于失败后调整间隔）
   void _restartPollingIfNeeded(bool wasSuccess) {
     if (!mounted) return;
 
@@ -226,7 +208,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
     }
   }
 
-  /// 🔧 [NEW] 解析错误信息，返回用户友好的提示
+  ///  [NEW] 解析错误信息，返回用户友好的提示
   String _getErrorMessage(dynamic error) {
     final errorStr = error.toString();
 
@@ -247,33 +229,95 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
   @override
   void initState() {
     super.initState();
-    // 🔧 [CRITICAL] 注册生命周期监听
+    // 注册生命周期监听
     WidgetsBinding.instance.addObserver(this);
-    // 🔧 [CRITICAL] 缓存 Provider 引用（防止 build() 中频繁查找）
+    // 缓存 Provider 引用（防止 build() 中频繁查找）
     _configProvider = context.read<RealtimeConfigProvider>();
+
+    logger.info('[TEST][页面初始化] 开始订阅WebSocket Stream');
+    _wsSubscription = _wsService.realtimeStream.listen(_handleRealtimeWsData);
+    logger.info('[TEST][页面初始化] WebSocket Stream订阅完成');
+
     _initData();
   }
 
   @override
   void dispose() {
-    // 🔧 [CRITICAL] 移除生命周期监听
+    //  [CRITICAL] 移除生命周期监听
     WidgetsBinding.instance.removeObserver(this);
-    // 🔧 使用 TimerManager 取消 Timer
+    //  使用 TimerManager 取消 Timer
     TimerManager().cancel(_timerIdRealtime);
+    _wsService.unsubscribeRealtime();
+    _wsSubscription?.cancel();
+    _wsSubscription = null;
     logger.info('RealtimeDashboardPage disposed, timer cancelled');
     super.dispose();
   }
 
   Future<void> _initData() async {
-    // 🔧 先加载本地缓存数据（App 重启后恢复上次数据）
+    // 先加载本地缓存数据（App 重启后恢复上次数据）
     await _loadCachedData();
 
     // 然后尝试获取最新数据
     await _fetchData();
 
-    // 🔧 启动轮询定时器（复用公共方法）
+    logger.info('[TEST][页面初始化] 开始订阅WebSocket realtime频道');
+    await _wsService.subscribeRealtime();
+    logger.info('[TEST][页面初始化] WebSocket订阅完成');
+
+    // 启动轮询定时器（复用公共方法）
     _startPolling();
     logger.lifecycle('数据轮询定时器已启动 (间隔: 5秒)');
+  }
+
+  void _handleRealtimeWsData(RealtimeWsData wsData) {
+    if (!mounted) return;
+
+    logger.info('[TEST][Stream→UI] 收到WebSocket数据 | '
+        '料仓=${wsData.hopperData.length} | '
+        '辊道窑=${wsData.rollerKilnData != null ? "有" : "无"} | '
+        'SCR+风机=${wsData.scrFanData != null ? "有" : "无"} | '
+        'source=${wsData.source}');
+
+    final hasValidHopperData = wsData.hopperData.isNotEmpty;
+    final hasValidRollerData = wsData.rollerKilnData != null;
+    final hasValidScrFanData = wsData.scrFanData != null;
+
+    if (!hasValidHopperData && !hasValidRollerData && !hasValidScrFanData) {
+      logger.warning('[TEST][Stream→UI] 数据为空，跳过更新');
+      return;
+    }
+
+    setState(() {
+      if (hasValidHopperData) {
+        _hopperData = wsData.hopperData;
+      }
+      if (hasValidRollerData) {
+        _rollerKilnData = wsData.rollerKilnData;
+      }
+      if (hasValidScrFanData) {
+        _scrFanData = wsData.scrFanData;
+      }
+      _isBackendAvailable = true;
+      _lastErrorMessage = null;
+    });
+
+    logger.info('[TEST][Stream→UI] UI状态已更新 | setState完成');
+
+    // 1. 更新统计 (与HTTP路径保持一致，供日志诊断)
+    _successCount++;
+    _lastSuccessTime = DateTime.now();
+    _lastUIRefreshTime = _lastSuccessTime;
+
+    // 2. 持久化缓存 (确保App重启后能恢复WS最新数据，而非旧的HTTP缓存)
+    _cacheService.saveCache(
+      hopperData: hasValidHopperData ? wsData.hopperData : _hopperData,
+      rollerKilnData:
+          hasValidRollerData ? wsData.rollerKilnData : _rollerKilnData,
+      scrFanData: hasValidScrFanData ? wsData.scrFanData : _scrFanData,
+    );
+
+    logger.info('[TEST][Stream→UI] 数据已缓存到本地');
   }
 
   /// 加载本地缓存数据
@@ -294,15 +338,15 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
   }
 
   Future<void> _fetchData() async {
-    // 🔧 [CRITICAL] 检测 _isRefreshing 是否卡死
+    //  [CRITICAL] 检测 _isRefreshing 是否卡死
     if (_isRefreshing) {
       // 检查是否超过最大允许刷新时长
       if (_refreshStartTime != null) {
         final duration =
             DateTime.now().difference(_refreshStartTime!).inSeconds;
         if (duration > _maxRefreshDurationSeconds) {
-          // 🔧 强制重置 _isRefreshing，防止永久卡死
-          logger.error('⚠️ _isRefreshing 卡死超过 ${duration}s，强制重置！');
+          //  强制重置 _isRefreshing，防止永久卡死
+          logger.error(' _isRefreshing 卡死超过 ${duration}s，强制重置！');
           _isRefreshing = false;
           _refreshStartTime = null;
           // 不 return，继续执行本次请求
@@ -321,7 +365,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
       return;
     }
 
-    _refreshStartTime = DateTime.now(); // 🔧 记录请求开始时间
+    _refreshStartTime = DateTime.now(); //  记录请求开始时间
 
     setState(() {
       _isRefreshing = true; // 4, 标记开始刷新
@@ -329,7 +373,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
 
     try {
       // 1,2,3, 并行请求三类设备数据，添加8秒超时控制
-      // 🔧 [CRITICAL] 缩短批量超时时间（单个请求5秒 + 3秒缓冲）
+      //  [CRITICAL] 缩短批量超时时间（单个请求5秒 + 3秒缓冲）
       final results = await Future.wait([
         _hopperService.getHopperBatchData(), // 1, 料仓数据
         _rollerKilnService.getRollerKilnRealtimeFormatted(), // 2, 辊道窑数据
@@ -347,7 +391,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
       final rollerData = results[1] as RollerKilnData?;
       final scrFanData = results[2] as ScrFanBatchData?;
 
-      // 🔧 [CRITICAL] 数据有效性检查 - 防止空数据覆盖正常数据
+      //  [CRITICAL] 数据有效性检查 - 防止空数据覆盖正常数据
       final hasValidHopperData = hopperData.isNotEmpty;
       final hasValidRollerData = rollerData != null;
       final hasValidScrFanData = scrFanData != null;
@@ -361,16 +405,16 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
       _successCount++;
       _lastSuccessTime = DateTime.now();
 
-      // 🔧 网络恢复，重置退避和错误状态
+      //  网络恢复，重置退避和错误状态
       _restartPollingIfNeeded(true);
 
-      // 🔧 [NEW] 恢复后端可用状态
+      //  [NEW] 恢复后端可用状态
       if (!_isBackendAvailable && mounted) {
         setState(() {
           _isBackendAvailable = true;
           _lastErrorMessage = null;
         });
-        logger.info('✅ 后端服务已恢复');
+        logger.info(' 后端服务已恢复');
       }
 
       // 5, 每500次成功记录一次日志（约42分钟），减少日志噪音
@@ -381,7 +425,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
 
       if (mounted) {
         setState(() {
-          // 🔧 [CRITICAL] 只有当新数据非空时才更新（防止空数据覆盖导致显示为0）
+          //  [CRITICAL] 只有当新数据非空时才更新（防止空数据覆盖导致显示为0）
           if (hasValidHopperData) {
             _hopperData = hopperData; // 1, 更新料仓数据
           }
@@ -406,16 +450,16 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
     } catch (e, stack) {
       _failCount++; // 5, 记录失败次数
 
-      // 🔧 网络异常，启动退避策略
+      //  网络异常，启动退避策略
       _restartPollingIfNeeded(false);
 
-      // 🔧 [NEW] 更新后端状态（连续失败3次后标记为不可用）
+      //  [NEW] 更新后端状态（连续失败3次后标记为不可用）
       if (_consecutiveFailures >= 3 && _isBackendAvailable && mounted) {
         setState(() {
           _isBackendAvailable = false;
           _lastErrorMessage = _getErrorMessage(e);
         });
-        logger.warning('⚠️ 后端服务不可用（连续失败 $_consecutiveFailures 次）');
+        logger.warning(' 后端服务不可用（连续失败 $_consecutiveFailures 次）');
       }
 
       // 请求失败时保持上一次成功的数据，不清空也不更新
@@ -430,7 +474,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
             stack);
       }
     } finally {
-      // 🔧 [CRITICAL] 无论成功失败，都必须重置状态
+      //  [CRITICAL] 无论成功失败，都必须重置状态
       _refreshStartTime = null;
       if (mounted) {
         setState(() {
@@ -448,6 +492,16 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
     // 获取屏幕尺寸
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
+
+    // [CRITICAL] 窗口最小化→全屏恢复过程中 MediaQuery 可能返回 0 或极小值
+    // 此时直接渲染会导致负数宽高 → SizedBox 断言失败 → 崩溃
+    // 安全阈值: 低于 100px 说明窗口处于过渡状态，显示空白占位
+    if (screenWidth < 100 || screenHeight < 100) {
+      return Scaffold(
+        backgroundColor: TechColors.bgDeep,
+        body: const SizedBox.expand(),
+      );
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // 新布局设计 (3区块):
@@ -535,7 +589,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
             ),
           ),
 
-          // 🔧 [NEW] 后端不可用时的浮动提示
+          //  [NEW] 后端不可用时的浮动提示
           if (!_isBackendAvailable)
             Positioned(
               top: 16,
@@ -573,7 +627,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              '⚠️ 后端服务不可用',
+                              ' 后端服务不可用',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -668,64 +722,6 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
     );
   }
 
-  /// 原回转窑区域方法 - 保留但不再使用（兼容性）
-  Widget _buildRotaryKilnSection(double width, double height) {
-    return SizedBox(
-      width: width,
-      height: height,
-      child: TechPanel(
-        accentColor: TechColors.glowOrange,
-        child: Padding(
-          padding: const EdgeInsets.all(4.0),
-          child: Column(
-            children: [
-              // 第一行 - 短窑7-6 + 无料仓2 + 长窑8-3
-              Expanded(
-                child: Row(
-                  children: [
-                    Expanded(flex: 6, child: _buildRotaryKilnCell(7)), // 1.5
-                    const SizedBox(width: 4),
-                    Expanded(flex: 6, child: _buildRotaryKilnCell(6)), // 1.5
-                    const SizedBox(width: 4),
-                    Expanded(
-                        flex: 5,
-                        child: _buildRotaryKilnNoHopperCell(2)), // 1.25
-                    const SizedBox(width: 4),
-                    Expanded(
-                        flex: 6, child: _buildRotaryKilnLongCell(8)), // 1.5
-                    const SizedBox(width: 4),
-                    Expanded(
-                        flex: 6, child: _buildRotaryKilnLongCell(3)), // 1.5
-                  ],
-                ),
-              ),
-              const SizedBox(height: 4),
-              // 第二行 - 短窑5-4 + 无料仓1 + 长窑9 + 空白
-              Expanded(
-                child: Row(
-                  children: [
-                    Expanded(flex: 6, child: _buildRotaryKilnCell(5)), // 1.5
-                    const SizedBox(width: 4),
-                    Expanded(flex: 6, child: _buildRotaryKilnCell(4)), // 1.5
-                    const SizedBox(width: 4),
-                    Expanded(
-                        flex: 5,
-                        child: _buildRotaryKilnNoHopperCell(1)), // 1.25
-                    const SizedBox(width: 4),
-                    Expanded(
-                        flex: 6, child: _buildRotaryKilnLongCell(9)), // 1.5
-                    const SizedBox(width: 4),
-                    const Expanded(flex: 6, child: SizedBox.shrink()), // 1.5
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   /// 单个回转窑数据小容器 - 显示设备图片
   Widget _buildRotaryKilnCell(int index) {
     // 6, 通过UI索引查找设备ID，获取对应料仓数据
@@ -751,82 +747,6 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
     // 1, 获取该设备的料仓实时数据
     final data = deviceId != null ? _hopperData[deviceId] : null;
     return RotaryKilnLongCell(index: index, data: data, deviceId: deviceId);
-  }
-
-  /// SCR设备区域 - 包含2个小容器
-  Widget _buildScrSection(double width, double height) {
-    return SizedBox(
-      width: width,
-      height: height,
-      child: TechPanel(
-        accentColor: TechColors.glowBlue,
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Column(
-            children: [
-              // SCR-1 容器
-              Expanded(
-                child: _buildScrCell(1),
-              ),
-              const SizedBox(height: 12),
-              // SCR-2 容器
-              Expanded(
-                child: _buildScrCell(2),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 单个SCR设备小容器 - 包含氨泵（水泵）组件 + 燃气管
-  Widget _buildScrCell(int index) {
-    // 3, 从SCR批量数据中安全获取对应设备 (index从1开始，数组从0开始)
-    final scrDevices = _scrFanData?.scr.devices;
-    final scrDevice = (scrDevices != null && scrDevices.length >= index)
-        ? scrDevices[index - 1]
-        : null;
-
-    final power = scrDevice?.elec?.pt ?? 0.0;
-    final energy = scrDevice?.elec?.impEp ?? 0.0;
-    final flowRate = scrDevice?.gas?.flowRate ?? 0.0;
-    final currentA = scrDevice?.elec?.currentA ?? 0.0;
-    final currentB = scrDevice?.elec?.currentB ?? 0.0;
-    final currentC = scrDevice?.elec?.currentC ?? 0.0;
-
-    // 3, 使用缓存的配置判断SCR氨泵和燃气运行状态
-    final isPumpRunning = _configProvider.isScrPumpRunning(index, power);
-    final isGasRunning = _configProvider.isScrGasRunning(index, flowRate);
-
-    return Row(
-      children: [
-        // 左侧 - 水泵组件 (占5份)
-        Expanded(
-          flex: 5,
-          child: WaterPumpCell(
-            index: index,
-            isRunning: isPumpRunning,
-            power: power,
-            cumulativeEnergy: energy,
-            energyConsumption: energy,
-            currentA: currentA,
-            currentB: currentB,
-            currentC: currentC,
-          ),
-        ),
-        // 右侧 - 燃气管组件 (占3份)
-        Expanded(
-          flex: 3,
-          child: GasPipeCell(
-            index: index,
-            isRunning: isGasRunning,
-            flowRate: flowRate,
-            energyConsumption: scrDevice?.gas?.totalFlow ?? 0.0,
-          ),
-        ),
-      ],
-    );
   }
 
   /// ═══════════════════════════════════════════════════════════════════════
@@ -1004,279 +924,49 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
                 ),
               ),
             ),
-            // 叠加数据层 - 上方温区卡片 + 左下角总电表
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 上方：1-6号温区数据卡片 (水平排列)
-                  SizedBox(
-                    height: 95,
-                    child: Row(
-                      children: List.generate(
-                        6,
-                        (i) {
-                          final zoneIndex = i + 1;
-                          final zone = (zones != null && zones.length > i)
-                              ? zones[i]
-                              : null;
-                          return Expanded(
-                            child: Padding(
-                              padding: EdgeInsets.only(left: i == 0 ? 0 : 4),
-                              child: _buildRollerKilnDataCard(
-                                '${zoneIndex}号温区',
-                                zone != null
-                                    ? '${zone.temperature.toStringAsFixed(0)}°C'
-                                    : '0°C',
-                                zone != null
-                                    ? '${zone.energy.toStringAsFixed(0)}kWh'
-                                    : '0kWh',
-                                zoneIndex: zoneIndex,
-                                temperatureValue: zone?.temperature,
-                                currentA: zone?.currentA,
-                                currentB: zone?.currentB,
-                                currentC: zone?.currentC,
-                                powerValue: zone?.power,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  // 中间留空，让背景图显示
-                  const Spacer(),
-                  // 左下角：总电表卡片（样式与温区卡片一致，字体+2）
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: TechColors.bgDeep.withOpacity(0.85),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: TechColors.glowCyan.withOpacity(0.4),
-                        width: 1,
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 功率
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const PowerIcon(
-                                size: 18, color: TechColors.glowCyan),
-                            const SizedBox(width: 2),
-                            Text(
-                              '${totalPower.toStringAsFixed(1)}kW',
-                              style: const TextStyle(
-                                color: TechColors.glowCyan,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w500,
-                                fontFamily: 'Roboto Mono',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        // 能耗
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            EnergyIcon(size: 18, color: TechColors.glowOrange),
-                            const SizedBox(width: 2),
-                            Text(
-                              '${totalEnergy.toStringAsFixed(1)}kWh',
-                              style: const TextStyle(
-                                color: TechColors.glowOrange,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w500,
-                                fontFamily: 'Roboto Mono',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        // A相电流
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CurrentIcon(color: TechColors.glowCyan, size: 18),
-                            Text(
-                              'A:${totalCurrentA.toStringAsFixed(1)}A',
-                              style: const TextStyle(
-                                color: TechColors.glowCyan,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w500,
-                                fontFamily: 'Roboto Mono',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        // B相电流
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CurrentIcon(color: TechColors.glowCyan, size: 18),
-                            Text(
-                              'B:${totalCurrentB.toStringAsFixed(1)}A',
-                              style: const TextStyle(
-                                color: TechColors.glowCyan,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w500,
-                                fontFamily: 'Roboto Mono',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        // C相电流
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CurrentIcon(color: TechColors.glowCyan, size: 18),
-                            Text(
-                              'C:${totalCurrentC.toStringAsFixed(1)}A',
-                              style: const TextStyle(
-                                color: TechColors.glowCyan,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w500,
-                                fontFamily: 'Roboto Mono',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 辊道窑区域 - 显示设备图片
-  Widget _buildRollerKilnSection(double width, double height) {
-    // 2, 从后端获取总表数据（不再前端累加）
-    final totalPower = _rollerKilnData?.total.power ?? 0.0;
-    final totalEnergy = _rollerKilnData?.total.energy ?? 0.0;
-    final totalCurrentA = _rollerKilnData?.total.currentA ?? 0.0;
-    final totalCurrentB = _rollerKilnData?.total.currentB ?? 0.0;
-    final totalCurrentC = _rollerKilnData?.total.currentC ?? 0.0;
-
-    // 2, 安全获取温区列表，避免强制解包
-    final zones = _rollerKilnData?.zones;
-
-    return SizedBox(
-      width: width,
-      height: height,
-      child: TechPanel(
-        accentColor: TechColors.glowGreen,
-        child: Stack(
-          children: [
-            // 背景图片 - 右移40px显示
+            // 上方温区卡片 - Positioned 固定顶部，避免 Column+Spacer 在窗口变化时溢出
             Positioned(
-              right: -40,
-              top: 0,
-              bottom: 0,
-              left: 40,
-              child: Image.asset(
-                'assets/images/roller_kiln.png',
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.image_not_supported,
-                          color: TechColors.textSecondary.withOpacity(0.5),
-                          size: 48,
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          '辊道窑设备图',
-                          style: TextStyle(
-                            color: TechColors.textSecondary,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-            // 上方数据标签 - 覆盖在图片上
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: SizedBox(
-                height: 150,
-                // 2, 根据辊道窑温区数据渲染温度卡片
-                child: Row(
-                  children: zones?.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final zone = entry.value;
-                        return Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.only(
-                              left: index == 0 ? 0 : 4,
-                              right: index == (zones.length - 1) ? 0 : 4,
-                            ),
-                            child: _buildRollerKilnDataCard(
-                              zone.zoneName,
-                              '${zone.temperature.toStringAsFixed(0)}°C',
-                              '${zone.energy.toStringAsFixed(0)}kWh',
-                              powerValue: zone.power, // 传入功率数值
-                              zoneIndex: index + 1, // 温区索引 1-6
-                              temperatureValue: zone.temperature,
-                              currentA: zone.currentA,
-                              currentB: zone.currentB,
-                              currentC: zone.currentC,
-                            ),
-                          ),
-                        );
-                      }).toList() ??
-                      List.generate(
-                        6,
-                        (index) => Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.only(
-                              left: index == 0 ? 0 : 4,
-                              right: index == 5 ? 0 : 4,
-                            ),
-                            child: _buildRollerKilnDataCard(
-                              '区域 ${index + 1}',
-                              '0°C',
-                              '0kWh',
-                              powerValue: 0.0,
-                              zoneIndex: index + 1,
-                              temperatureValue: 0.0,
-                              currentA: 0.0,
-                              currentB: 0.0,
-                              currentC: 0.0,
-                            ),
-                          ),
+              top: 8,
+              left: 8,
+              right: 8,
+              height: 95,
+              child: Row(
+                children: List.generate(
+                  6,
+                  (i) {
+                    final zoneIndex = i + 1;
+                    final zone =
+                        (zones != null && zones.length > i) ? zones[i] : null;
+                    return Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(left: i == 0 ? 0 : 4),
+                        child: _buildRollerKilnDataCard(
+                          '${zoneIndex}号温区',
+                          zone != null
+                              ? '${zone.temperature.toStringAsFixed(0)}°C'
+                              : '0°C',
+                          zone != null
+                              ? '${zone.energy.toStringAsFixed(0)}kWh'
+                              : '0kWh',
+                          zoneIndex: zoneIndex,
+                          temperatureValue: zone?.temperature,
+                          currentA: zone?.currentA,
+                          currentB: zone?.currentB,
+                          currentC: zone?.currentC,
+                          powerValue: zone?.power,
                         ),
                       ),
+                    );
+                  },
                 ),
               ),
             ),
-            // 左下角功率总和标签 + 三相电流（单列4行显示）
+            // 左下角总电表卡片 - Positioned 固定左下角
             Positioned(
-              left: 0,
-              bottom: 0,
+              bottom: 8,
+              left: 8,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                 decoration: BoxDecoration(
                   color: TechColors.bgDeep.withOpacity(0.85),
                   borderRadius: BorderRadius.circular(4),
@@ -1289,20 +979,17 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 第一行：总分区 (已移除)
-                    // 第二行：总功率
+                    // 功率
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const PowerIcon(size: 18, color: TechColors.glowCyan),
                         const SizedBox(width: 2),
                         Text(
-                          _rollerKilnData != null
-                              ? '${totalPower.toStringAsFixed(1)}kW'
-                              : '0.0kW',
+                          '${totalPower.toStringAsFixed(1)}kW',
                           style: const TextStyle(
                             color: TechColors.glowCyan,
-                            fontSize: 16,
+                            fontSize: 17,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -1310,19 +997,17 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
                       ],
                     ),
                     const SizedBox(height: 2),
-                    // 第三行：总能耗
+                    // 能耗
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        EnergyIcon(color: TechColors.glowOrange, size: 18),
+                        EnergyIcon(size: 18, color: TechColors.glowOrange),
                         const SizedBox(width: 2),
                         Text(
-                          _rollerKilnData != null
-                              ? '${totalEnergy.toStringAsFixed(1)}kWh'
-                              : '0.0kWh',
+                          '${totalEnergy.toStringAsFixed(1)}kWh',
                           style: const TextStyle(
                             color: TechColors.glowOrange,
-                            fontSize: 16,
+                            fontSize: 17,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -1330,7 +1015,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
                       ],
                     ),
                     const SizedBox(height: 2),
-                    // 第二行：A相电流
+                    // A相电流
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1339,7 +1024,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
                           'A:${totalCurrentA.toStringAsFixed(1)}A',
                           style: const TextStyle(
                             color: TechColors.glowCyan,
-                            fontSize: 16,
+                            fontSize: 17,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -1347,7 +1032,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
                       ],
                     ),
                     const SizedBox(height: 2),
-                    // 第三行：B相电流
+                    // B相电流
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1356,7 +1041,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
                           'B:${totalCurrentB.toStringAsFixed(1)}A',
                           style: const TextStyle(
                             color: TechColors.glowCyan,
-                            fontSize: 16,
+                            fontSize: 17,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -1364,7 +1049,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
                       ],
                     ),
                     const SizedBox(height: 2),
-                    // 第四行：C相电流
+                    // C相电流
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1373,7 +1058,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
                           'C:${totalCurrentC.toStringAsFixed(1)}A',
                           style: const TextStyle(
                             color: TechColors.glowCyan,
-                            fontSize: 16,
+                            fontSize: 17,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'Roboto Mono',
                           ),
@@ -1599,62 +1284,6 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  /// 风机区域 - 包含2个容器
-  Widget _buildFanSection(double width, double height) {
-    // 3, 安全获取风机数据
-    final fanDevices = _scrFanData?.fan.devices;
-    // index=1对应数组下标0, index=2对应数组下标1
-    final fan1 =
-        (fanDevices != null && fanDevices.isNotEmpty) ? fanDevices[0] : null;
-    final fan2 =
-        (fanDevices != null && fanDevices.length > 1) ? fanDevices[1] : null;
-
-    final fan1Power = fan1?.elec?.pt ?? 0.0;
-    final fan2Power = fan2?.elec?.pt ?? 0.0;
-    final isFan1Running = _configProvider.isFanRunning(1, fan1Power);
-    final isFan2Running = _configProvider.isFanRunning(2, fan2Power);
-
-    return SizedBox(
-      width: width,
-      height: height,
-      child: TechPanel(
-        accentColor: TechColors.glowCyan,
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            children: [
-              // 风机-1 容器
-              Expanded(
-                child: FanCell(
-                  index: 1,
-                  isRunning: isFan1Running,
-                  power: fan1Power,
-                  cumulativeEnergy: fan1?.elec?.impEp ?? 0.0,
-                  currentA: fan1?.elec?.currentA ?? 0.0,
-                  currentB: fan1?.elec?.currentB ?? 0.0,
-                  currentC: fan1?.elec?.currentC ?? 0.0,
-                ),
-              ),
-              const SizedBox(width: 12),
-              // 风机-2 容器
-              Expanded(
-                child: FanCell(
-                  index: 2,
-                  isRunning: isFan2Running,
-                  power: fan2Power,
-                  cumulativeEnergy: fan2?.elec?.impEp ?? 0.0,
-                  currentA: fan2?.elec?.currentA ?? 0.0,
-                  currentB: fan2?.elec?.currentB ?? 0.0,
-                  currentC: fan2?.elec?.currentC ?? 0.0,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

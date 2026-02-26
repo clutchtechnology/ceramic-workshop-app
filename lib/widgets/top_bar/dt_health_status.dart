@@ -27,7 +27,7 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
   bool? _lastPlcHealthy;
   bool? _lastDbHealthy;
 
-  // 🔧 网络异常退避
+  //  网络异常退避
   int _consecutiveFailures = 0;
   static const int _normalIntervalMinutes = 1;
   static const int _maxIntervalMinutes = 5;
@@ -41,7 +41,7 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
     _startPolling(_normalIntervalMinutes);
   }
 
-  /// 🔧 启动轮询（支持动态间隔）
+  ///  启动轮询（支持动态间隔）
   void _startPolling(int intervalMinutes) {
     _timer?.cancel();
     _timer = Timer.periodic(Duration(minutes: intervalMinutes), (_) {
@@ -95,11 +95,11 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
     // 3, 检查数据库连接状态
     if (!await _checkDbHealth(client)) allHealthy = false;
 
-    // 🔧 根据健康状态调整轮询间隔
+    //  根据健康状态调整轮询间隔
     _adjustPollingInterval(allHealthy);
   }
 
-  /// 🔧 调整轮询间隔
+  ///  调整轮询间隔
   void _adjustPollingInterval(bool allHealthy) {
     if (!mounted) return;
 

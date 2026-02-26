@@ -15,7 +15,7 @@ class AdminConfigData {
   factory AdminConfigData.fromJson(Map<String, dynamic> json) {
     return AdminConfigData(
       username: json['username'] as String? ?? 'admin',
-      password: json['password'] as String? ?? 'Imerys666',
+      password: json['password'] as String? ?? 'admin',
     );
   }
 
@@ -51,7 +51,7 @@ class AdminProvider extends ChangeNotifier {
   static const String _storageKey = 'admin_config';
 
   /// 超级管理员密码（固定，不可修改）
-  static const String _superAdminPassword = 'Imerys666';
+  static const String _superAdminPassword = 'admin';
 
   AdminConfigData? _adminConfig;
   bool _isLoading = false;

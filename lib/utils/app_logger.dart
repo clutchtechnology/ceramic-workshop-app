@@ -15,7 +15,7 @@ class AppLogger {
   final _fileNameFormat = DateFormat('yyyy-MM-dd');
   bool _initialized = false;
 
-  // 🔧 新增: 心跳定时器
+  //  新增: 心跳定时器
   Timer? _heartbeatTimer;
   int _heartbeatCount = 0;
   DateTime? _startTime;
@@ -54,14 +54,14 @@ class AppLogger {
       // 清理旧日志（保留最近7天）
       await _cleanOldLogs(logDir, 7);
 
-      // 🔧 启动心跳监控（每60秒记录一次）
+      //  启动心跳监控（每60秒记录一次）
       _startHeartbeat();
     } catch (e) {
       debugPrint('[AppLogger] 初始化失败: $e');
     }
   }
 
-  /// 🔧 心跳监控：每12小时记录一次，减少日志噪音
+  ///  心跳监控：每12小时记录一次，减少日志噪音
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(hours: 12), (timer) async {
@@ -129,7 +129,7 @@ class AppLogger {
   Future<void> _writeLog(String level, String message) async {
     if (!_initialized || _logFile == null) return;
 
-    // 🔧 发行版本只记录错误级别：ERROR, FATAL
+    //  发行版本只记录错误级别：ERROR, FATAL
     // 排除所有其他日志：INFO, NETWORK, MEMORY, ACTION, LIFECYCLE, WARNING, HEARTBEAT
     if (!kDebugMode) {
       const allowedLevels = {'ERROR', 'FATAL'};
@@ -227,7 +227,7 @@ class AppLogger {
   /// 关闭日志系统
   Future<void> close() async {
     if (_initialized) {
-      // 🔧 停止心跳定时器
+      //  停止心跳定时器
       _heartbeatTimer?.cancel();
       _heartbeatTimer = null;
 

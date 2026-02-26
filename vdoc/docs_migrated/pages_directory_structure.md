@@ -67,10 +67,10 @@ pages/
 
 ## 文件移动计划
 
-1. ✅ `rotary_kiln/` - 已存在
-2. ✅ `roller_kiln/` - 已存在
-3. ✅ `scr_equipment/` - 已存在
-4. ✅ `settings/` - 已存在
+1.  `rotary_kiln/` - 已存在
+2.  `roller_kiln/` - 已存在
+3.  `scr_equipment/` - 已存在
+4.  `settings/` - 已存在
 5. ⏳ 创建 `workshop_monitor/` 并移动 `workshop_monitor_page.dart`
 6. ⏳ 创建 `grinding_workshop/` 并移动相关文件
 7. ⏳ 创建 `common/` 并移动通用页面

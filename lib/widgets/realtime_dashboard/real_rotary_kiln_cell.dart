@@ -8,7 +8,7 @@ import '../icons/icons.dart';
 /// 回转窑单元组件
 /// 用于显示单个回转窑设备
 ///
-/// 🔧 性能优化:
+///  性能优化:
 /// - 使用 context.read 替代 context.watch（父组件已 watch，此处只需读取）
 /// - 减少 build 中的重复计算
 class RotaryKilnCell extends StatelessWidget {
@@ -37,7 +37,7 @@ class RotaryKilnCell extends StatelessWidget {
     final currentB = data?.electricityMeter?.currentB ?? 0.0;
     final currentC = data?.electricityMeter?.currentC ?? 0.0;
 
-    // 🔧 优化: 使用 context.read 而非 context.watch
+    //  优化: 使用 context.read 而非 context.watch
     // 父组件 RealtimeDashboardPage 已经 watch 了数据变化并传入新的 data
     // 此 Widget 只需读取配置，无需再次监听
     final configProvider = context.read<RealtimeConfigProvider>();

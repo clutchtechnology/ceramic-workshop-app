@@ -174,89 +174,41 @@ class HistoryDataService {
     }
   }
 
-  /// 获取聚合间隔的预估数据点数（用于调试或UI显示）
-  static int getEstimatedPoints(DateTime start, DateTime end) {
-    final totalSeconds = end.difference(start).inSeconds;
-    final interval = calculateAggregateInterval(start, end);
-    final intervalSeconds = _parseIntervalToSeconds(interval);
-    return (totalSeconds / intervalSeconds).round();
-  }
-
-  /// 将间隔字符串解析为秒数
-  static int _parseIntervalToSeconds(String interval) {
-    final value = int.tryParse(interval.substring(0, interval.length - 1)) ?? 1;
-    final unit = interval[interval.length - 1];
-    switch (unit) {
-      case 's':
-        return value;
-      case 'm':
-        return value * 60;
-      case 'h':
-        return value * 3600;
-      case 'd':
-        return value * 86400;
-      default:
-        return value;
-    }
-  }
-
-  // ============================================================
-  // 数据库时间戳查询
-  // ============================================================
-
-  /// 获取数据库中最新数据的时间戳
-  ///
-  /// 用于确定历史数据查询的时间范围基准点。
-  /// 返回 null 表示数据库中暂无数据或查询失败。
-  Future<DateTime?> getLatestDbTimestamp() async {
-    try {
-      final client = ApiClient();
-      final response = await client
-          .get(Api.healthLatestTimestamp)
-          .timeout(const Duration(seconds: 5));
-
-      if (response != null && response['success'] == true) {
-        final data = response['data'];
-        if (data != null &&
-            data['has_data'] == true &&
-            data['timestamp'] != null) {
-          // 解析 ISO 格式时间戳 - 转换为本地时间
-          return DateTime.parse(data['timestamp']).toLocal();
-        }
-      }
-      return null;
-    } catch (e) {
-      debugPrint('获取数据库最新时间戳失败: $e');
-      return null;
-    }
-  }
-
   // ============================================================
   // 料仓历史数据查询
   // ============================================================
 
-  /// 查询料仓历史数据
+  /// 查询料仓历史数据（支持动态聚合间隔）
   ///
   /// [deviceId] 设备ID（如 short_hopper_1）
   /// [start] 开始时间
   /// [end] 结束时间
   /// [moduleType] 模块类型（WeighSensor, TemperatureSensor, ElectricityMeter）
   /// [fields] 查询字段列表
+  /// [autoInterval] 是否自动计算最佳聚合间隔（默认 true）
+  /// [interval] 手动指定聚合间隔（如果 autoInterval=false）
   Future<HistoryDataResult> queryHopperHistory({
     required String deviceId,
     required DateTime start,
     required DateTime end,
     String? moduleType,
     List<String>? fields,
+    bool autoInterval = true,
+    String? interval,
   }) async {
-    final interval = calculateAggregateInterval(start, end);
-
     // 发送本地时间（后端使用北京时间存储）
     final queryParams = <String, String>{
       'start': _formatLocalTime(start),
       'end': _formatLocalTime(end),
-      'interval': interval,
+      'auto_interval': autoInterval.toString(),
     };
+
+    // 不自动计算时，发送手动指定的 interval，否则后端自己计算
+    if (!autoInterval) {
+      final String computedInterval =
+          interval ?? calculateAggregateInterval(start, end);
+      queryParams['interval'] = computedInterval;
+    }
 
     if (moduleType != null) {
       queryParams['module_type'] = moduleType;
@@ -286,7 +238,8 @@ class HistoryDataService {
     );
   }
 
-  /// 查询料仓称重历史（重量、下料速度）
+  /// 查询料仓称重历史（仅重量）
+  /// 注意: feed_rate 不在 sensor_data 中, 需要用 queryHopperFeedRateHistory 查 feeding_cumulative
   Future<HistoryDataResult> queryHopperWeightHistory({
     required String deviceId,
     required DateTime start,
@@ -297,8 +250,50 @@ class HistoryDataService {
       start: start,
       end: end,
       moduleType: 'WeighSensor',
-      fields: ['weight', 'feed_rate'],
+      fields: ['weight'],
     );
+  }
+
+  /// 查询料仓下料速度历史 (从 feeding_cumulative measurement)
+  /// 返回 display_feed_rate 数据点
+  Future<HistoryDataResult> queryHopperFeedRateHistory({
+    required String deviceId,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final queryParams = <String, String>{
+      'start': _formatLocalTime(start),
+      'end': _formatLocalTime(end),
+      'fields': 'display_feed_rate',
+      'auto_interval': 'true',
+    };
+
+    final uri =
+        Uri.parse('${Api.baseUrl}${Api.hopperFeedingCumulative(deviceId)}')
+            .replace(queryParameters: queryParams);
+
+    return _fetchHistoryData(uri, deviceId);
+  }
+
+  /// 查询料仓投料总量历史 (从 feeding_cumulative measurement)
+  /// 返回 feeding_total 数据点
+  Future<HistoryDataResult> queryHopperFeedingTotalHistory({
+    required String deviceId,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final queryParams = <String, String>{
+      'start': _formatLocalTime(start),
+      'end': _formatLocalTime(end),
+      'fields': 'feeding_total',
+      'auto_interval': 'true',
+    };
+
+    final uri =
+        Uri.parse('${Api.baseUrl}${Api.hopperFeedingCumulative(deviceId)}')
+            .replace(queryParameters: queryParams);
+
+    return _fetchHistoryData(uri, deviceId);
   }
 
   /// 查询料仓功率历史
@@ -316,7 +311,7 @@ class HistoryDataService {
     );
   }
 
-  /// 🔧 查询料仓能耗历史 (ImpEp - 累积电能)
+  ///  查询料仓能耗历史 (ImpEp - 累积电能)
   Future<HistoryDataResult> queryHopperEnergyHistory({
     required String deviceId,
     required DateTime start,
@@ -352,15 +347,15 @@ class HistoryDataService {
 
       if (jsonResponse['success'] == true || jsonResponse['code'] == 200) {
         final List<dynamic> list = jsonResponse['data'];
-        debugPrint('✅ 投料历史返回: ${list.length} 条记录');
+        debugPrint(' 投料历史返回: ${list.length} 条记录');
         return list.map((json) => FeedingRecord.fromJson(json)).toList();
       } else {
         debugPrint(
-            '❌ 后端返回错误: ${jsonResponse['error'] ?? jsonResponse['message']}');
+            ' 后端返回错误: ${jsonResponse['error'] ?? jsonResponse['message']}');
       }
       return [];
     } catch (e) {
-      debugPrint('❌ 查询投料记录异常: $e');
+      debugPrint(' 查询投料记录异常: $e');
       return [];
     }
   }
@@ -376,12 +371,12 @@ class HistoryDataService {
 
       return jsonResponse['success'] == true || jsonResponse['code'] == 200;
     } catch (e) {
-      debugPrint('❌ 回填投料记录失败: $e');
+      debugPrint(' 回填投料记录失败: $e');
       return false;
     }
   }
 
-  /// 🔧 [New] 删除错误的投料记录
+  ///  [New] 删除错误的投料记录
   Future<bool> deleteFeedingRecord(String deviceId, DateTime time) async {
     try {
       final jsonResponse = await ApiClient().delete(
@@ -391,7 +386,7 @@ class HistoryDataService {
 
       return jsonResponse['success'] == true || jsonResponse['code'] == 200;
     } catch (e) {
-      debugPrint('❌ 删除投料记录失败: $e');
+      debugPrint(' 删除投料记录失败: $e');
       return false;
     }
   }
@@ -561,7 +556,7 @@ class HistoryDataService {
     return _fetchHistoryData(uri, deviceId);
   }
 
-  /// 查询风机功率历史
+  /// 查询风机功率历史 (只查 Pt，ImpEp 风机图表暂不展示)
   Future<HistoryDataResult> queryFanPowerHistory({
     required String deviceId,
     required DateTime start,
@@ -572,7 +567,7 @@ class HistoryDataService {
       start: start,
       end: end,
       moduleType: 'ElectricityMeter',
-      fields: ['Pt', 'ImpEp'],
+      fields: ['Pt'],
     );
   }
 
@@ -581,18 +576,18 @@ class HistoryDataService {
   // ============================================================
 
   /// 通用历史数据请求方法
-  /// 🔧 修复: 使用 ApiClient 统一管理 HTTP 请求
+  ///  修复: 使用 ApiClient 统一管理 HTTP 请求
   Future<HistoryDataResult> _fetchHistoryData(Uri uri, String deviceId) async {
     final client = ApiClient();
 
     try {
-      // 🔧 构建查询参数 Map
+      //  构建查询参数 Map
       final params = <String, String>{};
       uri.queryParameters.forEach((key, value) {
         params[key] = value;
       });
 
-      debugPrint('📊 请求历史数据: ${uri.path}');
+      debugPrint(' 请求历史数据: ${uri.path}');
       final json =
           await client.get(uri.path, params: params.isNotEmpty ? params : null);
 
@@ -619,14 +614,14 @@ class HistoryDataService {
         );
       }
     } on TimeoutException {
-      debugPrint('❌ 历史数据请求超时');
+      debugPrint(' 历史数据请求超时');
       return HistoryDataResult(
         success: false,
         deviceId: deviceId,
         error: '请求超时，请检查网络连接',
       );
     } catch (e) {
-      debugPrint('❌ 历史数据请求失败: $e');
+      debugPrint(' 历史数据请求失败: $e');
       return HistoryDataResult(
         success: false,
         deviceId: deviceId,
@@ -677,19 +672,21 @@ class TimeRange {
 
 class FeedingRecord {
   final DateTime time;
-  final double addedWeight;
+  final double amount;
   final String deviceId;
 
   FeedingRecord({
     required this.time,
-    required this.addedWeight,
+    required this.amount,
     required this.deviceId,
   });
 
+  /// 兼容新旧字段名: v5.0 返回 'amount', 旧版返回 'added_weight'
   factory FeedingRecord.fromJson(Map<String, dynamic> json) {
+    final value = json['amount'] ?? json['added_weight'] ?? 0;
     return FeedingRecord(
       time: DateTime.parse(json['time']).toLocal(),
-      addedWeight: (json['added_weight'] as num).toDouble(),
+      amount: (value as num).toDouble(),
       deviceId: json['device_id'] as String,
     );
   }
@@ -742,8 +739,8 @@ class HistoryDataPoint {
   /// 获取重量值
   double? get weight => _getDouble('weight');
 
-  /// 获取下料速度
-  double? get feedRate => _getDouble('feed_rate');
+  /// 获取下料速度 (feeding_cumulative measurement 的 display_feed_rate 字段)
+  double? get feedRate => _getDouble('display_feed_rate');
 
   /// 获取流量
   double? get flowRate => _getDouble('flow_rate');

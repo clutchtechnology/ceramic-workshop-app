@@ -45,30 +45,19 @@ class HopperData {
       timestamp: json['timestamp'],
       weighSensor: modules.containsKey('weight')
           ? WeighSensor.fromJson(modules['weight']['fields'] ?? {})
-          : (modules.containsKey('WeighSensor')
-              ? WeighSensor.fromJson(modules['WeighSensor'])
-              : null),
+          : null,
       temperatureSensor: modules.containsKey('temp')
           ? TemperatureSensor.fromJson(modules['temp']['fields'] ?? {})
-          : (modules.containsKey('TemperatureSensor')
-              ? TemperatureSensor.fromJson(modules['TemperatureSensor'])
-              : null),
-      // ✅ 长料仓温度1
+          : null,
       temperatureSensor1: modules.containsKey('temp1')
           ? TemperatureSensor.fromJson(modules['temp1']['fields'] ?? {})
           : null,
-      // ✅ 长料仓温度2
       temperatureSensor2: modules.containsKey('temp2')
           ? TemperatureSensor.fromJson(modules['temp2']['fields'] ?? {})
           : null,
-      // ✅ 修正：使用 'meter' 标签（与后端配置一致）
       electricityMeter: modules.containsKey('meter')
           ? ElectricityMeter.fromJson(modules['meter']['fields'] ?? {})
-          : (modules.containsKey('elec')
-              ? ElectricityMeter.fromJson(modules['elec']['fields'] ?? {})
-              : (modules.containsKey('ElectricityMeter')
-                  ? ElectricityMeter.fromJson(modules['ElectricityMeter'])
-                  : null)),
+          : null,
     );
   }
 
@@ -77,15 +66,15 @@ class HopperData {
         'device_id': deviceId,
         'timestamp': timestamp,
         'modules': {
-          if (weighSensor != null) 'WeighSensor': weighSensor!.toJson(),
+          if (weighSensor != null) 'weight': {'fields': weighSensor!.toJson()},
           if (temperatureSensor != null)
-            'TemperatureSensor': temperatureSensor!.toJson(),
+            'temp': {'fields': temperatureSensor!.toJson()},
           if (temperatureSensor1 != null)
             'temp1': {'fields': temperatureSensor1!.toJson()},
           if (temperatureSensor2 != null)
             'temp2': {'fields': temperatureSensor2!.toJson()},
           if (electricityMeter != null)
-            'ElectricityMeter': electricityMeter!.toJson(),
+            'meter': {'fields': electricityMeter!.toJson()},
         },
       };
 }

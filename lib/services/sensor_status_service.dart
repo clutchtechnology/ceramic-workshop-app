@@ -10,7 +10,7 @@ import '../api/index.dart';
 import '../api/api.dart';
 import '../models/sensor_status_model.dart';
 
-/// 🔧 [CRITICAL] 使用 ApiClient 单例，避免创建多个 HTTP Client 导致连接泄漏
+///  [CRITICAL] 使用 ApiClient 单例，避免创建多个 HTTP Client 导致连接泄漏
 class SensorStatusService {
   final ApiClient _client = ApiClient();
 

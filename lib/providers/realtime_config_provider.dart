@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/alarm_service.dart';
 
 /// 实时数据配置 Provider
 /// 用于持久化存储温度阈值、功率阈值等实时大屏的设置参数
@@ -120,7 +121,7 @@ class HopperCapacityConfig {
 
 /// 实时数据配置 Provider
 ///
-/// 🔧 性能优化:
+///  性能优化:
 /// - 使用 Map 缓存替代 List.firstWhere 线性查找 (O(n) → O(1))
 /// - 缓存在配置加载后构建，避免每次 build 重复查找
 class RealtimeConfigProvider extends ChangeNotifier {
@@ -129,7 +130,7 @@ class RealtimeConfigProvider extends ChangeNotifier {
   bool _isLoaded = false;
   bool get isLoaded => _isLoaded;
 
-  // 🔧 性能优化: 使用 Map 缓存加速查找 (O(1) 替代 O(n))
+  //  性能优化: 使用 Map 缓存加速查找 (O(1) 替代 O(n))
   final Map<String, ThresholdConfig> _rotaryKilnCache = {};
   final Map<String, ThresholdConfig> _rotaryKilnPowerCache = {}; // 新增: 回转窑功率缓存
   final Map<String, ThresholdConfig> _rollerKilnCache = {};
@@ -377,7 +378,7 @@ class RealtimeConfigProvider extends ChangeNotifier {
         _loadFromJson(jsonData);
       }
 
-      // 🔧 构建缓存 Map (加速后续查找)
+      //  构建缓存 Map (加速后续查找)
       _buildCaches();
 
       _isLoaded = true;
@@ -390,7 +391,7 @@ class RealtimeConfigProvider extends ChangeNotifier {
     }
   }
 
-  /// 🔧 构建缓存 Map (O(1) 查找替代 O(n) 遍历)
+  ///  构建缓存 Map (O(1) 查找替代 O(n) 遍历)
   void _buildCaches() {
     _rotaryKilnCache.clear();
     for (var config in rotaryKilnConfigs) {
@@ -587,6 +588,11 @@ class RealtimeConfigProvider extends ChangeNotifier {
       final jsonString = jsonEncode(_toJson());
       await prefs.setString(_storageKey, jsonString);
       notifyListeners();
+      // 同步报警阈值到后端
+      AlarmService().syncThresholds(this).catchError((e) {
+        debugPrint('[RealtimeConfig] 报警阈值同步失败: $e');
+        return false;
+      });
       return true;
     } catch (e) {
       debugPrint('保存实时数据配置失败: $e');
@@ -708,14 +714,14 @@ class RealtimeConfigProvider extends ChangeNotifier {
         hopperCapacityConfigs[i].maxCapacity = 800.0;
       }
     }
-    // 🔧 重建缓存确保一致性
+    //  重建缓存确保一致性
     _buildCaches();
     notifyListeners();
   }
 
   // ============================================================
   // 便捷获取颜色的方法
-  // 🔧 性能优化: 使用缓存 Map 替代 List.firstWhere (O(1) vs O(n))
+  //  性能优化: 使用缓存 Map 替代 List.firstWhere (O(1) vs O(n))
   // ============================================================
 
   /// 根据设备ID判断是否需要减100度显示
@@ -789,7 +795,7 @@ class RealtimeConfigProvider extends ChangeNotifier {
 
   // ============================================================
   // 获取阈值配置的方法
-  // 🔧 性能优化: 使用缓存 Map
+  //  性能优化: 使用缓存 Map
   // ============================================================
 
   /// 获取回转窑阈值配置
@@ -866,7 +872,7 @@ class RealtimeConfigProvider extends ChangeNotifier {
 
   // ============================================================
   // 料仓容量相关方法
-  // 🔧 性能优化: 使用缓存 Map 替代 List.firstWhere (O(1) vs O(n))
+  //  性能优化: 使用缓存 Map 替代 List.firstWhere (O(1) vs O(n))
   // ============================================================
 
   /// 根据设备ID获取料仓容量百分比

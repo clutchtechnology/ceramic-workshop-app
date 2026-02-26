@@ -52,6 +52,7 @@ dependencies:
 
   # HTTP Client
   http: ^1.2.0
+  web_socket_channel: ^2.4.0
 
   # Utilities
   intl: ^0.20.2
@@ -76,6 +77,9 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^3.0.0
+  
+  # Icon generator
+  flutter_launcher_icons: ^0.13.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -117,3 +121,12 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages
+
+# Flutter Launcher Icons 配置
+flutter_launcher_icons:
+  windows:
+    generate: true
+    image_path: "assets/images/logo.png"  # 使用 PNG 格式
+    icon_size: 48  # Windows 图标大小
+  # 如果需要添加背景色（推荐）
+  # background_color: "#0A0E27"  # 深色背景，与应用主题一致

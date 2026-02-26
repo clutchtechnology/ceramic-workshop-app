@@ -9,7 +9,7 @@ import '../utils/app_logger.dart';
 /// 实时数据缓存服务
 /// 用于持久化存储最后一次成功获取的实时数据，App 重启后可恢复显示
 ///
-/// 🔧 性能优化:
+///  性能优化:
 /// - 节流机制: 最小30秒写入间隔，避免频繁I/O
 /// - 防并发: 使用标志位防止并发写入冲突
 class RealtimeDataCacheService {
@@ -21,7 +21,7 @@ class RealtimeDataCacheService {
   static const String _cacheFileName = 'realtime_data_cache.json';
   File? _cacheFile;
 
-  // 🔧 节流控制: 最小写入间隔30秒
+  //  节流控制: 最小写入间隔30秒
   DateTime? _lastSaveTime;
   static const Duration _minSaveInterval = Duration(seconds: 30);
   bool _isSaving = false; // 防止并发写入
@@ -44,20 +44,20 @@ class RealtimeDataCacheService {
   }
 
   /// 保存缓存数据
-  /// 🔧 节流优化: 最小30秒间隔，防止频繁I/O导致卡顿
+  ///  节流优化: 最小30秒间隔，防止频繁I/O导致卡顿
   Future<void> saveCache({
     required Map<String, HopperData> hopperData,
     RollerKilnData? rollerKilnData,
     ScrFanBatchData? scrFanData,
   }) async {
-    // 🔧 节流检查: 距上次保存不足30秒则跳过
+    //  节流检查: 距上次保存不足30秒则跳过
     final now = DateTime.now();
     if (_lastSaveTime != null &&
         now.difference(_lastSaveTime!) < _minSaveInterval) {
       return; // 静默跳过，不记录日志
     }
 
-    // 🔧 防并发: 正在保存则跳过
+    //  防并发: 正在保存则跳过
     if (_isSaving) return;
 
     try {

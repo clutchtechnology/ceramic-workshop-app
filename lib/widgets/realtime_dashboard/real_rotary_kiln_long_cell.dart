@@ -8,7 +8,7 @@ import '../icons/icons.dart';
 /// 长回转窑单元组件
 /// 用于显示单个长回转窑设备
 ///
-/// 🔧 性能优化:
+///  性能优化:
 /// - 使用 context.read 替代 context.watch（父组件已 watch，此处只需读取）
 class RotaryKilnLongCell extends StatelessWidget {
   /// 窑编号
@@ -32,15 +32,15 @@ class RotaryKilnLongCell extends StatelessWidget {
     final feedRate = data?.weighSensor?.feedRate ?? 0.0;
     final power = data?.electricityMeter?.pt ?? 0.0;
     final energy = data?.electricityMeter?.impEp ?? 0.0;
-    // ✅ 长料仓显示两个温度
+    //  长料仓显示两个温度
     final temperature1 = data?.temperatureSensor1?.temperature ?? 0.0;
     final temperature2 = data?.temperatureSensor2?.temperature ?? 0.0;
-    // ✅ 三相电流
+    //  三相电流
     final currentA = data?.electricityMeter?.currentA ?? 0.0;
     final currentB = data?.electricityMeter?.currentB ?? 0.0;
     final currentC = data?.electricityMeter?.currentC ?? 0.0;
 
-    // 🔧 优化: 使用 context.read 而非 context.watch
+    //  优化: 使用 context.read 而非 context.watch
     final configProvider = context.read<RealtimeConfigProvider>();
 
     // 2, 根据温度阈值配置获取显示颜色 (长窑有两个温度点)

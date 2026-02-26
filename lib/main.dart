@@ -124,7 +124,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     logger.lifecycle('开始清理资源...');
 
-    // 1. 🔧 [CRITICAL] 关闭所有 Timer（最优先）
+    // 1.  [CRITICAL] 关闭所有 Timer（最优先）
     TimerManager().shutdown();
 
     // 2. 关闭 HTTP Client
@@ -154,7 +154,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         logger.lifecycle('应用进入后台 (paused)');
         break;
       case AppLifecycleState.detached:
-        // 🔧 [CRITICAL] Windows 关闭时 dispose 可能不执行，这里是最后机会
+        //  [CRITICAL] Windows 关闭时 dispose 可能不执行，这里是最后机会
         logger.lifecycle('应用即将退出 (detached)');
         _cleanupResources();
         break;

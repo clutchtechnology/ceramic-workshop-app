@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'data_tech_line_widgets.dart';
 
 /// 简约时间范围选择器组件
@@ -105,7 +105,7 @@ class TimeRangeSelector extends StatelessWidget {
   }
 
   /// 格式化时间显示（超紧凑格式：HH:mm）
-  /// 🔧 [修复] 用户希望始终显示日期，因此统一使用 MM-dd HH:mm 格式
+  ///  [FIX] 用户希望始终显示日期，因此统一使用 MM-dd HH:mm 格式
   String _formatDateTimeCompact(DateTime dateTime) {
     // 即使是 compact 模式，现在也返回带日期的格式，因为用户觉得只有时间不够明确
     return '${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';

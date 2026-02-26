@@ -1,6 +1,6 @@
 # 数据导出功能实现总结
 
-## ✅ 已完成的功能
+##  已完成的功能
 
 ### 1. 后端API实现
 
@@ -33,10 +33,10 @@
 #### 数据导出弹窗
 - **文件**: `lib/widgets/data_display/data_export_dialog.dart`
 - **功能**:
-  - ✅ 时间范围选择（快速选择 + 自定义）
-  - ✅ 导出类型选择（下拉框）
-  - ✅ 符合项目UI风格（科技风）
-  - ✅ 与后端API对接
+  -  时间范围选择（快速选择 + 自定义）
+  -  导出类型选择（下拉框）
+  -  符合项目UI风格（科技风）
+  -  与后端API对接
 
 #### 数据导出服务
 - **文件**: `lib/services/data_export_service.dart`
@@ -53,7 +53,7 @@
   - 添加"数据导出"按钮（青色，与旧版"导出报表"橙色区分）
   - 添加 `_showDataExportDialog()` 方法
 
-## 📊 导出功能详情
+##  导出功能详情
 
 ### 1. 设备运行时长
 **导出内容**:
@@ -113,29 +113,29 @@
 ## 🎨 UI设计特点
 
 ### 符合项目风格
-- ✅ 深色背景 (`TechColors.bgDeep`, `TechColors.bgDark`)
-- ✅ 发光边框 (`GlowBorderContainer`)
-- ✅ 青色强调色 (`TechColors.glowCyan`)
-- ✅ 科技风字体 (`Roboto Mono`)
-- ✅ 圆角边框 (`BorderRadius.circular(4)`)
-- ✅ 边框线条 (`Border.all(color: TechColors.borderDark)`)
+-  深色背景 (`TechColors.bgDeep`, `TechColors.bgDark`)
+-  发光边框 (`GlowBorderContainer`)
+-  青色强调色 (`TechColors.glowCyan`)
+-  科技风字体 (`Roboto Mono`)
+-  圆角边框 (`BorderRadius.circular(4)`)
+-  边框线条 (`Border.all(color: TechColors.borderDark)`)
 
 ### 时间选择
-- ✅ 快速选择按钮（1天、3天、5天、7天、30天）
-- ✅ 自定义时间选择（日期 + 时间）
-- ✅ 选中状态高亮显示
+-  快速选择按钮（1天、3天、5天、7天、30天）
+-  自定义时间选择（日期 + 时间）
+-  选中状态高亮显示
 
 ### 导出类型
-- ✅ 下拉框选择
-- ✅ 类型说明文字
-- ✅ 4种导出类型
+-  下拉框选择
+-  类型说明文字
+-  4种导出类型
 
 ### 操作按钮
-- ✅ 取消按钮（灰色）
-- ✅ 导出按钮（青色发光）
-- ✅ 加载状态显示
+-  取消按钮（灰色）
+-  导出按钮（青色发光）
+-  加载状态显示
 
-## 🚀 使用方法
+##  使用方法
 
 ### 前端使用
 1. 打开历史数据页面
@@ -161,7 +161,7 @@ python scripts/test_export_api.py
 http://localhost:8080/docs
 ```
 
-## 📝 API示例
+##  API示例
 
 ### 1. 获取所有设备运行时长
 ```bash
@@ -183,7 +183,7 @@ curl "http://localhost:8080/api/export/feeding-amount?days=7"
 curl "http://localhost:8080/api/export/electricity/all?days=7"
 ```
 
-## 🎯 核心特性
+##  核心特性
 
 ### 1. 灵活的时间查询
 - 支持快速选择（1/3/5/7/30天）
@@ -253,11 +253,11 @@ ceramic-workshop-app/
 
 ## 🎉 完成状态
 
-- ✅ 后端API实现完成
-- ✅ 前端UI实现完成
-- ✅ 服务层对接完成
-- ✅ 测试脚本完成
-- ✅ 文档编写完成
+-  后端API实现完成
+-  前端UI实现完成
+-  服务层对接完成
+-  测试脚本完成
+-  文档编写完成
 
 所有功能已经完整实现，可以直接使用！
 

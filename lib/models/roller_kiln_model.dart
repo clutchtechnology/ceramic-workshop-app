@@ -61,12 +61,12 @@ class RollerKilnZone {
       zoneId: json['zone_id'] ?? '',
       zoneName: json['zone_name'] ?? '',
       temperature: (json['temperature'] as num?)?.toDouble() ?? 0.0,
-      power: (json['power'] as num?)?.toDouble() ?? 0.0,
-      energy: (json['energy'] as num?)?.toDouble() ?? 0.0,
-      voltage: (json['voltage'] as num?)?.toDouble() ?? 0.0,
-      currentA: (json['current_a'] as num?)?.toDouble() ?? 0.0,
-      currentB: (json['current_b'] as num?)?.toDouble() ?? 0.0,
-      currentC: (json['current_c'] as num?)?.toDouble() ?? 0.0,
+      power: (json['Pt'] as num?)?.toDouble() ?? 0.0,
+      energy: (json['ImpEp'] as num?)?.toDouble() ?? 0.0,
+      voltage: (json['Ua_0'] as num?)?.toDouble() ?? 0.0,
+      currentA: (json['I_0'] as num?)?.toDouble() ?? 0.0,
+      currentB: (json['I_1'] as num?)?.toDouble() ?? 0.0,
+      currentC: (json['I_2'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -74,12 +74,12 @@ class RollerKilnZone {
         'zone_id': zoneId,
         'zone_name': zoneName,
         'temperature': temperature,
-        'power': power,
-        'energy': energy,
-        'voltage': voltage,
-        'current_a': currentA,
-        'current_b': currentB,
-        'current_c': currentC,
+        'Pt': power,
+        'ImpEp': energy,
+        'Ua_0': voltage,
+        'I_0': currentA,
+        'I_1': currentB,
+        'I_2': currentC,
       };
 }
 
@@ -103,21 +103,21 @@ class RollerKilnTotal {
 
   factory RollerKilnTotal.fromJson(Map<String, dynamic> json) {
     return RollerKilnTotal(
-      power: (json['power'] as num?)?.toDouble() ?? 0.0,
-      energy: (json['energy'] as num?)?.toDouble() ?? 0.0,
-      voltage: (json['voltage'] as num?)?.toDouble() ?? 0.0,
-      currentA: (json['current_a'] as num?)?.toDouble() ?? 0.0,
-      currentB: (json['current_b'] as num?)?.toDouble() ?? 0.0,
-      currentC: (json['current_c'] as num?)?.toDouble() ?? 0.0,
+      power: (json['Pt'] as num?)?.toDouble() ?? 0.0,
+      energy: (json['ImpEp'] as num?)?.toDouble() ?? 0.0,
+      voltage: (json['Ua_0'] as num?)?.toDouble() ?? 0.0,
+      currentA: (json['I_0'] as num?)?.toDouble() ?? 0.0,
+      currentB: (json['I_1'] as num?)?.toDouble() ?? 0.0,
+      currentC: (json['I_2'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'power': power,
-        'energy': energy,
-        'voltage': voltage,
-        'current_a': currentA,
-        'current_b': currentB,
-        'current_c': currentC,
+        'Pt': power,
+        'ImpEp': energy,
+        'Ua_0': voltage,
+        'I_0': currentA,
+        'I_1': currentB,
+        'I_2': currentC,
       };
 }
