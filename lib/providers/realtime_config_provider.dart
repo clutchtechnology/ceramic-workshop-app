@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/alarm_service.dart';
+import '../utils/app_logger.dart';
 
 /// 实时数据配置 Provider
 /// 用于持久化存储温度阈值、功率阈值等实时大屏的设置参数
@@ -24,8 +25,8 @@ class ThresholdColors {
 class ThresholdConfig {
   final String key; // 设备键值
   final String displayName; // 显示名称
-  double normalMax; // 正常上限
-  double warningMax; // 警告上限（超过此值为报警）
+  double normalMax; // 警告上限（绿->黄切换点，同时作为运行状态判断阈值）
+  double warningMax; // 报警上限（超过此值为报警）
   bool subtractTemp100; // 是否在温度>300时减去100度显示
 
   ThresholdConfig({
@@ -147,101 +148,101 @@ class RealtimeConfigProvider extends ChangeNotifier {
     ThresholdConfig(
         key: 'short_hopper_1_temp',
         displayName: '7号回转窑 (短料仓)',
-        normalMax: 800.0,
-        warningMax: 1000.0),
+        normalMax: 1000.0,
+        warningMax: 1400.0),
     ThresholdConfig(
         key: 'short_hopper_2_temp',
         displayName: '6号回转窑 (短料仓)',
-        normalMax: 800.0,
-        warningMax: 1000.0),
+        normalMax: 1000.0,
+        warningMax: 1400.0),
     ThresholdConfig(
         key: 'short_hopper_3_temp',
         displayName: '5号回转窑 (短料仓)',
-        normalMax: 800.0,
-        warningMax: 1000.0),
+        normalMax: 1000.0,
+        warningMax: 1400.0),
     ThresholdConfig(
         key: 'short_hopper_4_temp',
         displayName: '4号回转窑 (短料仓)',
-        normalMax: 800.0,
-        warningMax: 1000.0),
+        normalMax: 1000.0,
+        warningMax: 1400.0),
     ThresholdConfig(
         key: 'no_hopper_1_temp',
         displayName: '2号回转窑 (无料仓)',
-        normalMax: 800.0,
-        warningMax: 1000.0),
+        normalMax: 1000.0,
+        warningMax: 1400.0),
     ThresholdConfig(
         key: 'no_hopper_2_temp',
         displayName: '1号回转窑 (无料仓)',
-        normalMax: 800.0,
-        warningMax: 1000.0),
+        normalMax: 1000.0,
+        warningMax: 1400.0),
     ThresholdConfig(
         key: 'long_hopper_1_temp',
         displayName: '8号回转窑 (长料仓)',
-        normalMax: 800.0,
-        warningMax: 1000.0),
+        normalMax: 1000.0,
+        warningMax: 1400.0),
     ThresholdConfig(
         key: 'long_hopper_2_temp',
         displayName: '3号回转窑 (长料仓)',
-        normalMax: 800.0,
-        warningMax: 1000.0),
+        normalMax: 1000.0,
+        warningMax: 1400.0),
     ThresholdConfig(
         key: 'long_hopper_3_temp',
         displayName: '9号回转窑 (长料仓)',
-        normalMax: 800.0,
-        warningMax: 1000.0),
+        normalMax: 1000.0,
+        warningMax: 1400.0),
   ];
 
   // ============================================================
   // 回转窑功率配置 (9个设备) - 用于判断运行状态
   // 键值格式: {device_id}_power
-  // 默认正常上限 0.1 (作为启动阈值), 警告上限 100.0
+  // 默认正常上限 10.0 (作为启动阈值), 警告上限 50.0
   // ============================================================
   final List<ThresholdConfig> rotaryKilnPowerConfigs = [
     ThresholdConfig(
         key: 'short_hopper_1_power',
         displayName: '7号回转窑功率',
-        normalMax: 0.1,
-        warningMax: 100.0),
+        normalMax: 10.0,
+        warningMax: 50.0),
     ThresholdConfig(
         key: 'short_hopper_2_power',
         displayName: '6号回转窑功率',
-        normalMax: 0.1,
-        warningMax: 100.0),
+        normalMax: 10.0,
+        warningMax: 50.0),
     ThresholdConfig(
         key: 'short_hopper_3_power',
         displayName: '5号回转窑功率',
-        normalMax: 0.1,
-        warningMax: 100.0),
+        normalMax: 10.0,
+        warningMax: 50.0),
     ThresholdConfig(
         key: 'short_hopper_4_power',
         displayName: '4号回转窑功率',
-        normalMax: 0.1,
-        warningMax: 100.0),
+        normalMax: 10.0,
+        warningMax: 50.0),
     ThresholdConfig(
         key: 'no_hopper_1_power',
         displayName: '2号回转窑功率',
-        normalMax: 0.1,
-        warningMax: 100.0),
+        normalMax: 10.0,
+        warningMax: 50.0),
     ThresholdConfig(
         key: 'no_hopper_2_power',
         displayName: '1号回转窑功率',
-        normalMax: 0.1,
-        warningMax: 100.0),
+        normalMax: 10.0,
+        warningMax: 50.0),
     ThresholdConfig(
         key: 'long_hopper_1_power',
         displayName: '8号回转窑功率',
-        normalMax: 0.1,
-        warningMax: 100.0),
+        normalMax: 10.0,
+        warningMax: 50.0),
     ThresholdConfig(
         key: 'long_hopper_2_power',
         displayName: '3号回转窑功率',
-        normalMax: 0.1,
-        warningMax: 100.0),
+        normalMax: 10.0,
+        warningMax: 50.0),
     ThresholdConfig(
         key: 'long_hopper_3_power',
         displayName: '9号回转窑功率',
-        normalMax: 0.1,
-        warningMax: 100.0),
+        normalMax: 10.0,
+        warningMax: 50.0),
   ];
 
   // ============================================================
@@ -252,33 +253,33 @@ class RealtimeConfigProvider extends ChangeNotifier {
     ThresholdConfig(
         key: 'zone1_temp',
         displayName: '1号区温度',
-        normalMax: 1200.0,
-        warningMax: 1400.0),
+        normalMax: 800.0,
+        warningMax: 1000.0),
     ThresholdConfig(
         key: 'zone2_temp',
         displayName: '2号区温度',
-        normalMax: 1200.0,
-        warningMax: 1400.0),
+        normalMax: 800.0,
+        warningMax: 1000.0),
     ThresholdConfig(
         key: 'zone3_temp',
         displayName: '3号区温度',
-        normalMax: 1200.0,
-        warningMax: 1400.0),
+        normalMax: 800.0,
+        warningMax: 1000.0),
     ThresholdConfig(
         key: 'zone4_temp',
         displayName: '4号区温度',
-        normalMax: 1200.0,
-        warningMax: 1400.0),
+        normalMax: 800.0,
+        warningMax: 1000.0),
     ThresholdConfig(
         key: 'zone5_temp',
         displayName: '5号区温度',
-        normalMax: 1200.0,
-        warningMax: 1400.0),
+        normalMax: 800.0,
+        warningMax: 1000.0),
     ThresholdConfig(
         key: 'zone6_temp',
         displayName: '6号区温度',
-        normalMax: 1200.0,
-        warningMax: 1400.0),
+        normalMax: 800.0,
+        warningMax: 1000.0),
   ];
 
   // ============================================================
@@ -289,13 +290,13 @@ class RealtimeConfigProvider extends ChangeNotifier {
     ThresholdConfig(
         key: 'fan_1_power',
         displayName: '1号风机功率',
-        normalMax: 0.3,
-        warningMax: 120.0),
+        normalMax: 0.6,
+        warningMax: 1.0),
     ThresholdConfig(
         key: 'fan_2_power',
         displayName: '2号风机功率',
-        normalMax: 0.3,
-        warningMax: 120.0),
+        normalMax: 0.6,
+        warningMax: 1.0),
   ];
 
   // ============================================================
@@ -306,13 +307,13 @@ class RealtimeConfigProvider extends ChangeNotifier {
     ThresholdConfig(
         key: 'scr_1_meter',
         displayName: '1号SCR氨水泵功率',
-        normalMax: 0.1,
-        warningMax: 100.0),
+        normalMax: 0.05,
+        warningMax: 0.1),
     ThresholdConfig(
         key: 'scr_2_meter',
         displayName: '2号SCR氨水泵功率',
-        normalMax: 0.1,
-        warningMax: 100.0),
+        normalMax: 0.05,
+        warningMax: 0.1),
   ];
 
   // ============================================================
@@ -323,13 +324,13 @@ class RealtimeConfigProvider extends ChangeNotifier {
     ThresholdConfig(
         key: 'scr_1_gas_meter',
         displayName: '1号SCR燃气表流量',
-        normalMax: 100.0,
-        warningMax: 150.0),
+        normalMax: 330.0,
+        warningMax: 400.0),
     ThresholdConfig(
         key: 'scr_2_gas_meter',
         displayName: '2号SCR燃气表流量',
-        normalMax: 100.0,
-        warningMax: 150.0),
+        normalMax: 330.0,
+        warningMax: 400.0),
   ];
 
   // ============================================================
@@ -340,36 +341,37 @@ class RealtimeConfigProvider extends ChangeNotifier {
     HopperCapacityConfig(
         key: 'short_hopper_1_capacity',
         displayName: '7号窑料仓 (短)',
-        maxCapacity: 500.0),
+        maxCapacity: 800.0),
     HopperCapacityConfig(
         key: 'short_hopper_2_capacity',
         displayName: '6号窑料仓 (短)',
-        maxCapacity: 500.0),
+        maxCapacity: 800.0),
     HopperCapacityConfig(
         key: 'short_hopper_3_capacity',
         displayName: '5号窑料仓 (短)',
-        maxCapacity: 500.0),
+        maxCapacity: 800.0),
     HopperCapacityConfig(
         key: 'short_hopper_4_capacity',
         displayName: '4号窑料仓 (短)',
-        maxCapacity: 500.0),
+        maxCapacity: 800.0),
     HopperCapacityConfig(
         key: 'long_hopper_1_capacity',
         displayName: '8号窑料仓 (长)',
-        maxCapacity: 800.0),
+        maxCapacity: 1000.0),
     HopperCapacityConfig(
         key: 'long_hopper_2_capacity',
         displayName: '3号窑料仓 (长)',
-        maxCapacity: 800.0),
+        maxCapacity: 1000.0),
     HopperCapacityConfig(
         key: 'long_hopper_3_capacity',
         displayName: '9号窑料仓 (长)',
-        maxCapacity: 800.0),
+        maxCapacity: 1000.0),
   ];
 
   /// 初始化加载配置
   Future<void> loadConfig() async {
     try {
+      // 1. 优先从本地 SharedPreferences 加载（快速启动）
       final prefs = await SharedPreferences.getInstance();
       final jsonString = prefs.getString(_storageKey);
 
@@ -378,14 +380,15 @@ class RealtimeConfigProvider extends ChangeNotifier {
         _loadFromJson(jsonData);
       }
 
-      //  构建缓存 Map (加速后续查找)
       _buildCaches();
-
       _isLoaded = true;
       notifyListeners();
+
+      // 2. 再从后端拉取最新阈值（后端为权威来源），失败时静默保留本地配置
+      await AlarmService().fetchThresholds(this);
     } catch (e) {
-      debugPrint('加载实时数据配置失败: $e');
-      _buildCaches(); // 即使加载失败也要构建默认缓存
+      logger.error('[RealtimeConfig] 加载配置失败', e);
+      _buildCaches();
       _isLoaded = true;
       notifyListeners();
     }
@@ -590,12 +593,12 @@ class RealtimeConfigProvider extends ChangeNotifier {
       notifyListeners();
       // 同步报警阈值到后端
       AlarmService().syncThresholds(this).catchError((e) {
-        debugPrint('[RealtimeConfig] 报警阈值同步失败: $e');
+        logger.warning('[RealtimeConfig] 报警阈值同步失败: $e');
         return false;
       });
       return true;
     } catch (e) {
-      debugPrint('保存实时数据配置失败: $e');
+      logger.error('保存实时数据配置失败', e);
       return false;
     }
   }
@@ -677,44 +680,121 @@ class RealtimeConfigProvider extends ChangeNotifier {
   void resetToDefault() {
     // 重置回转窑
     for (var config in rotaryKilnConfigs) {
-      config.normalMax = 800.0;
-      config.warningMax = 1000.0;
+      config.normalMax = 1000.0;
+      config.warningMax = 1400.0;
       config.subtractTemp100 = false;
     }
     // 重置回转窑功率
     for (var config in rotaryKilnPowerConfigs) {
-      config.normalMax = 0.1;
-      config.warningMax = 100.0;
+      config.normalMax = 10.0;
+      config.warningMax = 50.0;
     }
     // 重置辊道窑
     for (var config in rollerKilnConfigs) {
-      config.normalMax = 1200.0;
-      config.warningMax = 1400.0;
+      config.normalMax = 800.0;
+      config.warningMax = 1000.0;
     }
     // 重置风机
     for (var config in fanConfigs) {
-      config.normalMax = 0.3;
-      config.warningMax = 120.0;
+      config.normalMax = 0.6;
+      config.warningMax = 1.0;
     }
     // 重置SCR氨水泵
     for (var config in scrPumpConfigs) {
-      config.normalMax = 0.1;
-      config.warningMax = 100.0;
+      config.normalMax = 0.05;
+      config.warningMax = 0.1;
     }
     // 重置SCR燃气表
     for (var config in scrGasConfigs) {
-      config.normalMax = 100.0;
-      config.warningMax = 150.0;
+      config.normalMax = 330.0;
+      config.warningMax = 400.0;
     }
-    // 重置料仓容量 (短料仓500kg, 长料仓800kg)
+    // 重置料仓容量 (短料仓800kg, 长料仓1000kg)
     for (int i = 0; i < hopperCapacityConfigs.length; i++) {
       if (hopperCapacityConfigs[i].key.contains('short')) {
-        hopperCapacityConfigs[i].maxCapacity = 500.0;
-      } else {
         hopperCapacityConfigs[i].maxCapacity = 800.0;
+      } else {
+        hopperCapacityConfigs[i].maxCapacity = 1000.0;
       }
     }
-    //  重建缓存确保一致性
+    // 重建缓存确保一致性
+    _buildCaches();
+    notifyListeners();
+  }
+
+  /// 应用后端返回的阈值配置（后端为权威来源）
+  /// [backendData] 格式: {"rotary_temp_short_hopper_1": {"warning_max": 1000.0, "alarm_max": 1400.0, "enabled": true}, ...}
+  /// 映射规则: backend.warning_max -> normalMax (绿->黄切换点), backend.alarm_max -> warningMax (黄->红切换点)
+  void applyBackendThresholds(Map<String, dynamic> backendData) {
+    // 回转窑温度 x9
+    for (final cfg in rotaryKilnConfigs) {
+      final deviceId = cfg.key.replaceAll('_temp', '');
+      final entry =
+          backendData['rotary_temp_$deviceId'] as Map<String, dynamic>?;
+      if (entry != null) {
+        cfg.normalMax =
+            (entry['warning_max'] as num?)?.toDouble() ?? cfg.normalMax;
+        cfg.warningMax =
+            (entry['alarm_max'] as num?)?.toDouble() ?? cfg.warningMax;
+      }
+    }
+    // 回转窑功率 x9
+    for (final cfg in rotaryKilnPowerConfigs) {
+      final deviceId = cfg.key.replaceAll('_power', '');
+      final entry =
+          backendData['rotary_power_$deviceId'] as Map<String, dynamic>?;
+      if (entry != null) {
+        cfg.normalMax =
+            (entry['warning_max'] as num?)?.toDouble() ?? cfg.normalMax;
+        cfg.warningMax =
+            (entry['alarm_max'] as num?)?.toDouble() ?? cfg.warningMax;
+      }
+    }
+    // 辊道窑温度 x6
+    for (final cfg in rollerKilnConfigs) {
+      final zoneTag = cfg.key.replaceAll('_temp', '');
+      final entry =
+          backendData['roller_temp_$zoneTag'] as Map<String, dynamic>?;
+      if (entry != null) {
+        cfg.normalMax =
+            (entry['warning_max'] as num?)?.toDouble() ?? cfg.normalMax;
+        cfg.warningMax =
+            (entry['alarm_max'] as num?)?.toDouble() ?? cfg.warningMax;
+      }
+    }
+    // 风机功率 x2
+    for (final cfg in fanConfigs) {
+      final idx = cfg.key.split('_')[1];
+      final entry = backendData['fan_power_$idx'] as Map<String, dynamic>?;
+      if (entry != null) {
+        cfg.normalMax =
+            (entry['warning_max'] as num?)?.toDouble() ?? cfg.normalMax;
+        cfg.warningMax =
+            (entry['alarm_max'] as num?)?.toDouble() ?? cfg.warningMax;
+      }
+    }
+    // SCR 氨水泵功率 x2
+    for (final cfg in scrPumpConfigs) {
+      final idx = cfg.key.split('_')[1];
+      final entry = backendData['scr_power_$idx'] as Map<String, dynamic>?;
+      if (entry != null) {
+        cfg.normalMax =
+            (entry['warning_max'] as num?)?.toDouble() ?? cfg.normalMax;
+        cfg.warningMax =
+            (entry['alarm_max'] as num?)?.toDouble() ?? cfg.warningMax;
+      }
+    }
+    // SCR 燃气表流量 x2
+    for (final cfg in scrGasConfigs) {
+      final idx = cfg.key.split('_')[1];
+      final entry = backendData['scr_gas_$idx'] as Map<String, dynamic>?;
+      if (entry != null) {
+        cfg.normalMax =
+            (entry['warning_max'] as num?)?.toDouble() ?? cfg.normalMax;
+        cfg.warningMax =
+            (entry['alarm_max'] as num?)?.toDouble() ?? cfg.warningMax;
+      }
+    }
     _buildCaches();
     notifyListeners();
   }
@@ -734,17 +814,17 @@ class RealtimeConfigProvider extends ChangeNotifier {
 
   // 默认配置（缓存未命中时使用）
   static final _defaultRotaryKilnConfig = ThresholdConfig(
-      key: '', displayName: '', normalMax: 800.0, warningMax: 1000.0);
+      key: '', displayName: '', normalMax: 1000.0, warningMax: 1400.0);
   static final _defaultRotaryKilnPowerConfig = ThresholdConfig(
-      key: '', displayName: '', normalMax: 0.1, warningMax: 100.0);
+      key: '', displayName: '', normalMax: 10.0, warningMax: 50.0);
   static final _defaultRollerKilnConfig = ThresholdConfig(
-      key: '', displayName: '', normalMax: 1200.0, warningMax: 1400.0);
+      key: '', displayName: '', normalMax: 800.0, warningMax: 1000.0);
   static final _defaultFanConfig = ThresholdConfig(
-      key: '', displayName: '', normalMax: 80.0, warningMax: 120.0);
+      key: '', displayName: '', normalMax: 0.6, warningMax: 1.0);
   static final _defaultScrPumpConfig = ThresholdConfig(
-      key: '', displayName: '', normalMax: 30.0, warningMax: 50.0);
+      key: '', displayName: '', normalMax: 0.05, warningMax: 0.1);
   static final _defaultScrGasConfig = ThresholdConfig(
-      key: '', displayName: '', normalMax: 100.0, warningMax: 150.0);
+      key: '', displayName: '', normalMax: 330.0, warningMax: 400.0);
   static final _defaultHopperCapacityConfig =
       HopperCapacityConfig(key: '', displayName: '', maxCapacity: 1000.0);
 

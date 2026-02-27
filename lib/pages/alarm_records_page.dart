@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:intl/intl.dart';
 import '../models/alarm_model.dart';
 import '../services/alarm_service.dart';
 import '../widgets/data_display/data_tech_line_widgets.dart';
+import '../utils/app_logger.dart';
 
 // ============================================================
 // 报警记录页面 - 六宫格布局
@@ -153,8 +155,7 @@ class AlarmRecordsPageState extends State<AlarmRecordsPage> {
     );
     if (picked != null && mounted) {
       setState(() {
-        _endTime =
-            DateTime(picked.year, picked.month, picked.day, 23, 59, 59);
+        _endTime = DateTime(picked.year, picked.month, picked.day, 23, 59, 59);
       });
     }
   }
@@ -210,7 +211,7 @@ class AlarmRecordsPageState extends State<AlarmRecordsPage> {
       if (mounted) {
         setState(() => _gridLoading[index] = false);
       }
-      debugPrint('[AlarmRecordsPage] grid $index query error: $e');
+      logger.error('[AlarmRecordsPage] grid $index query error', e);
     }
   }
 
@@ -349,8 +350,8 @@ class AlarmRecordsPageState extends State<AlarmRecordsPage> {
             const SizedBox(width: 6),
             Text(
               '$label: $value',
-              style: const TextStyle(
-                  color: TechColors.textPrimary, fontSize: 13),
+              style:
+                  const TextStyle(color: TechColors.textPrimary, fontSize: 13),
             ),
           ],
         ),
@@ -508,8 +509,8 @@ class AlarmRecordsPageState extends State<AlarmRecordsPage> {
   // 宫格内表格
   // ============================================================
 
-  Widget _buildGridTable(
-      int index, List<AlarmRecord> records, bool isLoading, _GridConfig config) {
+  Widget _buildGridTable(int index, List<AlarmRecord> records, bool isLoading,
+      _GridConfig config) {
     // 多设备 + 选择"全部"时才显示设备列
     final showDeviceCol =
         config.devices.length > 2 && _selectedDeviceKeys[index] == '全部';
@@ -539,12 +540,20 @@ class AlarmRecordsPageState extends State<AlarmRecordsPage> {
                         ),
                       ),
                     )
-                  : ListView.builder(
-                      itemCount: records.length,
-                      padding: EdgeInsets.zero,
-                      itemBuilder: (context, i) {
-                        return _buildRecordRow(records[i], i, showDeviceCol);
-                      },
+                  : ScrollConfiguration(
+                      behavior: ScrollConfiguration.of(context).copyWith(
+                        dragDevices: {
+                          PointerDeviceKind.touch,
+                          PointerDeviceKind.mouse,
+                        },
+                      ),
+                      child: ListView.builder(
+                        itemCount: records.length,
+                        padding: EdgeInsets.zero,
+                        itemBuilder: (context, i) {
+                          return _buildRecordRow(records[i], i, showDeviceCol);
+                        },
+                      ),
                     ),
         ),
       ],
@@ -554,7 +563,7 @@ class AlarmRecordsPageState extends State<AlarmRecordsPage> {
   Widget _buildTableHeaderRow(bool showDeviceCol) {
     const style = TextStyle(
       color: TechColors.textSecondary,
-      fontSize: 11,
+      fontSize: 21, // 字号加大10px (原11px)
       fontWeight: FontWeight.w500,
     );
     return Container(
@@ -589,14 +598,14 @@ class AlarmRecordsPageState extends State<AlarmRecordsPage> {
 
     const rowTextStyle = TextStyle(
       color: TechColors.textPrimary,
-      fontSize: 11,
+      fontSize: 21, // 字号加大10px (原11px)
       fontFamily: 'Roboto Mono',
     );
 
     return Container(
-      color:
-          isEven ? Colors.transparent : TechColors.bgMedium.withOpacity(0.2),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      color: isEven ? Colors.transparent : TechColors.bgMedium.withOpacity(0.2),
+      padding: const EdgeInsets.symmetric(
+          horizontal: 8, vertical: 9), // 行高增加10px (原4px)
       child: Row(
         children: [
           Expanded(
@@ -605,7 +614,7 @@ class AlarmRecordsPageState extends State<AlarmRecordsPage> {
               timeStr,
               style: const TextStyle(
                 color: TechColors.textSecondary,
-                fontSize: 11,
+                fontSize: 21, // 字号加大10px (原11px)
                 fontFamily: 'Roboto Mono',
               ),
             ),
@@ -621,7 +630,7 @@ class AlarmRecordsPageState extends State<AlarmRecordsPage> {
               valueStr,
               style: const TextStyle(
                 color: TechColors.glowRed,
-                fontSize: 11,
+                fontSize: 21, // 字号加大10px (原11px)
                 fontFamily: 'Roboto Mono',
                 fontWeight: FontWeight.w500,
               ),

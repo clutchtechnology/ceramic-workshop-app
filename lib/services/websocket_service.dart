@@ -43,6 +43,7 @@ class WebSocketService {
   StreamSubscription? _streamSubscription;
   Timer? _heartbeatTimer;
   Timer? _reconnectTimer;
+  Timer? _watchdogTimer;
 
   final Set<String> _desiredChannels = <String>{};
   final Map<String, int> _channelRefCount = <String, int>{};
@@ -50,8 +51,12 @@ class WebSocketService {
   WebSocketState _state = WebSocketState.disconnected;
   bool _manualDisconnect = false;
   int _reconnectAttempts = 0;
+  DateTime _lastDataTime = DateTime.now();
 
   static const Duration _heartbeatInterval = Duration(seconds: 15);
+  static const Duration _watchdogInterval = Duration(seconds: 5);
+  // 数据超时: 已连接但超过此时间没收到任何消息 (含心跳回复)，认为连接已死
+  static const Duration _dataTimeout = Duration(seconds: 30);
 
   final StreamController<RealtimeWsData> _realtimeController =
       StreamController<RealtimeWsData>.broadcast();
@@ -78,10 +83,20 @@ class WebSocketService {
     _manualDisconnect = false;
     _setState(WebSocketState.connecting);
 
+    // 启动看门狗（首次连接时启动，全局只启动一次）
+    _startWatchdog();
+
     try {
-      logger.info('[TEST][前端→后端] 开始建立WebSocket连接: ${Api.wsRealtimeUrl}');
-      _channel = WebSocketChannel.connect(Uri.parse(Api.wsRealtimeUrl));
-      _streamSubscription = _channel!.stream.listen(
+      final channel = WebSocketChannel.connect(Uri.parse(Api.wsRealtimeUrl));
+      _channel = channel;
+
+      // 等待实际 TCP 握手完成，连接失败会在这里抛异常
+      await channel.ready;
+
+      // 如果 await 期间 _forceReconnect() 被调用，channel 已被替换，放弃旧连接
+      if (_channel != channel) return;
+
+      _streamSubscription = channel.stream.listen(
         _onMessage,
         onError: _onStreamError,
         onDone: _onStreamDone,
@@ -89,12 +104,14 @@ class WebSocketService {
       );
 
       _reconnectAttempts = 0;
+      _lastDataTime = DateTime.now();
       _setState(WebSocketState.connected);
       _startHeartbeat();
       _resubscribeDesiredChannels();
-      logger.info('[TEST][前端→后端] WebSocket 连接成功');
     } catch (e) {
       _emitError('WebSocket 连接失败: $e');
+      // 清理失败的 channel
+      _channel = null;
       _scheduleReconnect();
     }
   }
@@ -103,6 +120,7 @@ class WebSocketService {
     _manualDisconnect = true;
     _stopHeartbeat();
     _cancelReconnect();
+    _stopWatchdog();
 
     await _streamSubscription?.cancel();
     _streamSubscription = null;
@@ -124,9 +142,7 @@ class WebSocketService {
     await ensureConnected();
 
     if (isConnected && count == 1) {
-      logger.info('[TEST][前端→后端] 发送订阅请求: $key');
       _send(WsSubscribeMessage(channel).toJson());
-      logger.info('[TEST][前端→后端] 订阅请求已发送: $key');
     }
   }
 
@@ -152,13 +168,12 @@ class WebSocketService {
   void unsubscribeDeviceStatus() => unsubscribe(WsChannel.deviceStatus);
 
   void _onMessage(dynamic raw) {
+    _lastDataTime = DateTime.now();
     try {
       final Map<String, dynamic> json =
           raw is String ? jsonDecode(raw) as Map<String, dynamic> : raw;
 
       final envelope = WsEnvelope.fromJson(json);
-
-      logger.info('[TEST][后端→前端] 收到消息 | type=${envelope.type} | timestamp=${envelope.timestamp}');
 
       switch (envelope.type) {
         case 'realtime_data':
@@ -183,10 +198,16 @@ class WebSocketService {
 
   void _onStreamError(dynamic error) {
     _emitError('WebSocket 连接错误: $error');
+    _stopHeartbeat();
+    _streamSubscription = null;
+    _channel = null;
     _scheduleReconnect();
   }
 
   void _onStreamDone() {
+    _stopHeartbeat();
+    _streamSubscription = null;
+    _channel = null;
     if (_manualDisconnect) {
       _setState(WebSocketState.disconnected);
       return;
@@ -198,19 +219,10 @@ class WebSocketService {
     final data = envelope.data;
     if (data == null) return;
 
-    logger.info('[TEST][后端→前端] 开始解析实时数据');
-    
     final payload = _convertRealtimePayload(data);
     final ts = envelope.timestamp != null
         ? DateTime.tryParse(envelope.timestamp!)
         : null;
-
-    logger.info(
-      '[TEST][后端→前端] 数据解析完成 | '
-      '料仓=${payload.hopperData.length} | '
-      '辊道窑=${payload.rollerKilnData != null ? "有" : "无"} | '
-      'SCR+风机=${payload.scrFanData != null ? "有" : "无"}'
-    );
 
     _realtimeController.add(
       RealtimeWsData(
@@ -221,8 +233,6 @@ class WebSocketService {
         source: envelope.source,
       ),
     );
-    
-    logger.info('[TEST][后端→前端] 数据已发送到Stream');
   }
 
   void _handleDeviceStatusMessage(WsEnvelope envelope) {
@@ -397,16 +407,95 @@ class WebSocketService {
     _heartbeatTimer = null;
   }
 
+  // 看门狗: 检测"假连接"(已连接但无数据) 和"遗漏重连"(断开但未重连)
+  void _startWatchdog() {
+    if (_watchdogTimer != null) return;
+    _watchdogTimer = Timer.periodic(_watchdogInterval, (_) {
+      if (_manualDisconnect) return;
+      if (_desiredChannels.isEmpty) return;
+
+      // 场景 1: 状态已连接但长时间无数据 → 连接已死，强制重连
+      if (_state == WebSocketState.connected) {
+        final elapsed = DateTime.now().difference(_lastDataTime);
+        if (elapsed > _dataTimeout) {
+          logger.info(
+            '[WebSocket] 看门狗: 连接无响应 ${elapsed.inSeconds}s，强制重连',
+          );
+          _forceReconnect();
+        }
+        return;
+      }
+
+      // 场景 2: 断开状态且无重连计划 → 触发重连
+      if (_state == WebSocketState.disconnected) {
+        logger.info('[WebSocket] 看门狗: 检测到断线，触发重连');
+        ensureConnected();
+      }
+      // reconnecting 状态不干预，尊重指数退避策略
+    });
+  }
+
+  void _stopWatchdog() {
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
+  }
+
+  /// 应用恢复前台时调用 (息屏唤醒/焦点恢复)
+  void notifyAppResumed() {
+    if (_manualDisconnect) return;
+
+    if (_state == WebSocketState.connected) {
+      // 检查连接是否仍然活跃
+      final elapsed = DateTime.now().difference(_lastDataTime);
+      if (elapsed > _dataTimeout) {
+        logger.info(
+          '[WebSocket] 唤醒检查: 连接无响应 ${elapsed.inSeconds}s，强制重连',
+        );
+        _forceReconnect();
+      } else {
+        // 连接正常，发送心跳确认
+        _send(WsHeartbeatMessage().toJson());
+      }
+    } else if (_state == WebSocketState.reconnecting) {
+      // 重连 timer 可能被 OS 延迟，醒屏后立即重连一次
+      _cancelReconnect();
+      _reconnectAttempts = 0;
+      _setState(WebSocketState.disconnected);
+      ensureConnected();
+    } else {
+      ensureConnected();
+    }
+  }
+
+  // 强制断开旧连接并立即重连
+  void _forceReconnect() {
+    _stopHeartbeat();
+    _cancelReconnect();
+    _streamSubscription?.cancel();
+    _streamSubscription = null;
+    try {
+      _channel?.sink.close();
+    } catch (_) {}
+    _channel = null;
+    _reconnectAttempts = 0;
+    _setState(WebSocketState.disconnected);
+    ensureConnected();
+  }
+
   void _scheduleReconnect() {
     if (_manualDisconnect) return;
     _cancelReconnect();
+    _stopHeartbeat();
 
     _setState(WebSocketState.reconnecting);
 
     final seconds = _reconnectSeconds(_reconnectAttempts);
     _reconnectAttempts = (_reconnectAttempts + 1).clamp(0, 10);
 
+    logger.info('[WebSocket] 第$_reconnectAttempts次重连，${seconds}s 后执行');
+
     _reconnectTimer = Timer(Duration(seconds: seconds), () {
+      _setState(WebSocketState.disconnected);
       ensureConnected();
     });
   }
@@ -429,6 +518,8 @@ class WebSocketService {
       _channel!.sink.add(jsonEncode(message));
     } catch (e) {
       _emitError('发送 WebSocket 消息失败: $e');
+      // 发送失败说明连接已死，立即重连
+      _forceReconnect();
     }
   }
 

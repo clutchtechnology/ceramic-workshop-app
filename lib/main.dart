@@ -11,6 +11,7 @@ import 'providers/admin_provider.dart';
 import 'utils/app_logger.dart';
 import 'utils/timer_manager.dart';
 import 'api/index.dart';
+import 'services/websocket_service.dart';
 
 void main() async {
   // 捕获所有未处理的异步错误
@@ -43,24 +44,28 @@ void main() async {
 }
 
 Future<void> _initializeApp() async {
-  // 初始化窗口管理器 - 最大化显示（不覆盖任务栏）
+  // 初始化窗口管理器 - 全屏显示（保留最小化功能）
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await logger.info('初始化窗口管理器...');
     await windowManager.ensureInitialized();
 
     WindowOptions windowOptions = const WindowOptions(
+      size: Size(1920, 1080), // 设置初始大小
       backgroundColor: Colors.transparent,
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.hidden, // 隐藏原生标题栏
       windowButtonVisibility: false, // 隐藏原生窗口按钮
+      fullScreen: true, // 启动时全屏
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.setResizable(false); // 禁止调整大小
-      await windowManager.setFullScreen(true); // 全屏显示
+      // 1. 设置为全屏模式（覆盖任务栏）
+      await windowManager.setFullScreen(true);
+      // 2. 显示窗口
       await windowManager.show();
+      // 3. 获取焦点
       await windowManager.focus();
-      await logger.info('窗口已全屏显示');
+      await logger.info('窗口已全屏显示（可通过自定义按钮最小化）');
     });
   }
 
@@ -146,6 +151,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     switch (state) {
       case AppLifecycleState.resumed:
         logger.lifecycle('应用进入前台 (resumed)');
+        // 息屏唤醒: 检查 WebSocket 健康状态，必要时强制重连
+        WebSocketService().notifyAppResumed();
         break;
       case AppLifecycleState.inactive:
         logger.lifecycle('应用失去焦点 (inactive)');

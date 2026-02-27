@@ -56,7 +56,6 @@ dependencies:
 
   # Utilities
   intl: ^0.20.2
-  logger: ^2.3.0
   
   # Window Management (无边框全屏)
   window_manager: ^0.3.9

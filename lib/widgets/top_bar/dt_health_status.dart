@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../api/index.dart';
 import '../../api/api.dart';
+import '../../services/websocket_service.dart';
 import '../../utils/app_logger.dart';
 import '../data_display/data_tech_line_widgets.dart';
 
@@ -22,6 +23,9 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
   // 4, 定时器 → dispose() 中取消
   Timer? _timer;
 
+  // WebSocket 状态快速检测定时器 (3秒间隔)
+  Timer? _wsCheckTimer;
+
   // 5-7, 上次状态 → 检测状态变化，避免重复日志
   bool? _lastSystemHealthy;
   bool? _lastPlcHealthy;
@@ -39,6 +43,20 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
     _checkHealth();
     // 4, 启动定时健康检查（每分钟一次）
     _startPolling(_normalIntervalMinutes);
+    // WebSocket 状态快速检测 (3秒间隔)
+    // 当 WS 断开时立刻置为异常，WS 恢复时触发完整检查
+    _wsCheckTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted) return;
+      final wsConnected = WebSocketService().isConnected;
+      if (!wsConnected && _isSystemHealthy) {
+        logger.warning('WebSocket 断开，服务状态置为异常');
+        setState(() => _isSystemHealthy = false);
+        _lastSystemHealthy = false;
+      } else if (wsConnected && !_isSystemHealthy) {
+        // WS 恢复 -> 触发完整健康检查
+        _checkHealth();
+      }
+    });
   }
 
   ///  启动轮询（支持动态间隔）
@@ -53,6 +71,8 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
   @override
   void dispose() {
     _timer?.cancel();
+    _wsCheckTimer?.cancel();
+    _wsCheckTimer = null;
     super.dispose();
   }
 
@@ -246,30 +266,35 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
   }
 
   Widget _buildStatusIndicator(String label, bool isHealthy) {
-    final color = isHealthy ? TechColors.glowGreen : TechColors.glowRed;
+    final color = isHealthy ? TechColors.glowCyan : TechColors.glowRed;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: TechColors.bgMedium,
         borderRadius: BorderRadius.circular(4),
         border: Border.all(
-          color: color.withOpacity(0.5),
+          color: color.withOpacity(0.3),
         ),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 6,
             height: 6,
             decoration: BoxDecoration(
-              color: color,
+              color: isHealthy ? Colors.transparent : color,
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: color.withOpacity(0.5),
-                  blurRadius: 4,
-                ),
-              ],
+              border: isHealthy ? Border.all(color: color, width: 1.5) : null,
+              boxShadow: isHealthy
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: color.withOpacity(0.5),
+                        blurRadius: 4,
+                      ),
+                    ],
             ),
           ),
           const SizedBox(width: 6),
@@ -277,9 +302,17 @@ class _HealthStatusWidgetState extends State<HealthStatusWidget> {
             label,
             style: TextStyle(
               color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
               fontFamily: 'Roboto Mono',
+              shadows: isHealthy
+                  ? null
+                  : [
+                      Shadow(
+                        color: color.withOpacity(0.5),
+                        blurRadius: 6,
+                      ),
+                    ],
             ),
           ),
         ],

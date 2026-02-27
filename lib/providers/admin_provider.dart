@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/app_logger.dart';
 
 /// 管理员配置数据模型
 class AdminConfigData {
@@ -79,7 +80,7 @@ class AdminProvider extends ChangeNotifier {
           _adminConfig = AdminConfigData.fromJson(decodedJson);
         } catch (e) {
           // JSON 解析失败，使用默认值
-          debugPrint('Failed to parse admin config: $e');
+          logger.warning('Failed to parse admin config: $e');
           _adminConfig = AdminConfigData(
             username: 'admin',
             password: 'Imerys666',
@@ -96,7 +97,7 @@ class AdminProvider extends ChangeNotifier {
       }
     } catch (e) {
       _error = 'Failed to initialize admin config: $e';
-      debugPrint(_error);
+      logger.error(_error!);
       // 发生错误时使用默认值
       _adminConfig = AdminConfigData(
         username: 'admin',
@@ -153,7 +154,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       _error = 'Failed to update password: $e';
-      debugPrint(_error);
+      logger.error(_error!);
       notifyListeners();
       return false;
     }
@@ -176,7 +177,7 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       _error = 'Failed to update username: $e';
-      debugPrint(_error);
+      logger.error(_error!);
       notifyListeners();
       return false;
     }
@@ -190,7 +191,7 @@ class AdminProvider extends ChangeNotifier {
       await prefs.setString(_storageKey, jsonStr);
     } catch (e) {
       _error = 'Failed to save admin config: $e';
-      debugPrint(_error);
+      logger.error(_error!);
       rethrow;
     }
   }

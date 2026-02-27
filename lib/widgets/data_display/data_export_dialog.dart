@@ -6,6 +6,7 @@ import 'package:excel/excel.dart' hide Border;
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:file_picker/file_picker.dart';
+import '../../utils/app_logger.dart';
 
 /// ============================================================================
 /// 数据导出弹窗 (Data Export Dialog)
@@ -936,14 +937,14 @@ class _DataExportDialogState extends State<DataExportDialog> {
       final file = File(outputPath);
       await file.writeAsBytes(bytes);
 
-      print(' 文件已保存: $outputPath');
+      logger.info('文件已保存: $outputPath');
 
       // 更新成功消息，显示保存路径
       if (mounted) {
         _showMessage('导出成功！文件已保存到: $outputPath', isError: false);
       }
     } catch (e) {
-      print(' 保存文件失败: $e');
+      logger.error('保存文件失败', e);
       rethrow;
     }
   }

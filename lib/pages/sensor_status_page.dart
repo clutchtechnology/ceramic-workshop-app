@@ -73,6 +73,7 @@ class SensorStatusPageState extends State<SensorStatusPage>
     // 即使页面在 Offstage 中，Stream 数据仍会更新 ValueNotifier
     _wsService.subscribeDeviceStatus().catchError((e) {
       // 订阅失败不影响页面初始化，WebSocket 断线重连后自动重新订阅
+      logger.warning('SensorStatusPage: WebSocket订阅失败: $e');
     });
   }
 
@@ -243,7 +244,10 @@ class SensorStatusPageState extends State<SensorStatusPage>
 
   void _handleStatusWsData(AllStatusResponse response) {
     if (!mounted) return;
-    if (!response.success) return;
+    if (!response.success) {
+      logger.warning('SensorStatusPage: WS数据接收失败: success=false');
+      return;
+    }
 
     _responseNotifier.value = response;
     _errorMessageNotifier.value = null;
@@ -512,7 +516,7 @@ class SensorStatusPageState extends State<SensorStatusPage>
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(3),
         border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Row(

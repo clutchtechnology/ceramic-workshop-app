@@ -1,7 +1,9 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:io';
 import 'package:excel/excel.dart' hide Border;
+import '../utils/app_logger.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import '../widgets/data_display/data_tech_line_widgets.dart';
@@ -156,7 +158,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
         _loadScrFanData(),
       ]).timeout(const Duration(seconds: 30));
     } catch (e) {
-      debugPrint('加载历史数据超时或失败: $e');
+      logger.error('加载历史数据超时或失败', e);
     }
 
     if (mounted) {
@@ -346,7 +348,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
             startDate.year, startDate.month, startDate.day + d, 23, 59, 59);
         final dayLabel = dayFormat.format(dayStart);
 
-        debugPrint('[Export] 正在处理: $dayLabel');
+        logger.info('[Export] 正在处理: $dayLabel');
 
         // 遍历 1-9 号窑
         for (int i = 1; i <= 9; i++) {
@@ -461,7 +463,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
         }
       }
     } catch (e) {
-      debugPrint('Export failed: $e');
+      logger.error('Export failed', e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('导出失败: $e')),
@@ -1076,18 +1078,18 @@ class HistoryDataPageState extends State<HistoryDataPage>
                       Expanded(
                         child: TechPanel(
                           title: '风机',
-                          accentColor: TechColors.glowOrange,
+                          accentColor: TechColors.glowGreen,
                           headerActions: [
                             MultiSelectDropdown(
                               label: '风机',
                               itemCount: 2,
                               selectedItems: _selectedFanIndexes,
                               itemColors: const [
-                                TechColors.glowOrange,
-                                TechColors.glowOrange
+                                TechColors.glowGreen,
+                                TechColors.glowGreen
                               ],
                               getItemLabel: (i) => '风机#${i + 1}',
-                              accentColor: TechColors.glowOrange,
+                              accentColor: TechColors.glowGreen,
                               compact: true,
                               onItemToggle: (index) {
                                 setState(() => _selectedFanIndexes[index] =
@@ -1097,7 +1099,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
                             ),
                             const SizedBox(width: 8),
                             QuickTimeRangeSelector(
-                              accentColor: TechColors.glowOrange,
+                              accentColor: TechColors.glowGreen,
                               onDurationSelected: (duration) =>
                                   _handleQuickTimeSelect('fan', duration),
                             ),
@@ -1108,7 +1110,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
                                   _selectChartStartTime('fan'),
                               onEndTimeTap: () => _selectChartEndTime('fan'),
                               onCancel: () => _refreshChartData('fan'),
-                              accentColor: TechColors.glowOrange,
+                              accentColor: TechColors.glowGreen,
                               compact: true,
                             ),
                           ],
@@ -1816,7 +1818,7 @@ class _FeedingRecordsDialogState extends State<_FeedingRecordsDialog> {
       );
     }
 
-    const double rowHeight = 36.0;
+    const double rowHeight = 42.0; // 增加行高
 
     return Column(
       children: [
@@ -1838,14 +1840,14 @@ class _FeedingRecordsDialogState extends State<_FeedingRecordsDialog> {
                 child: Text('#',
                     style: TextStyle(
                         color: TechColors.glowOrange,
-                        fontSize: 12,
+                        fontSize: 15, // 字号加大
                         fontWeight: FontWeight.w600)),
               ),
               Expanded(
                 child: Text('投料时间',
                     style: TextStyle(
                         color: TechColors.glowOrange,
-                        fontSize: 12,
+                        fontSize: 15, // 字号加大
                         fontWeight: FontWeight.w600)),
               ),
               SizedBox(
@@ -1854,57 +1856,67 @@ class _FeedingRecordsDialogState extends State<_FeedingRecordsDialog> {
                     textAlign: TextAlign.right,
                     style: TextStyle(
                         color: TechColors.glowOrange,
-                        fontSize: 12,
+                        fontSize: 15, // 字号加大
                         fontWeight: FontWeight.w600)),
               ),
             ],
           ),
         ),
-        // 数据行（可滚动）
+        // 数据行（支持长按拖动滚动）
         Expanded(
-          child: ListView.builder(
-            itemCount: _records.length,
-            itemExtent: rowHeight,
-            itemBuilder: (context, index) {
-              final record = _records[index];
-              final isEven = index % 2 == 0;
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                color: isEven
-                    ? TechColors.bgMedium.withOpacity(0.2)
-                    : Colors.transparent,
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 48,
-                      child: Text(
-                        '${index + 1}',
-                        style: const TextStyle(
-                            color: TechColors.textSecondary, fontSize: 12),
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: {
+                PointerDeviceKind.touch,
+                PointerDeviceKind.mouse,
+              },
+            ),
+            child: ListView.builder(
+              itemCount: _records.length,
+              itemExtent: rowHeight,
+              itemBuilder: (context, index) {
+                final record = _records[index];
+                final isEven = index % 2 == 0;
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  color: isEven
+                      ? TechColors.bgMedium.withOpacity(0.2)
+                      : Colors.transparent,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 48,
+                        child: Text(
+                          '${index + 1}',
+                          style: const TextStyle(
+                              color: TechColors.textSecondary,
+                              fontSize: 15), // 字号加大
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        _formatDateTime(record.time),
-                        style: const TextStyle(
-                            color: TechColors.textPrimary, fontSize: 13),
+                      Expanded(
+                        child: Text(
+                          _formatDateTime(record.time),
+                          style: const TextStyle(
+                              color: TechColors.textPrimary,
+                              fontSize: 16), // 字号加大
+                        ),
                       ),
-                    ),
-                    SizedBox(
-                      width: 130,
-                      child: Text(
-                        record.amount.toStringAsFixed(2),
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                            color: TechColors.glowGreen,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500),
+                      SizedBox(
+                        width: 130,
+                        child: Text(
+                          record.amount.toStringAsFixed(2),
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                              color: TechColors.glowGreen,
+                              fontSize: 16, // 字号加大
+                              fontWeight: FontWeight.w500),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ],

@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/config_models.dart';
+import '../utils/app_logger.dart';
 
 /// 配置服务
 /// 负责系统配置的持久化存储和加载
@@ -17,7 +17,7 @@ class ConfigService {
       await file.writeAsString(jsonString);
       return true;
     } catch (e) {
-      debugPrint('保存配置失败: $e');
+      logger.error('保存配置失败', e);
       return false;
     }
   }
@@ -34,7 +34,7 @@ class ConfigService {
       final jsonData = jsonDecode(jsonString) as Map<String, dynamic>;
       return SystemConfig.fromJson(jsonData);
     } catch (e) {
-      debugPrint('加载配置失败: $e');
+      logger.error('加载配置失败', e);
       return null;
     }
   }
@@ -48,7 +48,7 @@ class ConfigService {
       }
       return true;
     } catch (e) {
-      debugPrint('删除配置失败: $e');
+      logger.error('删除配置失败', e);
       return false;
     }
   }

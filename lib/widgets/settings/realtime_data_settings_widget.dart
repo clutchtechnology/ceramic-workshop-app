@@ -640,7 +640,7 @@ class _RealtimeDataSettingsWidgetState
               ),
             ),
           ),
-          // 正常上限输入框
+          // 警告上限输入框
           Expanded(
             flex: 2,
             child: _buildInputField(
@@ -654,7 +654,7 @@ class _RealtimeDataSettingsWidgetState
               },
             ),
           ),
-          // 警告上限输入框
+          // 报警上限输入框
           Expanded(
             flex: 2,
             child: _buildInputField(
@@ -751,7 +751,7 @@ class _RealtimeDataSettingsWidgetState
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '正常上限 ($unit)',
+                      '警告上限 ($unit)',
                       style: const TextStyle(
                         color: TechColors.textSecondary,
                         fontSize: 12,
@@ -775,7 +775,7 @@ class _RealtimeDataSettingsWidgetState
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '警告上限 ($unit)',
+                      '报警上限 ($unit)',
                       style: const TextStyle(
                         color: TechColors.textSecondary,
                         fontSize: 12,
@@ -831,7 +831,7 @@ class _RealtimeDataSettingsWidgetState
               ),
             ),
           ),
-          // 正常上限输入框
+          // 警告上限输入框
           Expanded(
             flex: 2,
             child: _buildInputField(
@@ -845,7 +845,7 @@ class _RealtimeDataSettingsWidgetState
               },
             ),
           ),
-          // 警告上限输入框
+          // 报警上限输入框
           Expanded(
             flex: 2,
             child: _buildInputField(

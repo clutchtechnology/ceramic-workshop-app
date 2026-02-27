@@ -30,10 +30,6 @@ class AlarmService {
   /// subtractTemp100 处理:
   ///   no_hopper 设备温度显示时减去 100，后端比较的是 PLC 原始值，
   ///   所以同步时阈值 +100。
-  ///
-  /// 功率运行阈值处理:
-  ///   normalMax < 5.0 时认为是"是否运行"阈值而非警告阈值，
-  ///   此时 warning_max = warningMax * 0.85，alarm_max = warningMax。
   Future<bool> syncThresholds(RealtimeConfigProvider config) async {
     try {
       final body = _buildSyncMap(config);
@@ -83,22 +79,22 @@ class AlarmService {
     // --- 风机功率 x2 ---
     for (final cfg in config.fanConfigs) {
       // key = "fan_{n}_power"
-      final num = cfg.key.split('_')[1]; // "1" or "2"
-      map['fan_power_$num'] = _makePowerEntry(cfg);
+      final idx = cfg.key.split('_')[1]; // "1" or "2"
+      map['fan_power_$idx'] = _makePowerEntry(cfg);
     }
 
     // --- SCR 氨水泵功率 x2 ---
     for (final cfg in config.scrPumpConfigs) {
       // key = "scr_{n}_meter"
-      final num = cfg.key.split('_')[1]; // "1" or "2"
-      map['scr_power_$num'] = _makePowerEntry(cfg);
+      final idx = cfg.key.split('_')[1]; // "1" or "2"
+      map['scr_power_$idx'] = _makePowerEntry(cfg);
     }
 
     // --- SCR 燃气表流量 x2 ---
     for (final cfg in config.scrGasConfigs) {
       // key = "scr_{n}_gas_meter"
-      final num = cfg.key.split('_')[1]; // "1" or "2"
-      map['scr_gas_$num'] = {
+      final idx = cfg.key.split('_')[1]; // "1" or "2"
+      map['scr_gas_$idx'] = {
         'warning_max': cfg.normalMax,
         'alarm_max': cfg.warningMax,
         'enabled': true,
@@ -108,25 +104,37 @@ class AlarmService {
     return map;
   }
 
-  // 1.2 功率阈值处理：normalMax < 5.0 视为运行标志，非警告阈值
+  // 1.2 功率阈值直接映射: normalMax -> warning_max, warningMax -> alarm_max
   Map<String, dynamic> _makePowerEntry(ThresholdConfig cfg) {
-    final double warningMax;
-    final double alarmMax = cfg.warningMax;
-    if (cfg.normalMax < 5.0) {
-      // 运行阈值 -> 取报警阈值的 85% 作为警告阈值
-      warningMax = cfg.warningMax * 0.85;
-    } else {
-      warningMax = cfg.normalMax;
-    }
     return {
-      'warning_max': warningMax,
-      'alarm_max': alarmMax,
+      'warning_max': cfg.normalMax,
+      'alarm_max': cfg.warningMax,
       'enabled': true,
     };
   }
 
   // ============================================================
-  // 2. queryAlarms() - 查询历史报警记录
+  // 2. fetchThresholds() - 从后端加载阈值配置，覆盖本地存储
+  // ============================================================
+  /// 请求 GET /api/alarm/thresholds, 将后端存储的阈值应用到 [config]。
+  /// 映射规则: backend.warning_max -> config.normalMax, backend.alarm_max -> config.warningMax。
+  /// 失败时静默忽略，保留本地配置。
+  Future<bool> fetchThresholds(RealtimeConfigProvider config) async {
+    try {
+      final data = await _httpClient.get(Api.alarmThresholds);
+      if (data == null || data['success'] != true) return false;
+      final map = (data['data'] as Map<String, dynamic>?) ?? {};
+      config.applyBackendThresholds(map);
+      logger.info('[AlarmService] 从后端加载阈值配置成功，共 ${map.length} 个参数');
+      return true;
+    } catch (e) {
+      logger.warning('[AlarmService] 从后端加载阈值配置失败（将使用本地配置）: $e');
+      return false;
+    }
+  }
+
+  // ============================================================
+  // 3. queryAlarms() - 查询历史报警记录
   // ============================================================
   Future<List<AlarmRecord>> queryAlarms({
     DateTime? start,
@@ -160,7 +168,7 @@ class AlarmService {
   }
 
   // ============================================================
-  // 3. getAlarmCount() - 统计报警数量
+  // 4. getAlarmCount() - 统计报警数量
   // ============================================================
   Future<AlarmCount> getAlarmCount({int hours = 24}) async {
     try {

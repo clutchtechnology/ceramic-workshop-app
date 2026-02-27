@@ -1,7 +1,7 @@
 import '../api/index.dart';
 import '../api/api.dart';
 import '../models/scr_fan_model.dart';
-import 'package:flutter/foundation.dart';
+import '../utils/app_logger.dart';
 
 class ScrFanService {
   final ApiClient _client = ApiClient();
@@ -16,7 +16,7 @@ class ScrFanService {
       }
       return null;
     } catch (e) {
-      if (kDebugMode) debugPrint('Error fetching SCR+Fan batch data: $e');
+      logger.error('SCR+Fan 批量数据获取失败', e);
       return null;
     }
   }

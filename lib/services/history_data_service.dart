@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../api/api.dart';
 import '../api/index.dart';
+import '../utils/app_logger.dart';
 
 /// 历史数据服务
 /// 用于查询后端历史数据API，支持动态聚合间隔
@@ -334,8 +335,8 @@ class HistoryDataService {
     required DateTime end,
   }) async {
     try {
-      debugPrint(
-          '🔍 查询投料历史: $deviceId, Start: ${start.toString()}, End: ${end.toString()}');
+      logger.info(
+          '查询投料历史: $deviceId, Start: ${start.toString()}, End: ${end.toString()}');
       final jsonResponse = await ApiClient().get(
         '/api/hopper/$deviceId/feeding-history',
         params: {
@@ -347,15 +348,15 @@ class HistoryDataService {
 
       if (jsonResponse['success'] == true || jsonResponse['code'] == 200) {
         final List<dynamic> list = jsonResponse['data'];
-        debugPrint(' 投料历史返回: ${list.length} 条记录');
+        logger.info('投料历史返回: ${list.length} 条记录');
         return list.map((json) => FeedingRecord.fromJson(json)).toList();
       } else {
-        debugPrint(
-            ' 后端返回错误: ${jsonResponse['error'] ?? jsonResponse['message']}');
+        logger.warning(
+            '后端返回错误: ${jsonResponse['error'] ?? jsonResponse['message']}');
       }
       return [];
     } catch (e) {
-      debugPrint(' 查询投料记录异常: $e');
+      logger.error('查询投料记录异常', e);
       return [];
     }
   }
@@ -371,7 +372,7 @@ class HistoryDataService {
 
       return jsonResponse['success'] == true || jsonResponse['code'] == 200;
     } catch (e) {
-      debugPrint(' 回填投料记录失败: $e');
+      logger.error('回填投料记录失败', e);
       return false;
     }
   }
@@ -386,7 +387,7 @@ class HistoryDataService {
 
       return jsonResponse['success'] == true || jsonResponse['code'] == 200;
     } catch (e) {
-      debugPrint(' 删除投料记录失败: $e');
+      logger.error('删除投料记录失败', e);
       return false;
     }
   }
@@ -587,7 +588,7 @@ class HistoryDataService {
         params[key] = value;
       });
 
-      debugPrint(' 请求历史数据: ${uri.path}');
+      logger.info('请求历史数据: ${uri.path}');
       final json =
           await client.get(uri.path, params: params.isNotEmpty ? params : null);
 
@@ -614,14 +615,14 @@ class HistoryDataService {
         );
       }
     } on TimeoutException {
-      debugPrint(' 历史数据请求超时');
+      logger.warning('历史数据请求超时');
       return HistoryDataResult(
         success: false,
         deviceId: deviceId,
         error: '请求超时，请检查网络连接',
       );
     } catch (e) {
-      debugPrint(' 历史数据请求失败: $e');
+      logger.error('历史数据请求失败', e);
       return HistoryDataResult(
         success: false,
         deviceId: deviceId,

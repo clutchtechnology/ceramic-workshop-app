@@ -1,7 +1,7 @@
 import '../api/index.dart';
 import '../api/api.dart';
 import '../models/hopper_model.dart';
-import 'package:flutter/foundation.dart';
+import '../utils/app_logger.dart';
 
 class HopperService {
   final ApiClient _client = ApiClient();
@@ -28,7 +28,7 @@ class HopperService {
       }
       return {};
     } catch (e) {
-      if (kDebugMode) debugPrint('Error fetching hopper batch data: $e');
+      logger.error('料仓批量数据获取失败', e);
       return {};
     }
   }
@@ -42,8 +42,7 @@ class HopperService {
       }
       return null;
     } catch (e) {
-      if (kDebugMode)
-        debugPrint('Error fetching hopper data for $deviceId: $e');
+      logger.error('料仓数据获取失败: $deviceId', e);
       return null;
     }
   }

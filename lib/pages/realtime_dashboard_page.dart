@@ -234,9 +234,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
     // 缓存 Provider 引用（防止 build() 中频繁查找）
     _configProvider = context.read<RealtimeConfigProvider>();
 
-    logger.info('[TEST][页面初始化] 开始订阅WebSocket Stream');
     _wsSubscription = _wsService.realtimeStream.listen(_handleRealtimeWsData);
-    logger.info('[TEST][页面初始化] WebSocket Stream订阅完成');
 
     _initData();
   }
@@ -261,9 +259,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
     // 然后尝试获取最新数据
     await _fetchData();
 
-    logger.info('[TEST][页面初始化] 开始订阅WebSocket realtime频道');
     await _wsService.subscribeRealtime();
-    logger.info('[TEST][页面初始化] WebSocket订阅完成');
 
     // 启动轮询定时器（复用公共方法）
     _startPolling();
@@ -273,18 +269,11 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
   void _handleRealtimeWsData(RealtimeWsData wsData) {
     if (!mounted) return;
 
-    logger.info('[TEST][Stream→UI] 收到WebSocket数据 | '
-        '料仓=${wsData.hopperData.length} | '
-        '辊道窑=${wsData.rollerKilnData != null ? "有" : "无"} | '
-        'SCR+风机=${wsData.scrFanData != null ? "有" : "无"} | '
-        'source=${wsData.source}');
-
     final hasValidHopperData = wsData.hopperData.isNotEmpty;
     final hasValidRollerData = wsData.rollerKilnData != null;
     final hasValidScrFanData = wsData.scrFanData != null;
 
     if (!hasValidHopperData && !hasValidRollerData && !hasValidScrFanData) {
-      logger.warning('[TEST][Stream→UI] 数据为空，跳过更新');
       return;
     }
 
@@ -302,8 +291,6 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
       _lastErrorMessage = null;
     });
 
-    logger.info('[TEST][Stream→UI] UI状态已更新 | setState完成');
-
     // 1. 更新统计 (与HTTP路径保持一致，供日志诊断)
     _successCount++;
     _lastSuccessTime = DateTime.now();
@@ -316,8 +303,6 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
           hasValidRollerData ? wsData.rollerKilnData : _rollerKilnData,
       scrFanData: hasValidScrFanData ? wsData.scrFanData : _scrFanData,
     );
-
-    logger.info('[TEST][Stream→UI] 数据已缓存到本地');
   }
 
   /// 加载本地缓存数据

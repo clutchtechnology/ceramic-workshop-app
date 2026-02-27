@@ -51,8 +51,8 @@ class AppLogger {
       await _writeLog('INFO', 'Log file: ${_logFile!.path}');
       await _writeLog('INFO', '========================================');
 
-      // 清理旧日志（保留最近7天）
-      await _cleanOldLogs(logDir, 7);
+      // 清理旧日志（保留最近60天）
+      await _cleanOldLogs(logDir, 60);
 
       //  启动心跳监控（每60秒记录一次）
       _startHeartbeat();
@@ -85,11 +85,10 @@ class AppLogger {
     Directory logDir;
 
     if (Platform.isWindows) {
-      // Windows: 使用应用程序所在目录的 data/logs
+      // Windows: 使用应用程序所在目录的 logs/
       final exePath = Platform.resolvedExecutable;
       final exeDir = File(exePath).parent;
-      logDir = Directory(
-          '${exeDir.path}${Platform.pathSeparator}data${Platform.pathSeparator}logs');
+      logDir = Directory('${exeDir.path}${Platform.pathSeparator}logs');
     } else {
       // 其他平台: 使用应用文档目录
       final appDocDir = await getApplicationDocumentsDirectory();
@@ -128,15 +127,6 @@ class AppLogger {
   /// 写入日志
   Future<void> _writeLog(String level, String message) async {
     if (!_initialized || _logFile == null) return;
-
-    //  发行版本只记录错误级别：ERROR, FATAL
-    // 排除所有其他日志：INFO, NETWORK, MEMORY, ACTION, LIFECYCLE, WARNING, HEARTBEAT
-    if (!kDebugMode) {
-      const allowedLevels = {'ERROR', 'FATAL'};
-      if (!allowedLevels.contains(level)) {
-        return;
-      }
-    }
 
     try {
       final timestamp = _dateFormat.format(DateTime.now());
@@ -181,7 +171,7 @@ class AppLogger {
   /// 严重错误日志
   Future<void> fatal(String message,
       [Object? error, StackTrace? stackTrace]) async {
-    final errorMsg = StringBuffer('🔴 FATAL ERROR: $message');
+    final errorMsg = StringBuffer('[FATAL] $message');
     if (error != null) {
       errorMsg.write('\nError: $error');
     }

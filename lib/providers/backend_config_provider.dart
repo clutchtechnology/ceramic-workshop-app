@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api.dart';
 import '../api/index.dart';
+import '../utils/app_logger.dart';
 
 /// 后端配置 Provider
 /// 用于持久化存储服务器配置和PLC配置
@@ -179,7 +180,7 @@ class BackendConfigProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       // 7, 记录错误但不中断流程 (本地缓存失败不影响后端刷新)
-      debugPrint('从本地加载配置失败: $e');
+      logger.warning('从本地加载配置失败: $e');
     }
   }
 
@@ -198,7 +199,7 @@ class BackendConfigProvider extends ChangeNotifier {
       }
       return true;
     } catch (e) {
-      debugPrint('保存配置到本地失败: $e');
+      logger.warning('保存配置到本地失败: $e');
       return false;
     }
   }
