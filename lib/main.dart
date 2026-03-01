@@ -10,6 +10,7 @@ import 'providers/realtime_config_provider.dart';
 import 'providers/admin_provider.dart';
 import 'utils/app_logger.dart';
 import 'utils/timer_manager.dart';
+import 'utils/ui_watchdog.dart';
 import 'api/index.dart';
 import 'services/websocket_service.dart';
 
@@ -77,6 +78,9 @@ Future<void> _initializeApp() async {
   final adminProvider = AdminProvider();
   await adminProvider.initialize();
 
+  // [CRITICAL] 启动 UI 看门狗（心跳检测 + 帧率监控 + 自动降级）
+  UIWatchdog().start();
+
   await logger.info('应用程序初始化完成');
 
   runApp(MyApp(
@@ -129,7 +133,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     logger.lifecycle('开始清理资源...');
 
-    // 1.  [CRITICAL] 关闭所有 Timer（最优先）
+    // 0. [CRITICAL] 停止 UI 看门狗
+    UIWatchdog().stop();
+
+    // 1. [CRITICAL] 关闭所有 Timer（最优先）
     TimerManager().shutdown();
 
     // 2. 关闭 HTTP Client

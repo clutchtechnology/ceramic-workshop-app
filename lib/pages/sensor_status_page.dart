@@ -6,6 +6,7 @@ import '../services/websocket_service.dart';
 import '../widgets/data_display/data_tech_line_widgets.dart';
 import '../utils/app_logger.dart';
 import '../utils/timer_manager.dart';
+import '../utils/ui_watchdog.dart';
 
 /// 设备状态位显示页面 (单页面垂直布局)
 /// 同时显示 DB3(回转窑) / DB7(辊道窑) / DB11(SCR/风机) 的模块状态
@@ -54,6 +55,17 @@ class SensorStatusPageState extends State<SensorStatusPage>
 
   //  网络异常退避计数
   int _consecutiveFailures = 0;
+
+  // [CRITICAL] WebSocket 节流控制：后端 0.1s 推送设备状态，根据看门狗状态动态调整
+  // normal=2s, degraded=5s, critical=10s，防止工控机过载
+  DateTime? _lastStatusWsUpdate;
+  Duration get _statusWsThrottle => UIWatchdog().getThrottle(
+        normal: const Duration(seconds: 2),
+        degraded: const Duration(seconds: 5),
+        critical: const Duration(seconds: 10),
+      );
+  // 节流期间暂存最新数据，下次节流窗口到期时更新
+  AllStatusResponse? _pendingStatusData;
 
   //  [CRITICAL] 防止 _isRefreshing 卡死
   DateTime? _refreshStartTime;
@@ -249,6 +261,18 @@ class SensorStatusPageState extends State<SensorStatusPage>
       return;
     }
 
+    // [CRITICAL] 节流: 后端 0.1s 推送一次，ValueNotifier 最多 2s 更新一次
+    // 防止 Offstage 页面 10Hz 触发 ValueListenableBuilder 重建
+    final now = DateTime.now();
+    final lastUpdate = _lastStatusWsUpdate;
+    if (lastUpdate != null && now.difference(lastUpdate) < _statusWsThrottle) {
+      // 节流期间暂存最新数据，不触发 UI 更新
+      _pendingStatusData = response;
+      return;
+    }
+
+    _lastStatusWsUpdate = now;
+    _pendingStatusData = null;
     _responseNotifier.value = response;
     _errorMessageNotifier.value = null;
     _adjustPollingInterval(true);

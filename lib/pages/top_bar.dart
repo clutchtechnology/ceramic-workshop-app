@@ -425,15 +425,108 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
           icon: Icons.close,
           tooltip: '关闭',
           isClose: true,
-          onTap: () async {
-            await windowManager.close();
-          },
+          onTap: () => _showCloseConfirmDialog(),
         ),
       ],
     );
   }
 
   /// 构建单个窗口控制按钮（移除 Tooltip 避免 IndexedStack 布局问题）
+
+  /// 显示关闭确认弹窗
+  Future<void> _showCloseConfirmDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: TechColors.bgMedium,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(color: TechColors.statusAlarm.withOpacity(0.5)),
+        ),
+        child: Container(
+          width: 400,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: TechColors.bgMedium,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: TechColors.statusAlarm.withOpacity(0.5),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: TechColors.statusAlarm,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    '确认关闭',
+                    style: TextStyle(
+                      color: TechColors.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                '确定要关闭应用程序吗？',
+                style: TextStyle(
+                  color: TechColors.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: TechColors.textSecondary,
+                      side: BorderSide(color: TechColors.borderDark),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    child: const Text('取消'),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: TechColors.statusAlarm.withOpacity(0.2),
+                      foregroundColor: TechColors.statusAlarm,
+                      side: BorderSide(
+                        color: TechColors.statusAlarm.withOpacity(0.5),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    child: const Text('确认关闭'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed == true) {
+      await windowManager.close();
+    }
+  }
+
   Widget _buildWindowButton({
     required IconData icon,
     required String tooltip, // 保留参数但不使用 Tooltip

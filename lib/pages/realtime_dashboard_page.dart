@@ -20,6 +20,7 @@ import '../widgets/realtime_dashboard/real_water_pump_cell.dart';
 import '../widgets/realtime_dashboard/real_gas_pipe_cell.dart';
 import '../utils/app_logger.dart';
 import '../utils/timer_manager.dart';
+import '../utils/ui_watchdog.dart';
 
 /// 实时大屏页面
 /// 用于展示实时生产数据和监控信息
@@ -79,6 +80,21 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
 
   //  [CRITICAL] 缓存 Provider 引用（防止 build() 中频繁查找导致卡死）
   late RealtimeConfigProvider _configProvider;
+
+  // [CRITICAL] WebSocket 节流控制：后端 0.1s 推送，UI 根据看门狗状态动态调整
+  // normal=1s, degraded=3s, critical=5s，防止工控机过载
+  DateTime? _lastWsUiUpdate;
+  Duration get _wsUiThrottle => UIWatchdog().getThrottle(
+        normal: const Duration(seconds: 1),
+        degraded: const Duration(seconds: 3),
+        critical: const Duration(seconds: 5),
+      );
+  DateTime? _lastWsCacheSave;
+  Duration get _wsCacheThrottle => UIWatchdog().getThrottle(
+        normal: const Duration(seconds: 30),
+        degraded: const Duration(seconds: 60),
+        critical: const Duration(seconds: 120),
+      );
 
   // 6, UI索引到设备ID的映射 (硬件布局决定)
   // 短窑: 7,6,5,4, 无料仓: 2,1, 长窑: 8,3,9
@@ -277,32 +293,39 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
       return;
     }
 
-    setState(() {
-      if (hasValidHopperData) {
-        _hopperData = wsData.hopperData;
-      }
-      if (hasValidRollerData) {
-        _rollerKilnData = wsData.rollerKilnData;
-      }
-      if (hasValidScrFanData) {
-        _scrFanData = wsData.scrFanData;
-      }
-      _isBackendAvailable = true;
-      _lastErrorMessage = null;
-    });
-
-    // 1. 更新统计 (与HTTP路径保持一致，供日志诊断)
+    // [CRITICAL] 无论节流与否，始终更新内部数据变量（保证数据最新）
+    // 这样即使 setState 被节流，下次触发时用的也是最新一帧数据
+    if (hasValidHopperData) _hopperData = wsData.hopperData;
+    if (hasValidRollerData) _rollerKilnData = wsData.rollerKilnData;
+    if (hasValidScrFanData) _scrFanData = wsData.scrFanData;
+    _isBackendAvailable = true;
+    _lastErrorMessage = null;
     _successCount++;
     _lastSuccessTime = DateTime.now();
-    _lastUIRefreshTime = _lastSuccessTime;
 
-    // 2. 持久化缓存 (确保App重启后能恢复WS最新数据，而非旧的HTTP缓存)
-    _cacheService.saveCache(
-      hopperData: hasValidHopperData ? wsData.hopperData : _hopperData,
-      rollerKilnData:
-          hasValidRollerData ? wsData.rollerKilnData : _rollerKilnData,
-      scrFanData: hasValidScrFanData ? wsData.scrFanData : _scrFanData,
-    );
+    // [CRITICAL] 节流 setState：后端 0.1s 推送，UI 最多 1s 重建一次
+    // 防止 10Hz 全量重建超复杂 Widget 树导致工控机主线程卡死
+    final now = DateTime.now();
+    final lastUiUpdate = _lastWsUiUpdate;
+    if (lastUiUpdate == null || now.difference(lastUiUpdate) >= _wsUiThrottle) {
+      _lastWsUiUpdate = now;
+      _lastUIRefreshTime = now;
+      setState(() {
+        // 数据已在上方更新，此处 setState 仅触发重建
+      });
+    }
+
+    // [CRITICAL] 节流 saveCache：磁盘 I/O 最多 30s 一次，防止频繁写文件
+    final lastCacheSave = _lastWsCacheSave;
+    if (lastCacheSave == null ||
+        now.difference(lastCacheSave) >= _wsCacheThrottle) {
+      _lastWsCacheSave = now;
+      _cacheService.saveCache(
+        hopperData: _hopperData,
+        rollerKilnData: _rollerKilnData,
+        scrFanData: _scrFanData,
+      );
+    }
   }
 
   /// 加载本地缓存数据

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -20,6 +21,13 @@ class AppLogger {
   int _heartbeatCount = 0;
   DateTime? _startTime;
 
+  // [CRITICAL] 缓冲写入: 日志先攒到 buffer，定时刷盘
+  // 避免 10Hz WS 回调下每条日志都触发磁盘 I/O + flush
+  final StringBuffer _writeBuffer = StringBuffer();
+  Timer? _flushTimer;
+  bool _isFlushing = false;
+  static const Duration _flushInterval = Duration(seconds: 5);
+
   /// 初始化日志系统
   Future<void> initialize() async {
     if (_initialized) return;
@@ -35,9 +43,10 @@ class AppLogger {
           'app_log_${_fileNameFormat.format(DateTime.now())}.log';
       _logFile = File('${logDir.path}${Platform.pathSeparator}$fileName');
 
-      // 确保文件存在
+      // 确保文件存在，新建时写入 UTF-8 BOM，使 Windows GBK 系统能正确识别 UTF-8 编码
       if (!await _logFile!.exists()) {
         await _logFile!.create(recursive: true);
+        await _logFile!.writeAsBytes([0xEF, 0xBB, 0xBF]);
       }
 
       _initialized = true;
@@ -56,6 +65,9 @@ class AppLogger {
 
       //  启动心跳监控（每60秒记录一次）
       _startHeartbeat();
+
+      // [CRITICAL] 启动定时刷盘 Timer（每5秒将缓冲区写入磁盘）
+      _startFlushTimer();
     } catch (e) {
       debugPrint('[AppLogger] 初始化失败: $e');
     }
@@ -125,6 +137,8 @@ class AppLogger {
   }
 
   /// 写入日志
+  /// [CRITICAL] 使用缓冲写入: 日志先写入内存 buffer，由 _flushTimer 定时刷盘
+  /// 避免 10Hz WS 回调下每条日志都触发独立的磁盘 I/O + flush 导致主线程卡死
   Future<void> _writeLog(String level, String message) async {
     if (!_initialized || _logFile == null) return;
 
@@ -132,14 +146,44 @@ class AppLogger {
       final timestamp = _dateFormat.format(DateTime.now());
       final logEntry = '[$timestamp] [$level] $message\n';
 
-      // 写入文件
-      await _logFile!
-          .writeAsString(logEntry, mode: FileMode.append, flush: true);
+      // 写入内存缓冲区（零 I/O 开销）
+      _writeBuffer.write(logEntry);
 
       // 同时输出到控制台
       debugPrint(logEntry.trim());
     } catch (e) {
       debugPrint('[AppLogger] 写入日志失败: $e');
+    }
+  }
+
+  /// [CRITICAL] 启动定时刷盘 Timer
+  void _startFlushTimer() {
+    _flushTimer?.cancel();
+    _flushTimer = Timer.periodic(_flushInterval, (_) {
+      _flushBuffer();
+    });
+  }
+
+  /// [CRITICAL] 将缓冲区内容刷入磁盘（异步、非阻塞）
+  Future<void> _flushBuffer() async {
+    if (_isFlushing || _writeBuffer.isEmpty || _logFile == null) return;
+    _isFlushing = true;
+
+    try {
+      // 取出 buffer 内容，立即清空（防止下一次 flush 重复写入）
+      final content = _writeBuffer.toString();
+      _writeBuffer.clear();
+
+      await _logFile!.writeAsString(
+        content,
+        mode: FileMode.append,
+        flush: true,
+        encoding: utf8,
+      );
+    } catch (e) {
+      debugPrint('[AppLogger] 刷盘失败: $e');
+    } finally {
+      _isFlushing = false;
     }
   }
 
@@ -221,6 +265,10 @@ class AppLogger {
       _heartbeatTimer?.cancel();
       _heartbeatTimer = null;
 
+      // [CRITICAL] 停止刷盘定时器
+      _flushTimer?.cancel();
+      _flushTimer = null;
+
       final uptime = DateTime.now().difference(_startTime!);
       final hours = uptime.inHours;
       final minutes = uptime.inMinutes % 60;
@@ -230,6 +278,10 @@ class AppLogger {
       await _writeLog('INFO', '总运行时长: ${hours}小时${minutes}分钟');
       await _writeLog('INFO', '心跳次数: $_heartbeatCount');
       await _writeLog('INFO', '========================================');
+
+      // [CRITICAL] 关闭前将剩余缓冲区全部刷入磁盘
+      await _flushBuffer();
+
       _initialized = false;
     }
   }
