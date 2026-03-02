@@ -103,7 +103,7 @@ class WaterPumpCell extends StatelessWidget {
                             const SizedBox(width: 2),
                             Flexible(
                               child: Text(
-                                '${power.toStringAsFixed(3)}kW',
+                                '${(power * 1000).toStringAsFixed(0)}W',
                                 style: const TextStyle(
                                   color: TechColors.glowCyan,
                                   fontSize: 14,

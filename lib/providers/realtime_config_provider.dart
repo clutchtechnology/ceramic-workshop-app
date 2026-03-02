@@ -914,40 +914,34 @@ class RealtimeConfigProvider extends ChangeNotifier {
   }
 
   // ============================================================
-  // 判断设备运行状态的方法
+  // 设备运行状态判定 - 硬编码阈值
+  // [注意] 运行状态阈值与 normalMax/warningMax 无关
+  // normalMax/warningMax 仅控制数值标签的颜色显示 (绿->黄->红)
   // ============================================================
+  static const double _rotaryKilnRunningThreshold = 1.0; // kW
+  static const double _fanRunningThreshold = 0.5; // kW (500W)
+  static const double _scrPumpRunningThreshold = 0.036; // kW (36W)
+  static const double _scrGasRunningThreshold = 0.01; // m3/h
 
-  /// 判断回转窑是否运行（功率 >= minThreshold）
-  /// deviceId: 设备ID
+  /// 判断回转窑是否运行（功率 >= 1.0 kW）
   bool isRotaryKilnRunning(String deviceId, double power) {
     if (power < 0) power = 0;
-    final key = '${deviceId}_power';
-    final config = _rotaryKilnPowerCache[key] ?? _defaultRotaryKilnPowerConfig;
-    return config.isRunning(power);
+    return power >= _rotaryKilnRunningThreshold;
   }
 
-  /// 判断风机是否运行（功率 >= minThreshold）
-  /// fanIndex: 风机索引 (1 或 2)
+  /// 判断风机是否运行（功率 >= 0.5 kW / 500W）
   bool isFanRunning(int fanIndex, double power) {
-    if (fanIndex < 1 || fanIndex > fanConfigs.length) return power > 0;
-    final config = fanConfigs[fanIndex - 1];
-    return config.isRunning(power);
+    return power >= _fanRunningThreshold;
   }
 
-  /// 判断SCR氨水泵是否运行（功率 >= minThreshold）
-  /// scrIndex: SCR索引 (1 或 2)
+  /// 判断SCR氨水泵是否运行（功率 >= 0.036 kW / 36W）
   bool isScrPumpRunning(int scrIndex, double power) {
-    if (scrIndex < 1 || scrIndex > scrPumpConfigs.length) return power > 0;
-    final config = scrPumpConfigs[scrIndex - 1];
-    return config.isRunning(power);
+    return power >= _scrPumpRunningThreshold;
   }
 
-  /// 判断SCR燃气表是否运行（流量 >= minThreshold）
-  /// scrIndex: SCR索引 (1 或 2)
+  /// 判断SCR燃气表是否运行（流量 > 0.01 m3/h）
   bool isScrGasRunning(int scrIndex, double flowRate) {
-    if (scrIndex < 1 || scrIndex > scrGasConfigs.length) return flowRate > 0;
-    final config = scrGasConfigs[scrIndex - 1];
-    return config.isRunning(flowRate);
+    return flowRate > _scrGasRunningThreshold;
   }
 
   // ============================================================
