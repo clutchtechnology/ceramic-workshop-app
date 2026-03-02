@@ -285,7 +285,39 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
       ),
       child: Row(
         children: [
-          const SizedBox(width: 12),
+          // 分隔线
+          Container(
+            width: 4,
+            height: 22,
+            decoration: BoxDecoration(
+              color: TechColors.glowCyan,
+              boxShadow: [
+                BoxShadow(
+                  color: TechColors.glowCyan.withOpacity(1),
+                  blurRadius: 6,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          // 标题（仅文字）
+          Text(
+            '英格瓷磨料车间',
+            style: TextStyle(
+              color: TechColors.glowCyan,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.5,
+              shadows: [
+                Shadow(
+                  color: TechColors.glowCyan.withOpacity(0.6),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
           // 导航项
           ...List.generate(navItems.length, (index) {
             final isSelected = _selectedNavIndex == index;

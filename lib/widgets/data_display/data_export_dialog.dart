@@ -13,7 +13,7 @@ import '../../utils/app_logger.dart';
 /// ============================================================================
 /// 功能:
 /// 1. 选择时间范围（快速选择或自定义）
-/// 2. 选择导出类型（设备运行时长/燃气用量/累计投料量/用电量/全部数据）
+/// 2. 选择导出类型（设备运行时长/燃气用量/投料量统计/用电量/全部数据）
 /// 3. 导出为Excel文件（使用文件选择器保存）
 ///
 /// ============================================================================
@@ -906,8 +906,10 @@ class _DataExportDialogState extends State<DataExportDialog> {
   /// 保存Excel文件
   Future<void> _saveExcel(Excel excel, String baseName) async {
     try {
-      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final fileName = '${baseName}_$timestamp.xlsx';
+      final dateFormat = DateFormat('yyyyMMdd');
+      final startStr = _startTime != null ? dateFormat.format(_startTime!) : '';
+      final endStr = _endTime != null ? dateFormat.format(_endTime!) : '';
+      final fileName = '${baseName}_$startStr-$endStr.xlsx';
 
       // 使用文件选择器让用户选择保存位置
       String? outputPath = await FilePicker.platform.saveFile(

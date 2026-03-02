@@ -14,6 +14,8 @@ import '../widgets/data_display/quick_time_range_selector.dart';
 import '../widgets/data_display/data_single_select_dropdown.dart';
 import '../widgets/data_display/data_multi_select_dropdown.dart';
 import '../services/history_data_service.dart';
+import '../services/data_export_service.dart';
+import '../utils/device_name_mapper.dart';
 
 /// 历史数据页面（回转窑、辊道窑、SCR + 风机）
 class HistoryDataPage extends StatefulWidget {
@@ -175,133 +177,419 @@ class HistoryDataPageState extends State<HistoryDataPage>
     });
   }
 
-  /// 显示导出日期选择对话框
+  /// 显示数据导出弹窗
   Future<void> _showExportDatePicker() async {
     // 默认选择最近7天
     DateTime startDate = DateTime.now().subtract(const Duration(days: 7));
     DateTime endDate = DateTime.now();
+    int selectedQuickDays = 7; // 快捷选择天数
+    String selectedExportType = 'runtime'; // 导出类型
 
-    final result = await showDialog<Map<String, DateTime>>(
+    // 导出类型定义
+    final exportTypes = [
+      {
+        'value': 'runtime',
+        'label': '设备运行时长',
+        'desc': '导出所有设备(回转窑、辊道窑、SCR、风机)的设备运行时长',
+      },
+      {
+        'value': 'gas',
+        'label': '燃气用量',
+        'desc': '导出SCR燃气表的燃气用量统计',
+      },
+      {
+        'value': 'feeding',
+        'label': '投料量统计',
+        'desc': '导出带料仓回转窑(窑7,6,5,4,8,3,9)的投料量统计',
+      },
+      {
+        'value': 'electricity',
+        'label': '用电量',
+        'desc': '导出所有设备(回转窑、辊道窑、SCR、风机)的电量消耗统计',
+      },
+      {
+        'value': 'comprehensive',
+        'label': '全部数据',
+        'desc': '导出所有设备的全部数据(电量+运行时长+燃气+投料)',
+      },
+    ];
+
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
+      barrierDismissible: true,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: TechColors.bgDark,
-              title: const Text(
-                '选择导出日期范围',
-                style: TextStyle(color: TechColors.textPrimary),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 起始日期
-                  ListTile(
-                    title: const Text('起始日期',
-                        style: TextStyle(color: TechColors.textSecondary)),
-                    subtitle: Text(
-                      DateFormat('yyyy-MM-dd').format(startDate),
-                      style: const TextStyle(
-                          color: TechColors.glowCyan, fontSize: 16),
+            final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
+
+            // 快捷天数按钮
+            Widget quickDayButton(int days, String label) {
+              final isSelected = selectedQuickDays == days;
+              return GestureDetector(
+                onTap: () {
+                  setDialogState(() {
+                    selectedQuickDays = days;
+                    endDate = DateTime.now();
+                    startDate = endDate.subtract(Duration(days: days));
+                  });
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? TechColors.glowCyan.withValues(alpha: 0.15)
+                        : Colors.transparent,
+                    border: Border.all(
+                      color: isSelected
+                          ? TechColors.glowCyan
+                          : TechColors.borderDark,
+                      width: isSelected ? 1.5 : 1.0,
                     ),
-                    trailing: const Icon(Icons.calendar_today,
-                        color: TechColors.glowCyan),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: startDate,
-                        firstDate: DateTime(2024),
-                        lastDate: DateTime.now(),
-                        builder: (context, child) {
-                          return Theme(
-                            data: ThemeData.dark().copyWith(
-                              colorScheme: const ColorScheme.dark(
-                                primary: TechColors.glowCyan,
-                                surface: TechColors.bgDark,
-                              ),
-                            ),
-                            child: child!,
-                          );
-                        },
-                      );
-                      if (picked != null) {
-                        setDialogState(() => startDate = picked);
-                      }
-                    },
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  const Divider(color: TechColors.bgMedium),
-                  // 结束日期
-                  ListTile(
-                    title: const Text('结束日期',
-                        style: TextStyle(color: TechColors.textSecondary)),
-                    subtitle: Text(
-                      DateFormat('yyyy-MM-dd').format(endDate),
-                      style: const TextStyle(
-                          color: TechColors.glowCyan, fontSize: 16),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: isSelected
+                          ? TechColors.glowCyan
+                          : TechColors.textSecondary,
+                      fontSize: 13,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.normal,
                     ),
-                    trailing: const Icon(Icons.calendar_today,
-                        color: TechColors.glowCyan),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: endDate,
-                        firstDate: DateTime(2024),
-                        lastDate: DateTime.now(),
-                        builder: (context, child) {
-                          return Theme(
-                            data: ThemeData.dark().copyWith(
-                              colorScheme: const ColorScheme.dark(
-                                primary: TechColors.glowCyan,
-                                surface: TechColors.bgDark,
-                              ),
-                            ),
-                            child: child!,
-                          );
-                        },
-                      );
-                      if (picked != null) {
-                        setDialogState(() => endDate = picked);
-                      }
-                    },
                   ),
-                  const SizedBox(height: 16),
-                  // 预估行数提示
-                  Builder(
-                    builder: (context) {
-                      final days = endDate.difference(startDate).inDays + 1;
-                      final totalRows = days * 9;
-                      return Text(
-                        '预计导出 $days 天 × 9窑 = $totalRows 行数据',
-                        style: const TextStyle(
-                            color: TechColors.textSecondary, fontSize: 12),
-                      );
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('取消',
-                      style: TextStyle(color: TechColors.textSecondary)),
                 ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: TechColors.glowCyan),
-                  onPressed: () {
-                    if (endDate.isBefore(startDate)) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('结束日期不能早于起始日期')),
+              );
+            }
+
+            // 时间显示卡片
+            Widget timeCard(String title, DateTime time, bool isStart) {
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () async {
+                    final pickedDate = await showDatePicker(
+                      context: context,
+                      initialDate: time,
+                      firstDate: DateTime(2024),
+                      lastDate: DateTime.now(),
+                      builder: (context, child) {
+                        return Theme(
+                          data: ThemeData.dark().copyWith(
+                            colorScheme: const ColorScheme.dark(
+                              primary: TechColors.glowCyan,
+                              surface: TechColors.bgDark,
+                            ),
+                          ),
+                          child: child!,
+                        );
+                      },
+                    );
+                    if (pickedDate != null) {
+                      // 选择时间
+                      final pickedTime = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.fromDateTime(time),
+                        builder: (context, child) {
+                          return Theme(
+                            data: ThemeData.dark().copyWith(
+                              colorScheme: const ColorScheme.dark(
+                                primary: TechColors.glowCyan,
+                                surface: TechColors.bgDark,
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
                       );
-                      return;
+                      setDialogState(() {
+                        final newTime = DateTime(
+                          pickedDate.year,
+                          pickedDate.month,
+                          pickedDate.day,
+                          pickedTime?.hour ?? time.hour,
+                          pickedTime?.minute ?? time.minute,
+                        );
+                        if (isStart) {
+                          startDate = newTime;
+                        } else {
+                          endDate = newTime;
+                        }
+                        selectedQuickDays = -1; // 取消快捷选择
+                      });
                     }
-                    Navigator.pop(
-                        context, {'start': startDate, 'end': endDate});
                   },
-                  child: const Text('导出',
-                      style: TextStyle(color: TechColors.bgDeep)),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: TechColors.bgMedium,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: TechColors.borderDark),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            color: TechColors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.calendar_today,
+                                color: TechColors.glowCyan, size: 14),
+                            const SizedBox(width: 6),
+                            Text(
+                              dateFormat.format(time),
+                              style: const TextStyle(
+                                color: TechColors.glowCyan,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ],
+              );
+            }
+
+            return Dialog(
+              backgroundColor: TechColors.bgDark,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: TechColors.borderDark),
+              ),
+              child: Container(
+                width: 520,
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 标题栏
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 3,
+                              height: 20,
+                              color: TechColors.glowCyan,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              '数据导出',
+                              style: TextStyle(
+                                color: TechColors.textPrimary,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: const Icon(Icons.close,
+                              color: TechColors.textSecondary, size: 20),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // 时间范围标题
+                    Row(
+                      children: [
+                        Container(
+                          width: 3,
+                          height: 14,
+                          color: TechColors.glowCyan,
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          '时间范围',
+                          style: TextStyle(
+                            color: TechColors.textPrimary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // 快捷时间选择按钮
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        quickDayButton(1, '最近 1 天'),
+                        quickDayButton(3, '最近 3 天'),
+                        quickDayButton(5, '最近 5 天'),
+                        quickDayButton(7, '最近 7 天'),
+                        quickDayButton(30, '最近 30 天'),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // 开始时间 -> 结束时间
+                    Row(
+                      children: [
+                        timeCard('开始时间', startDate, true),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8),
+                          child: Icon(Icons.arrow_forward,
+                              color: TechColors.textSecondary, size: 16),
+                        ),
+                        timeCard('结束时间', endDate, false),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // 导出类型标题
+                    Row(
+                      children: [
+                        Container(
+                          width: 3,
+                          height: 14,
+                          color: TechColors.glowCyan,
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          '导出类型',
+                          style: TextStyle(
+                            color: TechColors.textPrimary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // 导出类型下拉选择
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: TechColors.bgMedium,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: TechColors.borderDark),
+                      ),
+                      child: DropdownButton<String>(
+                        value: selectedExportType,
+                        isExpanded: true,
+                        dropdownColor: TechColors.bgDark,
+                        underline: const SizedBox(),
+                        icon: const Icon(Icons.keyboard_arrow_down,
+                            color: TechColors.glowCyan),
+                        style: const TextStyle(
+                          color: TechColors.textPrimary,
+                          fontSize: 14,
+                        ),
+                        items: exportTypes.map((type) {
+                          return DropdownMenuItem<String>(
+                            value: type['value'] as String,
+                            child: Text(type['label'] as String),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              selectedExportType = value;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // 导出类型描述
+                    Text(
+                      exportTypes.firstWhere(
+                              (t) => t['value'] == selectedExportType)['desc']
+                          as String,
+                      style: const TextStyle(
+                        color: TechColors.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // 底部按钮
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        // 取消按钮
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                              side: const BorderSide(
+                                  color: TechColors.borderDark),
+                            ),
+                          ),
+                          child: const Text(
+                            '取消',
+                            style: TextStyle(
+                              color: TechColors.textSecondary,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // 导出按钮
+                        ElevatedButton(
+                          onPressed: () {
+                            if (endDate.isBefore(startDate)) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('结束时间不能早于开始时间')),
+                              );
+                              return;
+                            }
+                            Navigator.pop(context, {
+                              'start': startDate,
+                              'end': endDate,
+                              'type': selectedExportType,
+                            });
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: TechColors.glowOrange,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 32, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          child: const Text(
+                            '导出',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             );
           },
         );
@@ -309,161 +597,477 @@ class HistoryDataPageState extends State<HistoryDataPage>
     );
 
     if (result != null) {
-      await _exportHopperReportByDays(result['start']!, result['end']!);
+      final start = result['start'] as DateTime;
+      final end = result['end'] as DateTime;
+      final type = result['type'] as String;
+
+      switch (type) {
+        case 'runtime':
+          await _exportDeviceRuntime(start, end);
+          break;
+        case 'electricity':
+          await _exportElectricity(start, end);
+          break;
+        case 'gas':
+          await _exportGasConsumption(start, end);
+          break;
+        case 'feeding':
+          await _exportFeedingAmount(start, end);
+          break;
+        case 'comprehensive':
+          await _exportComprehensive(start, end);
+          break;
+      }
     }
   }
 
-  /// 按日导出回转窑报表
-  Future<void> _exportHopperReportByDays(
+  // ============================================================
+  // 导出逻辑: 调用后端 API + 生成 Excel
+  // ============================================================
+
+  final DataExportService _exportService = DataExportService();
+
+  /// 获取桌面路径
+  String _getDesktopPath() {
+    final userProfile = Platform.environment['USERPROFILE'];
+    if (Platform.isWindows && userProfile != null) {
+      final desktop = p.join(userProfile, 'Desktop');
+      if (Directory(desktop).existsSync()) return desktop;
+    }
+    // 备用路径
+    if (Platform.isWindows) {
+      const hardcoded = r'C:\Users\Admin\Desktop';
+      if (Directory(hardcoded).existsSync()) return hardcoded;
+    }
+    return Directory.current.path;
+  }
+
+  /// 保存 Excel 文件到桌面
+  Future<void> _saveExcelToDesktop(Excel excelObj, String filename) async {
+    final desktopPath = _getDesktopPath();
+    final savePath = p.join(desktopPath, filename);
+
+    final bytes = excelObj.encode();
+    if (bytes != null) {
+      File(savePath)
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(bytes);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已导出到: $savePath'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
+  /// 将设备列表的 daily_records 写入 Excel sheet
+  void _writeDeviceRuntimeToSheet(
+    Sheet sheet,
+    List<dynamic> devices,
+    String deviceIdKey,
+  ) {
+    for (final device in devices) {
+      final deviceId = device[deviceIdKey] as String? ?? '';
+      final deviceName = DeviceNameMapper.getDeviceName(deviceId);
+      final records = device['daily_records'] as List<dynamic>? ?? [];
+
+      for (final record in records) {
+        final date = record['date'] ?? '';
+        final startTime = record['start_time'] ?? '';
+        final endTime = record['end_time'] ?? '';
+        final runtimeHours = record['runtime_hours'] ?? 0.0;
+
+        sheet.appendRow([
+          TextCellValue(date.toString()),
+          TextCellValue(deviceName),
+          TextCellValue(DeviceNameMapper.getDeviceType(deviceId)),
+          TextCellValue(startTime.toString()),
+          TextCellValue(endTime.toString()),
+          TextCellValue(runtimeHours.toStringAsFixed(2)),
+        ]);
+      }
+    }
+  }
+
+  /// 导出: 设备运行时长
+  Future<void> _exportDeviceRuntime(
       DateTime startDate, DateTime endDate) async {
     if (!mounted) return;
 
-    final days = endDate.difference(startDate).inDays + 1;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('正在生成 $days 天的回转窑报表，请稍候...')),
+      const SnackBar(content: Text('正在获取设备运行时长数据，请稍候...')),
     );
 
     try {
-      final rows = <List<dynamic>>[];
+      final data = await _exportService.getAllDevicesRuntime(
+        startTime: startDate,
+        endTime: endDate,
+      );
+
+      // 生成 Excel
+      var excelObj = Excel.createExcel();
+      Sheet sheet = excelObj['设备运行时长'];
+
       // 表头
-      rows.add([
-        '日期',
-        '窑编号',
-        '起始时间',
-        '终止时间',
-        '最初能耗(kWh)',
-        '最后能耗(kWh)',
-        '能耗消耗(kWh)',
-        '投料总量(kg)'
+      sheet.appendRow([
+        TextCellValue('日期'),
+        TextCellValue('设备名称'),
+        TextCellValue('设备类型'),
+        TextCellValue('起始时间'),
+        TextCellValue('终止时间'),
+        TextCellValue('运行时长(小时)'),
       ]);
 
-      final dateFormat = DateFormat('yyyy-MM-dd HH:mm:ss');
-      final dayFormat = DateFormat('yyyy-MM-dd');
+      // 回转窑
+      final hoppers = data['hoppers'] as List<dynamic>? ?? [];
+      _writeDeviceRuntimeToSheet(sheet, hoppers, 'device_id');
 
-      // 按日遍历
-      for (int d = 0; d < days; d++) {
-        final dayStart = DateTime(
-            startDate.year, startDate.month, startDate.day + d, 0, 0, 0);
-        final dayEnd = DateTime(
-            startDate.year, startDate.month, startDate.day + d, 23, 59, 59);
-        final dayLabel = dayFormat.format(dayStart);
+      // 辊道窑分区
+      final rollerZones = data['roller_kiln_zones'] as List<dynamic>? ?? [];
+      _writeDeviceRuntimeToSheet(sheet, rollerZones, 'device_id');
 
-        logger.info('[Export] 正在处理: $dayLabel');
-
-        // 遍历 1-9 号窑
-        for (int i = 1; i <= 9; i++) {
-          final deviceId = HistoryDataService.hopperDeviceIds[i]!;
-          final kilnName = _getHopperLabel(i - 1);
-
-          // 1. 获取能耗数据
-          final energyRes = await _historyService.queryHopperEnergyHistory(
-            deviceId: deviceId,
-            start: dayStart,
-            end: dayEnd,
-          );
-
-          double firstEnergy = 0.0;
-          double lastEnergy = 0.0;
-          double consumption = 0.0;
-
-          if (energyRes.success &&
-              energyRes.hasData &&
-              energyRes.dataPoints != null &&
-              energyRes.dataPoints!.isNotEmpty) {
-            final points = energyRes.dataPoints!;
-            firstEnergy =
-                (points.first.fields['ImpEp'] as num?)?.toDouble() ?? 0.0;
-            lastEnergy =
-                (points.last.fields['ImpEp'] as num?)?.toDouble() ?? 0.0;
-            consumption = lastEnergy - firstEnergy;
-            if (consumption < 0) consumption = 0.0;
-          }
-
-          // 2. 获取投料数据 (后端已处理合并去重)
-          final feedingRecs = await _historyService.queryHopperFeedingHistory(
-            deviceId: deviceId,
-            start: dayStart,
-            end: dayEnd,
-          );
-
-          double totalFeeding = 0.0;
-          for (var rec in feedingRecs) {
-            totalFeeding += rec.amount;
-          }
-
-          rows.add([
-            dayLabel,
-            kilnName,
-            dateFormat.format(dayStart),
-            dateFormat.format(dayEnd),
-            firstEnergy.toStringAsFixed(2),
-            lastEnergy.toStringAsFixed(2),
-            consumption.toStringAsFixed(2),
-            totalFeeding.toStringAsFixed(2),
-          ]);
-        }
-
-        // 每天处理完后短暂延迟，避免请求过于密集
-        if (d < days - 1) {
-          await Future.delayed(const Duration(milliseconds: 100));
-        }
+      // 辊道窑合计
+      final rollerTotal = data['roller_kiln_total'];
+      if (rollerTotal != null) {
+        _writeDeviceRuntimeToSheet(sheet, [rollerTotal], 'device_id');
       }
 
-      // 3. 生成 Excel
-      var excelObj = Excel.createExcel();
-      Sheet sheet = excelObj['Sheet1'];
+      // SCR氨水泵
+      final scrDevices = data['scr_devices'] as List<dynamic>? ?? [];
+      _writeDeviceRuntimeToSheet(sheet, scrDevices, 'device_id');
 
-      for (var row in rows) {
-        List<CellValue> cellValues =
-            row.map((e) => TextCellValue(e.toString())).toList();
-        sheet.appendRow(cellValues);
-      }
+      // 风机
+      final fanDevices = data['fan_devices'] as List<dynamic>? ?? [];
+      _writeDeviceRuntimeToSheet(sheet, fanDevices, 'device_id');
 
       // 设置列宽
-      for (int i = 0; i < 8; i++) {
+      for (int i = 0; i < 6; i++) {
+        sheet.setColumnWidth(i, 20.0);
+      }
+
+      // 删除默认Sheet1
+      if (excelObj.sheets.containsKey('Sheet1')) {
+        excelObj.delete('Sheet1');
+      }
+
+      final dayFormat = DateFormat('yyyy-MM-dd');
+      final filename =
+          '设备运行时长_${dayFormat.format(startDate)}_至_${dayFormat.format(endDate)}.xlsx';
+      await _saveExcelToDesktop(excelObj, filename);
+    } catch (e) {
+      logger.error('[Export] runtime export failed', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// 导出: 用电量
+  Future<void> _exportElectricity(DateTime startDate, DateTime endDate) async {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('正在获取用电量数据，请稍候...')),
+    );
+
+    try {
+      final data = await _exportService.getAllElectricity(
+        startTime: startDate,
+        endTime: endDate,
+      );
+
+      var excelObj = Excel.createExcel();
+      Sheet sheet = excelObj['用电量'];
+
+      // 表头
+      sheet.appendRow([
+        TextCellValue('日期'),
+        TextCellValue('设备名称'),
+        TextCellValue('设备类型'),
+        TextCellValue('起始时间'),
+        TextCellValue('终止时间'),
+        TextCellValue('起始读数(kWh)'),
+        TextCellValue('终止读数(kWh)'),
+        TextCellValue('电量消耗(kWh)'),
+        TextCellValue('运行时长(小时)'),
+      ]);
+
+      // 写入各类设备
+      void writeElecDevices(List<dynamic> devices) {
+        for (final device in devices) {
+          final deviceId = device['device_id'] as String? ?? '';
+          final deviceName = DeviceNameMapper.getDeviceName(deviceId);
+          final records = device['daily_records'] as List<dynamic>? ?? [];
+
+          for (final record in records) {
+            sheet.appendRow([
+              TextCellValue((record['date'] ?? '').toString()),
+              TextCellValue(deviceName),
+              TextCellValue(DeviceNameMapper.getDeviceType(deviceId)),
+              TextCellValue((record['start_time'] ?? '').toString()),
+              TextCellValue((record['end_time'] ?? '').toString()),
+              TextCellValue(
+                  (record['start_reading'] ?? 0.0).toStringAsFixed(2)),
+              TextCellValue((record['end_reading'] ?? 0.0).toStringAsFixed(2)),
+              TextCellValue((record['consumption'] ?? 0.0).toStringAsFixed(2)),
+              TextCellValue(
+                  (record['runtime_hours'] ?? 0.0).toStringAsFixed(2)),
+            ]);
+          }
+        }
+      }
+
+      writeElecDevices(data['hoppers'] as List<dynamic>? ?? []);
+      writeElecDevices(data['roller_kiln_zones'] as List<dynamic>? ?? []);
+      if (data['roller_kiln_total'] != null) {
+        writeElecDevices([data['roller_kiln_total']]);
+      }
+      writeElecDevices(data['scr_devices'] as List<dynamic>? ?? []);
+      writeElecDevices(data['fan_devices'] as List<dynamic>? ?? []);
+
+      for (int i = 0; i < 9; i++) {
         sheet.setColumnWidth(i, 18.0);
       }
 
-      // 4. 保存文件
-      String desktopPath;
-      final userProfile = Platform.environment['USERPROFILE'];
-      if (Platform.isWindows && userProfile != null) {
-        desktopPath = p.join(userProfile, 'Desktop');
-      } else {
-        desktopPath = Directory.current.path;
+      if (excelObj.sheets.containsKey('Sheet1')) {
+        excelObj.delete('Sheet1');
       }
 
-      if (!Directory(desktopPath).existsSync()) {
-        if (Platform.isWindows) {
-          final hardcoded = r'C:\Users\Admin\Desktop';
-          if (Directory(hardcoded).existsSync()) {
-            desktopPath = hardcoded;
-          }
-        }
-      }
-
-      final startStr = dayFormat.format(startDate);
-      final endStr = dayFormat.format(endDate);
-      final filename = '回转窑报表_${startStr}_至_$endStr.xlsx';
-      final savePath = p.join(desktopPath, filename);
-
-      final bytes = excelObj.encode();
-      if (bytes != null) {
-        File(savePath)
-          ..createSync(recursive: true)
-          ..writeAsBytesSync(bytes);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('已导出 ${rows.length - 1} 行数据到: $savePath'),
-              duration: const Duration(seconds: 5),
-            ),
-          );
-        }
-      }
+      final dayFormat = DateFormat('yyyy-MM-dd');
+      final filename =
+          '用电量_${dayFormat.format(startDate)}_至_${dayFormat.format(endDate)}.xlsx';
+      await _saveExcelToDesktop(excelObj, filename);
     } catch (e) {
-      logger.error('Export failed', e);
+      logger.error('[Export] electricity export failed', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// 导出: 燃气用量
+  Future<void> _exportGasConsumption(
+      DateTime startDate, DateTime endDate) async {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('正在获取燃气用量数据，请稍候...')),
+    );
+
+    try {
+      final data = await _exportService.getGasConsumption(
+        deviceIds: ['scr_1', 'scr_2'],
+        startTime: startDate,
+        endTime: endDate,
+      );
+
+      var excelObj = Excel.createExcel();
+      Sheet sheet = excelObj['燃气用量'];
+
+      // 表头
+      sheet.appendRow([
+        TextCellValue('日期'),
+        TextCellValue('设备名称'),
+        TextCellValue('起始时间'),
+        TextCellValue('终止时间'),
+        TextCellValue('起始读数(m3)'),
+        TextCellValue('终止读数(m3)'),
+        TextCellValue('燃气用量(m3)'),
+      ]);
+
+      for (final deviceId in ['scr_1', 'scr_2']) {
+        final deviceData = data[deviceId] as Map<String, dynamic>?;
+        if (deviceData == null) continue;
+
+        final deviceName = DeviceNameMapper.getDeviceName(deviceId);
+        final records = deviceData['daily_records'] as List<dynamic>? ?? [];
+
+        for (final record in records) {
+          sheet.appendRow([
+            TextCellValue((record['date'] ?? '').toString()),
+            TextCellValue(deviceName),
+            TextCellValue((record['start_time'] ?? '').toString()),
+            TextCellValue((record['end_time'] ?? '').toString()),
+            TextCellValue((record['start_reading'] ?? 0.0).toStringAsFixed(2)),
+            TextCellValue((record['end_reading'] ?? 0.0).toStringAsFixed(2)),
+            TextCellValue((record['consumption'] ?? 0.0).toStringAsFixed(2)),
+          ]);
+        }
+      }
+
+      for (int i = 0; i < 7; i++) {
+        sheet.setColumnWidth(i, 18.0);
+      }
+
+      if (excelObj.sheets.containsKey('Sheet1')) {
+        excelObj.delete('Sheet1');
+      }
+
+      final dayFormat = DateFormat('yyyy-MM-dd');
+      final filename =
+          '燃气用量_${dayFormat.format(startDate)}_至_${dayFormat.format(endDate)}.xlsx';
+      await _saveExcelToDesktop(excelObj, filename);
+    } catch (e) {
+      logger.error('[Export] gas export failed', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// 导出: 投料量统计
+  Future<void> _exportFeedingAmount(
+      DateTime startDate, DateTime endDate) async {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('正在获取投料量数据，请稍候...')),
+    );
+
+    try {
+      final data = await _exportService.getFeedingAmount(
+        startTime: startDate,
+        endTime: endDate,
+      );
+
+      var excelObj = Excel.createExcel();
+      Sheet sheet = excelObj['投料量统计'];
+
+      // 表头
+      sheet.appendRow([
+        TextCellValue('日期'),
+        TextCellValue('设备名称'),
+        TextCellValue('起始时间'),
+        TextCellValue('终止时间'),
+        TextCellValue('投料总量(kg)'),
+      ]);
+
+      final hoppers = data['hoppers'] as List<dynamic>? ?? [];
+      for (final device in hoppers) {
+        final deviceId = device['device_id'] as String? ?? '';
+        final deviceName = DeviceNameMapper.getDeviceName(deviceId);
+        final records = device['daily_records'] as List<dynamic>? ?? [];
+
+        for (final record in records) {
+          sheet.appendRow([
+            TextCellValue((record['date'] ?? '').toString()),
+            TextCellValue(deviceName),
+            TextCellValue((record['start_time'] ?? '').toString()),
+            TextCellValue((record['end_time'] ?? '').toString()),
+            TextCellValue((record['feeding_amount'] ?? 0.0).toStringAsFixed(2)),
+          ]);
+        }
+      }
+
+      for (int i = 0; i < 5; i++) {
+        sheet.setColumnWidth(i, 18.0);
+      }
+
+      if (excelObj.sheets.containsKey('Sheet1')) {
+        excelObj.delete('Sheet1');
+      }
+
+      final dayFormat = DateFormat('yyyy-MM-dd');
+      final filename =
+          '投料量统计_${dayFormat.format(startDate)}_至_${dayFormat.format(endDate)}.xlsx';
+      await _saveExcelToDesktop(excelObj, filename);
+    } catch (e) {
+      logger.error('[Export] feeding export failed', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// 导出: 全部数据
+  Future<void> _exportComprehensive(
+      DateTime startDate, DateTime endDate) async {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('正在获取全部数据，请稍候...')),
+    );
+
+    try {
+      final data = await _exportService.getComprehensiveData(
+        startTime: startDate,
+        endTime: endDate,
+      );
+
+      var excelObj = Excel.createExcel();
+      Sheet sheet = excelObj['全部数据'];
+
+      // 表头
+      sheet.appendRow([
+        TextCellValue('日期'),
+        TextCellValue('设备名称'),
+        TextCellValue('设备类型'),
+        TextCellValue('起始时间'),
+        TextCellValue('终止时间'),
+        TextCellValue('电量消耗(kWh)'),
+        TextCellValue('运行时长(小时)'),
+        TextCellValue('燃气用量(m3)'),
+        TextCellValue('投料量(kg)'),
+      ]);
+
+      final devices = data['devices'] as List<dynamic>? ?? [];
+      // 按排序权重排序
+      devices.sort((a, b) {
+        final aId = a['device_id'] as String? ?? '';
+        final bId = b['device_id'] as String? ?? '';
+        return DeviceNameMapper.getDeviceSortOrder(aId)
+            .compareTo(DeviceNameMapper.getDeviceSortOrder(bId));
+      });
+
+      for (final device in devices) {
+        final deviceId = device['device_id'] as String? ?? '';
+        final deviceName = DeviceNameMapper.getDeviceName(deviceId);
+        final deviceType = DeviceNameMapper.getDeviceType(deviceId);
+        final records = device['daily_records'] as List<dynamic>? ?? [];
+
+        for (final record in records) {
+          sheet.appendRow([
+            TextCellValue((record['date'] ?? '').toString()),
+            TextCellValue(deviceName),
+            TextCellValue(deviceType),
+            TextCellValue((record['start_time'] ?? '').toString()),
+            TextCellValue((record['end_time'] ?? '').toString()),
+            TextCellValue(
+                (record['electricity_consumption'] ?? 0.0).toStringAsFixed(2)),
+            TextCellValue((record['runtime_hours'] ?? 0.0).toStringAsFixed(2)),
+            TextCellValue(
+                (record['gas_consumption'] ?? 0.0).toStringAsFixed(2)),
+            TextCellValue((record['feeding_amount'] ?? 0.0).toStringAsFixed(2)),
+          ]);
+        }
+      }
+
+      for (int i = 0; i < 9; i++) {
+        sheet.setColumnWidth(i, 18.0);
+      }
+
+      if (excelObj.sheets.containsKey('Sheet1')) {
+        excelObj.delete('Sheet1');
+      }
+
+      final dayFormat = DateFormat('yyyy-MM-dd');
+      final filename =
+          '全部数据_${dayFormat.format(startDate)}_至_${dayFormat.format(endDate)}.xlsx';
+      await _saveExcelToDesktop(excelObj, filename);
+    } catch (e) {
+      logger.error('[Export] comprehensive export failed', e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('导出失败: $e')),
