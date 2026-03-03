@@ -135,3 +135,4 @@ logs/
 
 # snap7 DLL (Windows PLC communication)
 *.dll
+ElectricFurnace

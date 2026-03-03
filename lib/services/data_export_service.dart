@@ -1,4 +1,4 @@
-import '../api/api.dart';
+﻿import '../api/api.dart';
 import '../api/index.dart';
 import '../utils/device_name_mapper.dart';
 
@@ -217,6 +217,36 @@ class DataExportService {
       return response['data'] as Map<String, dynamic>;
     } else {
       throw Exception(response['error'] ?? '获取电量统计失败');
+    }
+  }
+
+  /// 强制重算日报表中的运行时长数据
+  ///
+  /// 调用后端 GET /api/daily-summary/recalculate 接口，
+  /// 使用当前配置的轮询间隔重新计算指定日期范围内的运行时长。
+  /// 用于修正历史数据（例如轮询间隔从6s改为5s后的数据修正）。
+  Future<Map<String, dynamic>> recalculateDailySummary({
+    required DateTime startTime,
+    required DateTime endTime,
+  }) async {
+    final startDate =
+        '${startTime.year}-${startTime.month.toString().padLeft(2, '0')}-${startTime.day.toString().padLeft(2, '0')}';
+    final endDate =
+        '${endTime.year}-${endTime.month.toString().padLeft(2, '0')}-${endTime.day.toString().padLeft(2, '0')}';
+
+    final response = await _client.getWithTimeout(
+      '/api/daily-summary/recalculate',
+      params: {
+        'start_date': startDate,
+        'end_date': endDate,
+      },
+      timeout: const Duration(seconds: 120),
+    );
+
+    if (response['success'] == true) {
+      return response['data'] as Map<String, dynamic>;
+    } else {
+      throw Exception(response['error'] ?? '重算日报表失败');
     }
   }
 

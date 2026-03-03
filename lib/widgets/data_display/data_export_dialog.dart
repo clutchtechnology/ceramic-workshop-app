@@ -4,7 +4,7 @@ import 'data_tech_line_widgets.dart';
 import '../../services/data_export_service.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'dart:io';
-import 'package:path/path.dart' as p;
+
 import 'package:file_picker/file_picker.dart';
 import '../../utils/app_logger.dart';
 
@@ -109,6 +109,9 @@ class _DataExportDialogState extends State<DataExportDialog> {
 
   // ==================== 加载状态 ====================
   bool _isExporting = false;
+
+  // ==================== 强制重算 ====================
+  bool _forceRecalculate = false;
 
   // ==================== 服务 ====================
   final DataExportService _exportService = DataExportService();
@@ -249,6 +252,17 @@ class _DataExportDialogState extends State<DataExportDialog> {
     });
 
     try {
+      // 如果勾选了强制重算，先调用后端重算日报表数据
+      if (_forceRecalculate &&
+          (_selectedExportType == ExportType.runtime ||
+              _selectedExportType == ExportType.electricityAll ||
+              _selectedExportType == ExportType.comprehensive)) {
+        await _exportService.recalculateDailySummary(
+          startTime: _startTime!,
+          endTime: _endTime!,
+        );
+      }
+
       switch (_selectedExportType) {
         case ExportType.runtime:
           await _exportRuntime();
@@ -1275,6 +1289,57 @@ class _DataExportDialogState extends State<DataExportDialog> {
             fontSize: 22,
           ),
         ),
+        // 强制重算选项（仅对包含运行时长的导出类型显示）
+        if (_selectedExportType == ExportType.runtime ||
+            _selectedExportType == ExportType.electricityAll ||
+            _selectedExportType == ExportType.comprehensive)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Checkbox(
+                    value: _forceRecalculate,
+                    onChanged: (value) {
+                      setState(() {
+                        _forceRecalculate = value ?? false;
+                      });
+                    },
+                    activeColor: TechColors.glowCyan,
+                    side: const BorderSide(color: TechColors.textMuted),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _forceRecalculate = !_forceRecalculate;
+                    });
+                  },
+                  child: const Text(
+                    '强制重算运行时长',
+                    style: TextStyle(
+                      color: TechColors.textSecondary,
+                      fontSize: 22,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (_forceRecalculate)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 32),
+            child: Text(
+              '将使用当前配置的轮询间隔重新计算日报表中的运行时长数据',
+              style: TextStyle(
+                color: TechColors.statusWarning,
+                fontSize: 20,
+              ),
+            ),
+          ),
       ],
     );
   }
