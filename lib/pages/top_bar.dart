@@ -34,6 +34,9 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
   // 8, 窗口状态（是否全屏/最大化）
   bool _restoreFullScreenAfterMinimize = false;
 
+  // 9, [CRITICAL] 最小化过渡标志: 防止 setFullScreen(false) 触发 onWindowRestore 导致竞态
+  bool _isMinimizing = false;
+
   // ============================================================
   // 页面 GlobalKey (用于调用子页面方法)
   // ============================================================
@@ -128,12 +131,23 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
   }
 
   @override
+  void onWindowMinimize() {
+    // 最小化完成，清除过渡标志
+    _isMinimizing = false;
+  }
+
+  @override
   void onWindowRestore() {
+    // [CRITICAL] 最小化过渡中 setFullScreen(false) 会触发 onWindowRestore
+    // 此时必须跳过，否则会立刻 setFullScreen(true) 导致状态冲突和卡死
+    if (_isMinimizing) return;
     _tryRestoreFullScreenAfterMinimize();
   }
 
   @override
   void onWindowFocus() {
+    // [CRITICAL] 同理，最小化过渡中不响应 focus 事件
+    if (_isMinimizing) return;
     _tryRestoreFullScreenAfterMinimize();
   }
 
@@ -141,6 +155,9 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
     if (!_restoreFullScreenAfterMinimize || !mounted) return;
     _restoreFullScreenAfterMinimize = false;
     try {
+      // 等待 Windows 窗口状态完全稳定后再切回全屏
+      await Future.delayed(const Duration(milliseconds: 200));
+      if (!mounted) return;
       await windowManager.setFullScreen(true);
     } catch (_) {
       // ignore
@@ -442,13 +459,32 @@ class _DigitalTwinPageState extends State<DigitalTwinPage> with WindowListener {
           icon: Icons.remove,
           tooltip: '最小化',
           onTap: () async {
-            // Windows 下全屏窗口可能无法直接最小化：先退出全屏再最小化
-            final isFullScreen = await windowManager.isFullScreen();
-            if (isFullScreen) {
-              _restoreFullScreenAfterMinimize = true;
-              await windowManager.setFullScreen(false);
+            // [CRITICAL] 防止快速连点、防止最小化过渡期间重入
+            if (_isMinimizing) return;
+            _isMinimizing = true;
+
+            try {
+              // Windows 下全屏窗口可能无法直接最小化：先退出全屏再最小化
+              final isFullScreen = await windowManager.isFullScreen();
+              if (isFullScreen) {
+                _restoreFullScreenAfterMinimize = true;
+                await windowManager.setFullScreen(false);
+                // [CRITICAL] 等待 Windows 完成全屏退出的窗口状态变化
+                // 不等待会导致 minimize() 与状态转换冲突
+                await Future.delayed(const Duration(milliseconds: 150));
+              }
+              if (!mounted) return;
+              await windowManager.minimize();
+            } catch (e) {
+              // 出错时重置所有标志，防止卡在异常状态
+              _restoreFullScreenAfterMinimize = false;
+              _isMinimizing = false;
             }
-            await windowManager.minimize();
+            // _isMinimizing 在 onWindowMinimize 回调中重置
+            // 安全兜底：如果回调未触发，500ms 后强制重置
+            Future.delayed(const Duration(milliseconds: 500), () {
+              _isMinimizing = false;
+            });
           },
         ),
         const SizedBox(width: 4),
