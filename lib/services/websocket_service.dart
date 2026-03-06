@@ -172,7 +172,6 @@ class WebSocketService {
     try {
       final Map<String, dynamic> json =
           raw is String ? jsonDecode(raw) as Map<String, dynamic> : raw;
-
       final envelope = WsEnvelope.fromJson(json);
 
       switch (envelope.type) {
@@ -189,7 +188,7 @@ class WebSocketService {
         case 'heartbeat':
           break;
         default:
-          logger.warning('未知 WebSocket 消息类型: ${envelope.type}');
+          logger.info('WebSocket 未知消息类型: ${envelope.type}');
       }
     } catch (e) {
       _emitError('解析 WebSocket 消息失败: $e');

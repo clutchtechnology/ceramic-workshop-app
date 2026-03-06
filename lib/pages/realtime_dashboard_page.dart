@@ -78,11 +78,15 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
   bool _isBackendAvailable = true; // 后端是否可用
   String? _lastErrorMessage; // 最后一次错误信息
 
+  // [CRITICAL] 页面活跃状态: Offstage 隐藏时为 false，跳过 setState 避免无用重建
+  // Offstage 不阻止 build()，隐藏页面的 setState 仍会触发整个 Widget 树重建
+  bool _isPageActive = true;
+
   //  [CRITICAL] 缓存 Provider 引用（防止 build() 中频繁查找导致卡死）
   late RealtimeConfigProvider _configProvider;
 
-  // [CRITICAL] WebSocket 节流控制：后端 0.1s 推送，UI 根据看门狗状态动态调整
-  // normal=1s, degraded=3s, critical=5s，防止工控机过载
+  // [CRITICAL] WebSocket 节流控制: 后端 5s 推送, UI 根据看门狗状态动态调整
+  // normal=1s, degraded=3s, critical=5s, 防止工控机过载
   DateTime? _lastWsUiUpdate;
   Duration get _wsUiThrottle => UIWatchdog().getThrottle(
         normal: const Duration(seconds: 1),
@@ -118,16 +122,18 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
     await _fetchData();
   }
 
-  // 暂停HTTP备用定时器（页面不可见时调用）
-  // [CRITICAL] WebSocket订阅始终保持活跃，仅暂停HTTP备用定时器
+  // 暂停HTTP备用定时器和UI刷新（页面不可见时调用）
+  // [CRITICAL] WebSocket订阅始终保持活跃，仅暂停HTTP备用定时器和UI刷新
   void pausePolling() {
+    _isPageActive = false;
     TimerManager().pause(_timerIdRealtime);
-    logger.info('RealtimeDashboardPage: HTTP备用定时器已暂停（WebSocket订阅保持活跃）');
+    logger.info('RealtimeDashboardPage: 页面不可见，暂停HTTP定时器和UI刷新');
   }
 
-  // 恢复HTTP备用定时器（页面可见时调用）
-  // [CRITICAL] WebSocket订阅始终保持活跃，仅恢复HTTP备用定时器
+  // 恢复HTTP备用定时器和UI刷新（页面可见时调用）
+  // [CRITICAL] WebSocket订阅始终保持活跃，仅恢复HTTP备用定时器和UI刷新
   void resumePolling() {
+    _isPageActive = true;
     // 重置连续失败计数
     _consecutiveFailures = 0;
 
@@ -137,7 +143,13 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
       TimerManager().resume(_timerIdRealtime);
     }
 
-    logger.info('RealtimeDashboardPage: HTTP备用定时器已恢复（WebSocket订阅保持活跃）');
+    // [CRITICAL] 页面重新可见，重置节流允许立即刷新UI显示最新数据
+    _lastWsUiUpdate = null;
+    if (mounted) {
+      setState(() {});
+    }
+
+    logger.info('RealtimeDashboardPage: 页面可见，恢复HTTP定时器和UI刷新');
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -303,19 +315,24 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
     _successCount++;
     _lastSuccessTime = DateTime.now();
 
-    // [CRITICAL] 节流 setState：后端 0.1s 推送，UI 最多 1s 重建一次
-    // 防止 10Hz 全量重建超复杂 Widget 树导致工控机主线程卡死
     final now = DateTime.now();
-    final lastUiUpdate = _lastWsUiUpdate;
-    if (lastUiUpdate == null || now.difference(lastUiUpdate) >= _wsUiThrottle) {
-      _lastWsUiUpdate = now;
-      _lastUIRefreshTime = now;
-      setState(() {
-        // 数据已在上方更新，此处 setState 仅触发重建
-      });
+
+    // [CRITICAL] 页面不可见时跳过 setState (Offstage 不阻止 build，隐藏页面仍会重建)
+    // 数据已在上方更新，页面恢复可见时 resumePolling 会立即刷新
+    if (_isPageActive) {
+      // [CRITICAL] 节流 setState：UI 根据看门狗状态动态调整刷新间隔
+      final lastUiUpdate = _lastWsUiUpdate;
+      if (lastUiUpdate == null ||
+          now.difference(lastUiUpdate) >= _wsUiThrottle) {
+        _lastWsUiUpdate = now;
+        _lastUIRefreshTime = now;
+        setState(() {
+          // 数据已在上方更新，此处 setState 仅触发重建
+        });
+      }
     }
 
-    // [CRITICAL] 节流 saveCache：磁盘 I/O 最多 30s 一次，防止频繁写文件
+    // [CRITICAL] 节流 saveCache：磁盘 I/O 最多 30s 一次，不受页面可见性影响
     final lastCacheSave = _lastWsCacheSave;
     if (lastCacheSave == null ||
         now.difference(lastCacheSave) >= _wsCacheThrottle) {

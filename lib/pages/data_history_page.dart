@@ -38,6 +38,11 @@ class HistoryDataPageState extends State<HistoryDataPage>
 
   DateTime? _lastRefreshTime;
 
+  // [CRITICAL] 代际计数器 - 防止页面切换后旧请求的 setState 覆盖新数据
+  int _loadGeneration = 0;
+  // [CRITICAL] 加载互斥锁 - 防止多次加载重叠执行
+  bool _isLoadingInProgress = false;
+
   // 各设备图表时间范围
   late DateTime _hopperChartStartTime;
   late DateTime _hopperChartEndTime;
@@ -148,22 +153,44 @@ class HistoryDataPageState extends State<HistoryDataPage>
   /// 加载所有历史数据
   Future<void> _loadAllHistoryData() async {
     if (!mounted) return;
+
+    // [CRITICAL] 如果上一批请求还在执行，递增 generation 使其丢弃结果，但不重复发起
+    if (_isLoadingInProgress) {
+      _loadGeneration++;
+      return;
+    }
+
+    _isLoadingInProgress = true;
+    _loadGeneration++;
+    final currentGen = _loadGeneration;
+
     setState(() => _isLoading = true);
 
     try {
+      // 分 2 批加载，每批 3 个任务，避免同时发起 ~21 个 HTTP 请求
+      // 第 1 批：回转窑数据
       await Future.wait([
         _loadHopperTemperatureData(),
         _loadHopperWeightData(),
         _loadHopperEnergyData(),
+      ]).timeout(const Duration(seconds: 15));
+
+      // [CRITICAL] 检查代际 - 如果已经有新的加载请求，丢弃本次结果
+      if (!mounted || currentGen != _loadGeneration) return;
+
+      // 第 2 批：投料 + 辊道窑 + SCR/风机
+      await Future.wait([
         _loadHopperFeedingData(),
         _loadRollerData(),
         _loadScrFanData(),
-      ]).timeout(const Duration(seconds: 30));
+      ]).timeout(const Duration(seconds: 15));
     } catch (e) {
       logger.error('加载历史数据超时或失败', e);
+    } finally {
+      _isLoadingInProgress = false;
     }
 
-    if (mounted) {
+    if (mounted && currentGen == _loadGeneration) {
       setState(() => _isLoading = false);
     }
   }

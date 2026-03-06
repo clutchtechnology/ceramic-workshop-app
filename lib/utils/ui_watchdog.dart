@@ -76,8 +76,8 @@ class UIWatchdog {
   // 心跳延迟超过 15s = critical（主线程几乎无响应）
   static const Duration _criticalDelay = Duration(seconds: 15);
 
-  // 帧耗时 >32ms 算慢帧（低于 30fps）
-  static const int _slowFrameThresholdMs = 32;
+  // 帧耗时 >50ms 算慢帧 (适配工控机硬件, 20fps 以下才告警)
+  static const int _slowFrameThresholdMs = 50;
 
   // 帧率统计周期 30s，仅异常时输出日志
   static const int _frameStatsWindowSeconds = 30;

@@ -1026,7 +1026,13 @@ enum AlarmLevel { info, warning, alarm }
 /// ============================================================================
 /// 动画网格背景 (Animated Grid Background)
 /// ============================================================================
-class AnimatedGridBackground extends StatefulWidget {
+// [CRITICAL] 静态网格背景 - 不使用 AnimationController
+// 原 AnimatedGridBackground 使用 60fps 动画持续绘制，10+ 小时后:
+// - 2,160,000 次 _GridPainter 对象创建 + 1.62 亿次 drawLine 调用
+// - 无 RepaintBoundary 隔离，导致整个仪表盘 Widget 树每帧重绘
+// - GPU 纹理缓存膨胀 + GDI 句柄累积 + Dart GC 压力 -> 主线程卡死
+// 修复: 改为 StatelessWidget，网格只绘制一次，通过 RepaintBoundary 隔离
+class AnimatedGridBackground extends StatelessWidget {
   final Widget child;
   final Color gridColor;
   final double gridSize;
@@ -1039,49 +1045,28 @@ class AnimatedGridBackground extends StatefulWidget {
   });
 
   @override
-  State<AnimatedGridBackground> createState() => _AnimatedGridBackgroundState();
-}
-
-class _AnimatedGridBackgroundState extends State<AnimatedGridBackground>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 20),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // 网格背景
+        // 静态网格背景 (只绘制一次，不再 60fps 刷新)
         Positioned.fill(
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              return CustomPaint(
-                painter: _GridPainter(
-                  color: widget.gridColor,
-                  gridSize: widget.gridSize,
-                  offset: _controller.value * widget.gridSize,
-                ),
-              );
-            },
+          child: RepaintBoundary(
+            child: CustomPaint(
+              painter: _GridPainter(
+                color: gridColor,
+                gridSize: gridSize,
+                offset: 0,
+              ),
+              // isComplex: true 告诉 Flutter 缓存此绘制结果
+              isComplex: true,
+              willChange: false,
+            ),
           ),
         ),
-        // 内容
-        widget.child,
+        // 内容区域，RepaintBoundary 隔离网格和仪表盘的重绘
+        RepaintBoundary(
+          child: child,
+        ),
       ],
     );
   }
@@ -1128,144 +1113,4 @@ class _GridPainter extends CustomPainter {
   }
 }
 
-/// ============================================================================
-/// 数据流动线条 (Data Flow Line)
-/// ============================================================================
-class DataFlowLine extends StatefulWidget {
-  final double width;
-  final double height;
-  final Axis direction;
-  final Color color;
-  final Duration duration;
 
-  const DataFlowLine({
-    super.key,
-    this.width = 100,
-    this.height = 2,
-    this.direction = Axis.horizontal,
-    this.color = TechColors.glowCyan,
-    this.duration = const Duration(seconds: 2),
-  });
-
-  @override
-  State<DataFlowLine> createState() => _DataFlowLineState();
-}
-
-class _DataFlowLineState extends State<DataFlowLine>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: widget.duration,
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: widget.direction == Axis.horizontal ? widget.width : widget.height,
-      height:
-          widget.direction == Axis.horizontal ? widget.height : widget.width,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          return CustomPaint(
-            painter: _DataFlowPainter(
-              progress: _controller.value,
-              color: widget.color,
-              isHorizontal: widget.direction == Axis.horizontal,
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _DataFlowPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final bool isHorizontal;
-
-  _DataFlowPainter({
-    required this.progress,
-    required this.color,
-    required this.isHorizontal,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.width <= 0 || size.height <= 0) return;
-
-    // 背景线
-    final bgPaint = Paint()
-      ..color = color.withOpacity(0.2)
-      ..strokeWidth = isHorizontal ? size.height : size.width;
-
-    if (isHorizontal) {
-      canvas.drawLine(
-        Offset(0, size.height / 2),
-        Offset(size.width, size.height / 2),
-        bgPaint,
-      );
-    } else {
-      canvas.drawLine(
-        Offset(size.width / 2, 0),
-        Offset(size.width / 2, size.height),
-        bgPaint,
-      );
-    }
-
-    // 流动光点
-    final flowPaint = Paint()
-      ..shader = LinearGradient(
-        colors: [
-          Colors.transparent,
-          color.withOpacity(0.5),
-          color,
-          color.withOpacity(0.5),
-          Colors.transparent,
-        ],
-      ).createShader(isHorizontal
-          ? Rect.fromLTWH(0, 0, size.width * 0.3, size.height)
-          : Rect.fromLTWH(0, 0, size.width, size.height * 0.3))
-      ..strokeWidth = isHorizontal ? size.height : size.width;
-
-    if (isHorizontal) {
-      final x = progress * size.width * 1.3 - size.width * 0.15;
-      canvas.save();
-      canvas.clipRect(Rect.fromLTWH(0, 0, size.width, size.height));
-      canvas.drawLine(
-        Offset(x, size.height / 2),
-        Offset(x + size.width * 0.3, size.height / 2),
-        flowPaint,
-      );
-      canvas.restore();
-    } else {
-      final y = progress * size.height * 1.3 - size.height * 0.15;
-      canvas.save();
-      canvas.clipRect(Rect.fromLTWH(0, 0, size.width, size.height));
-      canvas.drawLine(
-        Offset(size.width / 2, y),
-        Offset(size.width / 2, y + size.height * 0.3),
-        flowPaint,
-      );
-      canvas.restore();
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DataFlowPainter oldDelegate) {
-    return oldDelegate.progress != progress;
-  }
-}
