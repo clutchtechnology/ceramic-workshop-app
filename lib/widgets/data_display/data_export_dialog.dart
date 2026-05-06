@@ -7,6 +7,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import '../../utils/app_logger.dart';
+import '../../utils/device_name_mapper.dart';
 
 /// ============================================================================
 /// 数据导出弹窗 (Data Export Dialog)
@@ -85,7 +86,7 @@ import '../../utils/app_logger.dart';
 /// - short_hopper_1~4 → 窑7,6,5,4
 /// - no_hopper_1~2 → 窑2,1
 /// - long_hopper_1~3 → 窑8,3,9
-/// - zone1~6 → 辊道窑分区1-6
+/// - zone1~6 → 辊道窑前端显示温区映射
 /// - roller_kiln_total → 辊道窑合计
 /// - scr_1/2 → SCR北/南_燃气表, SCR北/南_氨水泵
 /// - fan_1/2 → SCR北/南_风机
@@ -299,31 +300,7 @@ class _DataExportDialogState extends State<DataExportDialog> {
 
   /// 设备名称映射
   String _getDeviceName(String deviceId) {
-    const deviceMap = {
-      'short_hopper_1': '窑7',
-      'short_hopper_2': '窑6',
-      'short_hopper_3': '窑5',
-      'short_hopper_4': '窑4',
-      'no_hopper_1': '窑2',
-      'no_hopper_2': '窑1',
-      'long_hopper_1': '窑8',
-      'long_hopper_2': '窑3',
-      'long_hopper_3': '窑9',
-      'zone1': '辊道窑分区1',
-      'zone2': '辊道窑分区2',
-      'zone3': '辊道窑分区3',
-      'zone4': '辊道窑分区4',
-      'zone5': '辊道窑分区5',
-      'zone6': '辊道窑分区6',
-      'roller_kiln_total': '辊道窑合计',
-      'scr_1': 'SCR北_燃气表',
-      'scr_2': 'SCR南_燃气表',
-      'scr_1_pump': 'SCR北_氨水泵',
-      'scr_2_pump': 'SCR南_氨水泵',
-      'fan_1': 'SCR北_风机',
-      'fan_2': 'SCR南_风机',
-    };
-    return deviceMap[deviceId] ?? deviceId;
+    return DeviceNameMapper.getDeviceName(deviceId);
   }
 
   /// 设置列宽（统一设置，避免重复代码）

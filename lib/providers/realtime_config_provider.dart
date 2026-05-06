@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/alarm_service.dart';
 import '../utils/app_logger.dart';
+import '../utils/roller_kiln_zone_mapper.dart';
 
 /// 实时数据配置 Provider
 /// 用于持久化存储温度阈值、功率阈值等实时大屏的设置参数
@@ -25,7 +26,7 @@ class ThresholdColors {
 class ThresholdConfig {
   final String key; // 设备键值
   final String displayName; // 显示名称
-  double normalMax; // 警告上限（绿->黄切换点，同时作为运行状态判断阈值）
+  double normalMax; // 警告上限（绿->黄切换点）
   double warningMax; // 报警上限（超过此值为报警）
   bool subtractTemp100; // 是否在温度>300时减去100度显示
 
@@ -56,20 +57,21 @@ class ThresholdConfig {
   }
 
   ThresholdConfig copyWith({
+    String? displayName,
     double? normalMax,
     double? warningMax,
     bool? subtractTemp100,
   }) {
     return ThresholdConfig(
       key: key,
-      displayName: displayName,
+      displayName: displayName ?? this.displayName,
       normalMax: normalMax ?? this.normalMax,
       warningMax: warningMax ?? this.warningMax,
       subtractTemp100: subtractTemp100 ?? this.subtractTemp100,
     );
   }
 
-  /// 判断设备是否启动（数值 >= normalMax 认为启动）
+  /// 判断数值是否超过 normalMax
   bool isRunning(double value) {
     return value >= normalMax;
   }
@@ -120,6 +122,33 @@ class HopperCapacityConfig {
   }
 }
 
+/// 设备运行阈值配置（用于启停状态判定）
+class RunningThresholdConfig {
+  final String key; // 设备键值
+  final String displayName; // 显示名称
+  double runningThreshold; // 运行阈值（>= 阈值判定为运行）
+
+  RunningThresholdConfig({
+    required this.key,
+    required this.displayName,
+    this.runningThreshold = 0.0,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'key': key,
+        'displayName': displayName,
+        'runningThreshold': runningThreshold,
+      };
+
+  factory RunningThresholdConfig.fromJson(Map<String, dynamic> json) {
+    return RunningThresholdConfig(
+      key: json['key'] as String,
+      displayName: json['displayName'] as String,
+      runningThreshold: (json['runningThreshold'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
 /// 实时数据配置 Provider
 ///
 ///  性能优化:
@@ -139,6 +168,10 @@ class RealtimeConfigProvider extends ChangeNotifier {
   final Map<String, ThresholdConfig> _scrPumpCache = {};
   final Map<String, ThresholdConfig> _scrGasCache = {};
   final Map<String, HopperCapacityConfig> _hopperCapacityCache = {};
+  final Map<String, RunningThresholdConfig> _rotaryKilnRunningCache = {};
+  final Map<String, RunningThresholdConfig> _fanRunningCache = {};
+  final Map<String, RunningThresholdConfig> _scrPumpRunningCache = {};
+  final Map<String, RunningThresholdConfig> _scrGasRunningCache = {};
 
   // ============================================================
   // 回转窑温度配置 (9个设备)
@@ -193,9 +226,9 @@ class RealtimeConfigProvider extends ChangeNotifier {
   ];
 
   // ============================================================
-  // 回转窑功率配置 (9个设备) - 用于判断运行状态
+  // 回转窑功率配置 (9个设备) - 用于功率颜色阈值
   // 键值格式: {device_id}_power
-  // 默认正常上限 10.0 (作为启动阈值), 警告上限 50.0
+  // 默认正常上限 10.0, 警告上限 50.0
   // ============================================================
   final List<ThresholdConfig> rotaryKilnPowerConfigs = [
     ThresholdConfig(
@@ -281,6 +314,24 @@ class RealtimeConfigProvider extends ChangeNotifier {
         normalMax: 800.0,
         warningMax: 1000.0),
   ];
+
+  List<ThresholdConfig> get rollerKilnDisplayConfigs {
+    final labelsByConfigKey = <String, List<String>>{};
+    final sourcesByConfigKey = <String, ThresholdConfig>{};
+
+    for (final displayZone in RollerKilnZoneMapper.displayZones) {
+      final source = rollerKilnConfigs[displayZone.temperatureConfigIndex];
+      sourcesByConfigKey.putIfAbsent(source.key, () => source);
+      labelsByConfigKey
+          .putIfAbsent(source.key, () => [])
+          .add(displayZone.displayLabel);
+    }
+
+    return labelsByConfigKey.entries.map((entry) {
+      final source = sourcesByConfigKey[entry.key]!;
+      return source.copyWith(displayName: '${entry.value.join('/')}温度');
+    }).toList(growable: false);
+  }
 
   // ============================================================
   // 风机功率配置 (2个风机)
@@ -368,6 +419,77 @@ class RealtimeConfigProvider extends ChangeNotifier {
         maxCapacity: 1000.0),
   ];
 
+  // ============================================================
+  // 运行阈值配置 (启停状态判定)
+  // ============================================================
+  final List<RunningThresholdConfig> rotaryKilnRunningConfigs = [
+    RunningThresholdConfig(
+        key: 'short_hopper_1_running',
+        displayName: '7号回转窑运行阈值',
+        runningThreshold: 1.0),
+    RunningThresholdConfig(
+        key: 'short_hopper_2_running',
+        displayName: '6号回转窑运行阈值',
+        runningThreshold: 1.0),
+    RunningThresholdConfig(
+        key: 'short_hopper_3_running',
+        displayName: '5号回转窑运行阈值',
+        runningThreshold: 1.0),
+    RunningThresholdConfig(
+        key: 'short_hopper_4_running',
+        displayName: '4号回转窑运行阈值',
+        runningThreshold: 1.0),
+    RunningThresholdConfig(
+        key: 'no_hopper_1_running',
+        displayName: '2号回转窑运行阈值',
+        runningThreshold: 1.0),
+    RunningThresholdConfig(
+        key: 'no_hopper_2_running',
+        displayName: '1号回转窑运行阈值',
+        runningThreshold: 1.0),
+    RunningThresholdConfig(
+        key: 'long_hopper_1_running',
+        displayName: '8号回转窑运行阈值',
+        runningThreshold: 1.0),
+    RunningThresholdConfig(
+        key: 'long_hopper_2_running',
+        displayName: '3号回转窑运行阈值',
+        runningThreshold: 1.0),
+    RunningThresholdConfig(
+        key: 'long_hopper_3_running',
+        displayName: '9号回转窑运行阈值',
+        runningThreshold: 1.0),
+  ];
+
+  final List<RunningThresholdConfig> fanRunningConfigs = [
+    RunningThresholdConfig(
+        key: 'fan_1_running', displayName: '1号风机运行阈值', runningThreshold: 0.5),
+    RunningThresholdConfig(
+        key: 'fan_2_running', displayName: '2号风机运行阈值', runningThreshold: 0.5),
+  ];
+
+  final List<RunningThresholdConfig> scrPumpRunningConfigs = [
+    RunningThresholdConfig(
+        key: 'scr_1_running',
+        displayName: '1号SCR氨水泵运行阈值',
+        runningThreshold: 0.036),
+    RunningThresholdConfig(
+        key: 'scr_2_running',
+        displayName: '2号SCR氨水泵运行阈值',
+        runningThreshold: 0.036),
+  ];
+
+  final List<RunningThresholdConfig> scrGasRunningConfigs = [
+    RunningThresholdConfig(
+        key: 'scr_1_gas_running',
+        displayName: '1号SCR燃气表运行阈值',
+        runningThreshold: 0.01),
+    RunningThresholdConfig(
+        key: 'scr_2_gas_running',
+        displayName: '2号SCR燃气表运行阈值',
+        runningThreshold: 0.01),
+  ];
+
   /// 初始化加载配置
   Future<void> loadConfig() async {
     try {
@@ -429,6 +551,26 @@ class RealtimeConfigProvider extends ChangeNotifier {
     _hopperCapacityCache.clear();
     for (var config in hopperCapacityConfigs) {
       _hopperCapacityCache[config.key] = config;
+    }
+
+    _rotaryKilnRunningCache.clear();
+    for (var config in rotaryKilnRunningConfigs) {
+      _rotaryKilnRunningCache[config.key] = config;
+    }
+
+    _fanRunningCache.clear();
+    for (var config in fanRunningConfigs) {
+      _fanRunningCache[config.key] = config;
+    }
+
+    _scrPumpRunningCache.clear();
+    for (var config in scrPumpRunningConfigs) {
+      _scrPumpRunningCache[config.key] = config;
+    }
+
+    _scrGasRunningCache.clear();
+    for (var config in scrGasRunningConfigs) {
+      _scrGasRunningCache[config.key] = config;
     }
   }
 
@@ -530,6 +672,54 @@ class RealtimeConfigProvider extends ChangeNotifier {
         }
       }
     }
+
+    if (json['rotaryKilnRun'] != null) {
+      final runData = json['rotaryKilnRun'] as Map<String, dynamic>;
+      for (var config in rotaryKilnRunningConfigs) {
+        if (runData[config.key] != null) {
+          final data = runData[config.key] as Map<String, dynamic>;
+          config.runningThreshold =
+              (data['runningThreshold'] as num?)?.toDouble() ??
+                  config.runningThreshold;
+        }
+      }
+    }
+
+    if (json['fanRun'] != null) {
+      final runData = json['fanRun'] as Map<String, dynamic>;
+      for (var config in fanRunningConfigs) {
+        if (runData[config.key] != null) {
+          final data = runData[config.key] as Map<String, dynamic>;
+          config.runningThreshold =
+              (data['runningThreshold'] as num?)?.toDouble() ??
+                  config.runningThreshold;
+        }
+      }
+    }
+
+    if (json['scrPumpRun'] != null) {
+      final runData = json['scrPumpRun'] as Map<String, dynamic>;
+      for (var config in scrPumpRunningConfigs) {
+        if (runData[config.key] != null) {
+          final data = runData[config.key] as Map<String, dynamic>;
+          config.runningThreshold =
+              (data['runningThreshold'] as num?)?.toDouble() ??
+                  config.runningThreshold;
+        }
+      }
+    }
+
+    if (json['scrGasRun'] != null) {
+      final runData = json['scrGasRun'] as Map<String, dynamic>;
+      for (var config in scrGasRunningConfigs) {
+        if (runData[config.key] != null) {
+          final data = runData[config.key] as Map<String, dynamic>;
+          config.runningThreshold =
+              (data['runningThreshold'] as num?)?.toDouble() ??
+                  config.runningThreshold;
+        }
+      }
+    }
   }
 
   Map<String, dynamic> _toJson() {
@@ -580,6 +770,22 @@ class RealtimeConfigProvider extends ChangeNotifier {
       'hopperCapacity': {
         for (var config in hopperCapacityConfigs)
           config.key: {'maxCapacity': config.maxCapacity}
+      },
+      'rotaryKilnRun': {
+        for (var config in rotaryKilnRunningConfigs)
+          config.key: {'runningThreshold': config.runningThreshold}
+      },
+      'fanRun': {
+        for (var config in fanRunningConfigs)
+          config.key: {'runningThreshold': config.runningThreshold}
+      },
+      'scrPumpRun': {
+        for (var config in scrPumpRunningConfigs)
+          config.key: {'runningThreshold': config.runningThreshold}
+      },
+      'scrGasRun': {
+        for (var config in scrGasRunningConfigs)
+          config.key: {'runningThreshold': config.runningThreshold}
       },
     };
   }
@@ -635,8 +841,19 @@ class RealtimeConfigProvider extends ChangeNotifier {
     if (index >= 0 && index < rollerKilnConfigs.length) {
       if (normalMax != null) rollerKilnConfigs[index].normalMax = normalMax;
       if (warningMax != null) rollerKilnConfigs[index].warningMax = warningMax;
+      _rollerKilnCache[rollerKilnConfigs[index].key] = rollerKilnConfigs[index];
       notifyListeners();
     }
+  }
+
+  /// 更新辊道窑显示温区配置。显示温区5/6会共同写回后端 zone2 温度阈值。
+  void updateRollerKilnDisplayConfig(int displayIndex,
+      {double? normalMax, double? warningMax}) {
+    updateRollerKilnConfig(
+      RollerKilnZoneMapper.temperatureConfigIndexForDisplayIndex(displayIndex),
+      normalMax: normalMax,
+      warningMax: warningMax,
+    );
   }
 
   /// 更新风机配置
@@ -672,6 +889,53 @@ class RealtimeConfigProvider extends ChangeNotifier {
       if (maxCapacity != null) {
         hopperCapacityConfigs[index].maxCapacity = maxCapacity;
       }
+      notifyListeners();
+    }
+  }
+
+  /// 更新回转窑运行阈值配置
+  void updateRotaryKilnRunningConfig(int index, {double? runningThreshold}) {
+    if (index >= 0 && index < rotaryKilnRunningConfigs.length) {
+      if (runningThreshold != null) {
+        rotaryKilnRunningConfigs[index].runningThreshold = runningThreshold;
+      }
+      _rotaryKilnRunningCache[rotaryKilnRunningConfigs[index].key] =
+          rotaryKilnRunningConfigs[index];
+      notifyListeners();
+    }
+  }
+
+  /// 更新风机运行阈值配置
+  void updateFanRunningConfig(int index, {double? runningThreshold}) {
+    if (index >= 0 && index < fanRunningConfigs.length) {
+      if (runningThreshold != null) {
+        fanRunningConfigs[index].runningThreshold = runningThreshold;
+      }
+      _fanRunningCache[fanRunningConfigs[index].key] = fanRunningConfigs[index];
+      notifyListeners();
+    }
+  }
+
+  /// 更新SCR氨水泵运行阈值配置
+  void updateScrPumpRunningConfig(int index, {double? runningThreshold}) {
+    if (index >= 0 && index < scrPumpRunningConfigs.length) {
+      if (runningThreshold != null) {
+        scrPumpRunningConfigs[index].runningThreshold = runningThreshold;
+      }
+      _scrPumpRunningCache[scrPumpRunningConfigs[index].key] =
+          scrPumpRunningConfigs[index];
+      notifyListeners();
+    }
+  }
+
+  /// 更新SCR燃气表运行阈值配置
+  void updateScrGasRunningConfig(int index, {double? runningThreshold}) {
+    if (index >= 0 && index < scrGasRunningConfigs.length) {
+      if (runningThreshold != null) {
+        scrGasRunningConfigs[index].runningThreshold = runningThreshold;
+      }
+      _scrGasRunningCache[scrGasRunningConfigs[index].key] =
+          scrGasRunningConfigs[index];
       notifyListeners();
     }
   }
@@ -717,6 +981,23 @@ class RealtimeConfigProvider extends ChangeNotifier {
         hopperCapacityConfigs[i].maxCapacity = 1000.0;
       }
     }
+
+    for (var config in rotaryKilnRunningConfigs) {
+      config.runningThreshold = 1.0;
+    }
+
+    for (var config in fanRunningConfigs) {
+      config.runningThreshold = 0.5;
+    }
+
+    for (var config in scrPumpRunningConfigs) {
+      config.runningThreshold = 0.036;
+    }
+
+    for (var config in scrGasRunningConfigs) {
+      config.runningThreshold = 0.01;
+    }
+
     // 重建缓存确保一致性
     _buildCaches();
     notifyListeners();
@@ -827,6 +1108,14 @@ class RealtimeConfigProvider extends ChangeNotifier {
       key: '', displayName: '', normalMax: 330.0, warningMax: 400.0);
   static final _defaultHopperCapacityConfig =
       HopperCapacityConfig(key: '', displayName: '', maxCapacity: 1000.0);
+  static final _defaultRotaryRunningConfig =
+      RunningThresholdConfig(key: '', displayName: '', runningThreshold: 1.0);
+  static final _defaultFanRunningConfig =
+      RunningThresholdConfig(key: '', displayName: '', runningThreshold: 0.5);
+  static final _defaultScrPumpRunningConfig =
+      RunningThresholdConfig(key: '', displayName: '', runningThreshold: 0.036);
+  static final _defaultScrGasRunningConfig =
+      RunningThresholdConfig(key: '', displayName: '', runningThreshold: 0.01);
 
   /// 根据设备ID获取回转窑温度颜色
   /// deviceId: 例如 "short_hopper_1"
@@ -843,10 +1132,19 @@ class RealtimeConfigProvider extends ChangeNotifier {
     return config.getColor(temperature);
   }
 
-  /// 根据温区索引获取辊道窑温度颜色 (1-6)
+  /// 根据后端温区索引获取辊道窑温度颜色 (1-6)
   Color getRollerKilnTempColorByIndex(int zoneIndex, double temperature) {
     final zoneTag = 'zone${zoneIndex}_temp';
     return getRollerKilnTempColor(zoneTag, temperature);
+  }
+
+  /// 根据前端显示温区索引获取辊道窑温度颜色 (0-6)
+  Color getRollerKilnTempColorByDisplayIndex(
+      int displayIndex, double temperature) {
+    return getRollerKilnTempColor(
+      RollerKilnZoneMapper.temperatureKeyForDisplayIndex(displayIndex),
+      temperature,
+    );
   }
 
   /// 根据风机ID获取功率颜色
@@ -914,34 +1212,38 @@ class RealtimeConfigProvider extends ChangeNotifier {
   }
 
   // ============================================================
-  // 设备运行状态判定 - 硬编码阈值
-  // [注意] 运行状态阈值与 normalMax/warningMax 无关
-  // normalMax/warningMax 仅控制数值标签的颜色显示 (绿->黄->红)
+  // 设备运行状态判定 - 使用前端可配置阈值
   // ============================================================
-  static const double _rotaryKilnRunningThreshold = 1.0; // kW
-  static const double _fanRunningThreshold = 0.5; // kW (500W)
-  static const double _scrPumpRunningThreshold = 0.036; // kW (36W)
-  static const double _scrGasRunningThreshold = 0.01; // m3/h
-
-  /// 判断回转窑是否运行（功率 >= 1.0 kW）
+  /// 判断回转窑是否运行
   bool isRotaryKilnRunning(String deviceId, double power) {
-    if (power < 0) power = 0;
-    return power >= _rotaryKilnRunningThreshold;
+    final value = power < 0 ? 0.0 : power;
+    final key = '${deviceId}_running';
+    final config = _rotaryKilnRunningCache[key] ?? _defaultRotaryRunningConfig;
+    return value >= config.runningThreshold;
   }
 
-  /// 判断风机是否运行（功率 >= 0.5 kW / 500W）
+  /// 判断风机是否运行
   bool isFanRunning(int fanIndex, double power) {
-    return power >= _fanRunningThreshold;
+    final value = power < 0 ? 0.0 : power;
+    final key = 'fan_${fanIndex}_running';
+    final config = _fanRunningCache[key] ?? _defaultFanRunningConfig;
+    return value >= config.runningThreshold;
   }
 
-  /// 判断SCR氨水泵是否运行（功率 >= 0.036 kW / 36W）
+  /// 判断SCR氨水泵是否运行
   bool isScrPumpRunning(int scrIndex, double power) {
-    return power >= _scrPumpRunningThreshold;
+    final value = power < 0 ? 0.0 : power;
+    final key = 'scr_${scrIndex}_running';
+    final config = _scrPumpRunningCache[key] ?? _defaultScrPumpRunningConfig;
+    return value >= config.runningThreshold;
   }
 
-  /// 判断SCR燃气表是否运行（流量 > 0.01 m3/h）
+  /// 判断SCR燃气表是否运行
   bool isScrGasRunning(int scrIndex, double flowRate) {
-    return flowRate > _scrGasRunningThreshold;
+    final value = flowRate < 0 ? 0.0 : flowRate;
+    final key = 'scr_${scrIndex}_gas_running';
+    final config = _scrGasRunningCache[key] ?? _defaultScrGasRunningConfig;
+    return value >= config.runningThreshold;
   }
 
   // ============================================================

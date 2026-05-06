@@ -76,10 +76,14 @@ class _RealtimeDataSettingsWidgetState
   /// 初始化阈值配置控制器 (复用逻辑)
   void _initThresholdControllers(List<ThresholdConfig> configs) {
     for (var config in configs) {
-      _controllers['${config.key}_normal'] =
-          TextEditingController(text: config.normalMax.toString());
-      _controllers['${config.key}_warning'] =
-          TextEditingController(text: config.warningMax.toString());
+      _controllers.putIfAbsent(
+        '${config.key}_normal',
+        () => TextEditingController(text: config.normalMax.toString()),
+      );
+      _controllers.putIfAbsent(
+        '${config.key}_warning',
+        () => TextEditingController(text: config.warningMax.toString()),
+      );
     }
   }
 
@@ -169,7 +173,7 @@ class _RealtimeDataSettingsWidgetState
           _buildConfigSection(
             index: 1,
             title: '回转窑功率阈值配置',
-            subtitle: '9个回转窑设备 (判断运行状态)',
+            subtitle: '9个回转窑设备 (功率颜色阈值)',
             icon: Icons.flash_on,
             accentColor: TechColors.glowPurple,
             unit: 'kW',
@@ -186,13 +190,13 @@ class _RealtimeDataSettingsWidgetState
           _buildConfigSection(
             index: 2,
             title: '辊道窑温度阈值配置',
-            subtitle: '6个温区',
+            subtitle: '高温区 + 温区1-4 + 温区5/6共享阈值',
             icon: Icons.local_fire_department,
             accentColor: TechColors.glowRed,
             unit: '℃',
-            configs: provider.rollerKilnConfigs,
+            configs: provider.rollerKilnDisplayConfigs,
             onUpdate: (index, normalMax, warningMax) {
-              provider.updateRollerKilnConfig(index,
+              provider.updateRollerKilnDisplayConfig(index,
                   normalMax: normalMax, warningMax: warningMax);
             },
           ),

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:io';
@@ -16,6 +16,7 @@ import '../widgets/data_display/data_multi_select_dropdown.dart';
 import '../services/history_data_service.dart';
 import '../services/data_export_service.dart';
 import '../utils/device_name_mapper.dart';
+import '../utils/roller_kiln_zone_mapper.dart';
 
 /// 历史数据页面（回转窑、辊道窑、SCR + 风机）
 class HistoryDataPage extends StatefulWidget {
@@ -55,7 +56,8 @@ class HistoryDataPageState extends State<HistoryDataPage>
 
   // 设备选择状态
   int _selectedHopperIndex = 0;
-  List<bool> _selectedRollerZones = List.generate(6, (_) => true);
+  List<bool> _selectedRollerZones =
+      List.generate(RollerKilnZoneMapper.displayCount, (_) => true);
   int _selectedPumpIndex = 0;
   List<bool> _selectedFanIndexes = [true, false];
 
@@ -89,14 +91,15 @@ class HistoryDataPageState extends State<HistoryDataPage>
     const Color(0xFFff6b60), // long_hopper_3
   ];
 
-  // 6种颜色用于区分不同辊道窑温区
+  // 7种颜色用于区分不同辊道窑显示温区
   final List<Color> _rollerZoneColors = [
-    TechColors.glowCyan, // zone1
-    TechColors.glowGreen, // zone2
-    const Color(0xFFaf52de), // zone3
-    TechColors.glowOrange, // zone4
-    const Color(0xFFffcc00), // zone5
-    const Color(0xFF00d4ff), // zone6
+    TechColors.glowRed, // 高温区: temp zone1, meter zone6
+    TechColors.glowCyan, // 温区1: temp zone6, meter zone5
+    TechColors.glowGreen, // 温区2: temp zone5, meter zone4
+    const Color(0xFFaf52de), // 温区3 -> zone3
+    TechColors.glowOrange, // 温区4: temp zone4, meter zone2
+    const Color(0xFFffcc00), // 温区5: temp zone2, meter zone1
+    const Color(0xFF00d4ff), // 温区6: temp zone2, meter zone1
   ];
 
   // 2种颜色用于区分SCR/风机设备
@@ -1233,27 +1236,30 @@ class HistoryDataPageState extends State<HistoryDataPage>
 
   Future<void> _loadRollerData() async {
     final tasks = [
-      for (int i = 0; i < 6; i++)
+      for (int i = 0; i < RollerKilnZoneMapper.displayCount; i++)
         if (_selectedRollerZones[i]) _loadSingleRollerZoneData(i)
     ];
     if (tasks.isNotEmpty) await Future.wait(tasks);
   }
 
   /// 加载单个辊道窑温区数据
-  Future<void> _loadSingleRollerZoneData(int zoneIndex) async {
-    final zoneId = HistoryDataService.rollerZoneIds[zoneIndex + 1]!;
+  Future<void> _loadSingleRollerZoneData(int displayIndex) async {
+    final tempZoneId =
+        RollerKilnZoneMapper.temperatureZoneIdForDisplayIndex(displayIndex);
+    final meterZoneId =
+        RollerKilnZoneMapper.meterZoneIdForDisplayIndex(displayIndex);
 
     // 并行请求温度和功率数据
     final results = await Future.wait([
       _historyService.queryRollerTemperatureHistory(
         start: _rollerChartStartTime,
         end: _rollerChartEndTime,
-        zone: zoneId,
+        zone: tempZoneId,
       ),
       _historyService.queryRollerPowerHistory(
         start: _rollerChartStartTime,
         end: _rollerChartEndTime,
-        zone: zoneId,
+        zone: meterZoneId,
       ),
     ]);
 
@@ -1265,7 +1271,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
     // 温度数据
     if (tempResult.success && tempResult.hasData) {
       final spots = _convertToFlSpots(tempResult.dataPoints!, 'temperature');
-      setState(() => _rollerTemperatureData[zoneIndex] = spots);
+      setState(() => _rollerTemperatureData[displayIndex] = spots);
     }
 
     // 功率和能耗数据
@@ -1273,8 +1279,8 @@ class HistoryDataPageState extends State<HistoryDataPage>
       final powerSpots = _convertToFlSpots(powerResult.dataPoints!, 'Pt');
       final energySpots = _convertToFlSpots(powerResult.dataPoints!, 'ImpEp');
       setState(() {
-        _rollerPowerData[zoneIndex] = powerSpots;
-        _rollerEnergyData[zoneIndex] = energySpots;
+        _rollerPowerData[displayIndex] = powerSpots;
+        _rollerEnergyData[displayIndex] = energySpots;
       });
     }
   }
@@ -1427,7 +1433,9 @@ class HistoryDataPageState extends State<HistoryDataPage>
   }
 
   /// 获取辊道窑温区显示名称
-  String _getRollerZoneLabel(int index) => '温区${index + 1}';
+  String _getRollerZoneLabel(int index) {
+    return RollerKilnZoneMapper.labelForDisplayIndex(index);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1582,7 +1590,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
                       // 1. 温区多选
                       MultiSelectDropdown(
                         label: '温区',
-                        itemCount: 6,
+                        itemCount: RollerKilnZoneMapper.displayCount,
                         selectedItems: _selectedRollerZones,
                         itemColors: _rollerZoneColors,
                         getItemLabel: _getRollerZoneLabel,
@@ -1812,7 +1820,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
     return TechLineChart(
       title: '下料速度曲线',
       accentColor: TechColors.glowCyan,
-      yAxisLabel: '速度(kg/s)',
+      yAxisLabel: '速度(kg/h)',
       xAxisLabel: '',
       xInterval:
           _calculateXInterval(_hopperChartStartTime, _hopperChartEndTime),
@@ -1968,7 +1976,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
       dataMap: _rollerTemperatureData,
       selectedItems: _selectedRollerZones,
       itemColors: _rollerZoneColors,
-      itemCount: 6,
+      itemCount: RollerKilnZoneMapper.displayCount,
       getItemLabel: _getRollerZoneLabel,
       selectorLabel: '选择分区',
       showSelector: false, // 不显示选择器
@@ -1988,7 +1996,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
       dataMap: _rollerEnergyData,
       selectedItems: _selectedRollerZones,
       itemColors: _rollerZoneColors,
-      itemCount: 6,
+      itemCount: RollerKilnZoneMapper.displayCount,
       getItemLabel: _getRollerZoneLabel,
       selectorLabel: '选择分区',
       showSelector: false, // 不显示选择器
@@ -2008,7 +2016,7 @@ class HistoryDataPageState extends State<HistoryDataPage>
       dataMap: _rollerPowerData,
       selectedItems: _selectedRollerZones,
       itemColors: _rollerZoneColors,
-      itemCount: 6,
+      itemCount: RollerKilnZoneMapper.displayCount,
       getItemLabel: _getRollerZoneLabel,
       selectorLabel: '选择分区',
       showSelector: false,

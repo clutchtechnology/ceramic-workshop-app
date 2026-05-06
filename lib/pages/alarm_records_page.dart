@@ -5,6 +5,7 @@ import '../models/alarm_model.dart';
 import '../services/alarm_service.dart';
 import '../widgets/data_display/data_tech_line_widgets.dart';
 import '../utils/app_logger.dart';
+import '../utils/roller_kiln_zone_mapper.dart';
 
 // ============================================================
 // 报警记录页面 - 六宫格布局
@@ -19,11 +20,13 @@ class _GridConfig {
   final String title;
   final String paramPrefix;
   final Map<String, String> devices; // 显示名 -> suffix
+  final bool isRollerKiln;
 
   const _GridConfig({
     required this.title,
     required this.paramPrefix,
     required this.devices,
+    this.isRollerKiln = false,
   });
 }
 
@@ -59,14 +62,22 @@ const _kilnDevices = <String, String>{
   '窑9': '_long_hopper_3',
 };
 
+Map<String, String> _rollerKilnAlarmDevices() {
+  return {
+    '全部': '',
+    for (final zone in RollerKilnZoneMapper.displayZones)
+      zone.displayLabel: '_${zone.temperatureZoneId}',
+  };
+}
+
 // -- 6个宫格定义 --
-const _gridConfigs = <_GridConfig>[
-  _GridConfig(
+final _gridConfigs = <_GridConfig>[
+  const _GridConfig(
     title: '回转窑温度',
     paramPrefix: 'rotary_temp',
     devices: _kilnDevices,
   ),
-  _GridConfig(
+  const _GridConfig(
     title: '回转窑功率',
     paramPrefix: 'rotary_power',
     devices: _kilnDevices,
@@ -74,27 +85,20 @@ const _gridConfigs = <_GridConfig>[
   _GridConfig(
     title: '辊道窑温度',
     paramPrefix: 'roller_temp',
-    devices: <String, String>{
-      '全部': '',
-      '温区1': '_zone1',
-      '温区2': '_zone2',
-      '温区3': '_zone3',
-      '温区4': '_zone4',
-      '温区5': '_zone5',
-      '温区6': '_zone6',
-    },
+    devices: _rollerKilnAlarmDevices(),
+    isRollerKiln: true,
   ),
-  _GridConfig(
+  const _GridConfig(
     title: 'SCR功率',
     paramPrefix: 'scr_power',
     devices: <String, String>{'全部': '', 'SCR1': '_1', 'SCR2': '_2'},
   ),
-  _GridConfig(
+  const _GridConfig(
     title: 'SCR燃气',
     paramPrefix: 'scr_gas',
     devices: <String, String>{'全部': '', 'SCR1': '_1', 'SCR2': '_2'},
   ),
-  _GridConfig(
+  const _GridConfig(
     title: '风机功率',
     paramPrefix: 'fan_power',
     devices: <String, String>{'全部': '', '风机1': '_1', '风机2': '_2'},
@@ -203,7 +207,9 @@ class AlarmRecordsPageState extends State<AlarmRecordsPage> {
       );
       if (mounted) {
         setState(() {
-          _gridRecords[index] = records;
+          _gridRecords[index] = config.isRollerKiln
+              ? _mapRollerAlarmRecords(records, deviceKey)
+              : records;
           _gridLoading[index] = false;
         });
       }
@@ -229,11 +235,74 @@ class AlarmRecordsPageState extends State<AlarmRecordsPage> {
 
   String _getDeviceLabel(AlarmRecord record) {
     if (record.deviceId == 'roller_kiln_1') {
-      final match = RegExp(r'zone(\d+)').firstMatch(record.paramName);
-      if (match != null) return '温区${match.group(1)}';
+      final displayLabel =
+          RollerKilnZoneMapper.displayLabelFromDisplaySuffix(record.paramName);
+      if (displayLabel != null) return displayLabel;
+
+      final backendZone =
+          RollerKilnZoneMapper.backendZoneIdFromText(record.paramName);
+      if (backendZone != null) {
+        return RollerKilnZoneMapper.labelForTemperatureBackendZoneId(
+            backendZone);
+      }
       return '辊道窑';
     }
     return _deviceNameMap[record.deviceId] ?? record.deviceId;
+  }
+
+  List<AlarmRecord> _mapRollerAlarmRecords(
+    List<AlarmRecord> records,
+    String selectedDeviceKey,
+  ) {
+    if (selectedDeviceKey != '全部') {
+      final displayZone = RollerKilnZoneMapper.displayZones.firstWhere(
+        (zone) => zone.displayLabel == selectedDeviceKey,
+        orElse: () => RollerKilnZoneMapper.displayZones.first,
+      );
+      if (displayZone.temperatureZoneId == 'zone2' &&
+          displayZone.displayZoneNumber != null) {
+        return records
+            .map((record) => _copyRecordWithParamName(
+                  record,
+                  'roller_temp_zone2_display${displayZone.displayZoneNumber}',
+                ))
+            .toList(growable: false);
+      }
+      return records;
+    }
+
+    final mapped = <AlarmRecord>[];
+    for (final record in records) {
+      final backendZone =
+          RollerKilnZoneMapper.backendZoneIdFromText(record.paramName);
+      final displayZones = backendZone == null
+          ? const <RollerKilnDisplayZone>[]
+          : RollerKilnZoneMapper.displayZonesForTemperatureBackendZoneId(
+              backendZone);
+      if (displayZones.length > 1) {
+        for (final displayZone in displayZones) {
+          mapped.add(_copyRecordWithParamName(
+            record,
+            '${record.paramName}_display${displayZone.displayZoneNumber}',
+          ));
+        }
+      } else {
+        mapped.add(record);
+      }
+    }
+    return mapped;
+  }
+
+  AlarmRecord _copyRecordWithParamName(AlarmRecord record, String paramName) {
+    return AlarmRecord(
+      time: record.time,
+      deviceId: record.deviceId,
+      alarmType: record.alarmType,
+      paramName: paramName,
+      level: record.level,
+      value: record.value,
+      threshold: record.threshold,
+    );
   }
 
   // ============================================================

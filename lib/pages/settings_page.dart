@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import '../widgets/data_display/data_tech_line_widgets.dart';
 import '../widgets/settings/realtime_data_settings_widget.dart';
+import '../widgets/settings/running_threshold_settings_widget.dart';
 import '../providers/admin_provider.dart';
 
 /// 系统配置页
@@ -19,7 +20,7 @@ class _SettingsPageState extends State<SettingsPage> {
   // 状态变量
   // ============================================================
 
-  // 1, 当前选中的配置区块索引 (0:服务, 1:PLC, 2:实时数据, 3:管理员)
+  // 1, 当前选中的配置区块索引 (0:服务, 1:PLC, 2:实时数据, 3:启停阈值, 4:管理员)
   int _selectedSection = 0;
 
   // 2, 密码修改输入控制器 (提升到类级别，避免每次build重建)
@@ -66,6 +67,7 @@ class _SettingsPageState extends State<SettingsPage> {
       {'icon': Icons.dns, 'label': '服务配置'},
       {'icon': Icons.settings_input_component, 'label': 'PLC 配置'},
       {'icon': Icons.dashboard_customize, 'label': '实时数据设置'},
+      {'icon': Icons.toggle_on, 'label': '启停阈值设置'},
       {'icon': Icons.security, 'label': '管理员设置'},
     ];
 
@@ -255,6 +257,18 @@ class _SettingsPageState extends State<SettingsPage> {
       );
     }
 
+    // 启停阈值设置子页面
+    if (_selectedSection == 3) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(0, 12, 12, 12),
+        child: TechPanel(
+          title: '设备启停阈值配置',
+          accentColor: TechColors.glowBlue,
+          child: const RunningThresholdSettingsWidget(),
+        ),
+      );
+    }
+
     return Container(
       margin: const EdgeInsets.fromLTRB(0, 12, 12, 12),
       child: TechPanel(
@@ -282,6 +296,8 @@ class _SettingsPageState extends State<SettingsPage> {
       case 2:
         return '实时数据阈值与颜色配置';
       case 3:
+        return '设备启停阈值配置';
+      case 4:
         return '管理员设置';
       default:
         return '系统配置';
@@ -294,7 +310,7 @@ class _SettingsPageState extends State<SettingsPage> {
         return _buildServerConfig();
       case 1:
         return _buildPLCConfig();
-      case 3:
+      case 4:
         return _buildAdminSettings();
       default:
         return const SizedBox();

@@ -1,12 +1,6 @@
-/// ============================================================================
-/// 设备名称映射工具类 (Device Name Mapper)
-/// ============================================================================
-/// 功能:
-/// 1. 将后端 device_id 映射为前端显示名称
-/// 2. 提供设备类型判断方法
-/// 3. 提供设备分组信息
-/// ============================================================================
+import 'roller_kiln_zone_mapper.dart';
 
+/// 设备名称映射工具类 (Device Name Mapper)
 class DeviceNameMapper {
   /// 设备名称映射表
   static const Map<String, String> deviceNameMap = {
@@ -21,13 +15,13 @@ class DeviceNameMapper {
     'long_hopper_2': '窑3',
     'long_hopper_3': '窑9',
 
-    // 辊道窑（7个：6个分区 + 1个合计）
-    'zone1': '辊道窑分区1',
-    'zone2': '辊道窑分区2',
-    'zone3': '辊道窑分区3',
-    'zone4': '辊道窑分区4',
-    'zone5': '辊道窑分区5',
-    'zone6': '辊道窑分区6',
+    // 辊道窑后端原始分区；无上下文时按电表映射展示。
+    'zone1': '辊道窑温区5/温区6',
+    'zone2': '辊道窑温区4',
+    'zone3': '辊道窑温区3',
+    'zone4': '辊道窑温区2',
+    'zone5': '辊道窑温区1',
+    'zone6': '辊道窑高温区',
     'roller_kiln_total': '辊道窑合计',
 
     // SCR燃气表（2个）
@@ -110,14 +104,14 @@ class DeviceNameMapper {
       'long_hopper_3': 9, // 窑9
     };
 
-    // 辊道窑分区: 1-6
+    // 辊道窑分区: 按电表前端显示顺序（高温区、温区1-5/6）
     const zoneOrder = {
-      'zone1': 10,
-      'zone2': 11,
-      'zone3': 12,
-      'zone4': 13,
-      'zone5': 14,
-      'zone6': 15,
+      'zone6': 10,
+      'zone5': 11,
+      'zone4': 12,
+      'zone3': 13,
+      'zone2': 14,
+      'zone1': 15,
       'roller_kiln_total': 16,
     };
 
@@ -178,6 +172,20 @@ class DeviceNameMapper {
   /// 获取所有辊道窑分区设备ID（按顺序）
   static List<String> getRollerKilnZoneIds() {
     return ['zone1', 'zone2', 'zone3', 'zone4', 'zone5', 'zone6'];
+  }
+
+  /// 获取所有辊道窑前端显示电表分区ID（按显示顺序，温区5/6都映射到zone1）
+  static List<String> getRollerKilnDisplayZoneIds() {
+    return RollerKilnZoneMapper.displayZones
+        .map((zone) => zone.meterZoneId)
+        .toList(growable: false);
+  }
+
+  /// 获取所有辊道窑前端显示分区名称（按显示顺序）
+  static List<String> getRollerKilnDisplayZoneNames() {
+    return RollerKilnZoneMapper.displayZones
+        .map((zone) => zone.displayLabel)
+        .toList(growable: false);
   }
 
   /// 获取所有SCR燃气表设备ID（按顺序）

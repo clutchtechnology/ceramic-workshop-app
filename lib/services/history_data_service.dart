@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
 import '../api/api.dart';
 import '../api/index.dart';
 import '../utils/app_logger.dart';
+import '../utils/roller_kiln_zone_mapper.dart';
 
 /// 历史数据服务
 /// 用于查询后端历史数据API，支持动态聚合间隔
@@ -55,6 +55,10 @@ class HistoryDataService {
     5: 'zone5',
     6: 'zone6',
   };
+
+  /// 辊道窑前端显示温区映射（高温区 + 1-6号显示温区）
+  static List<RollerKilnDisplayZone> get rollerDisplayZones =>
+      RollerKilnZoneMapper.displayZones;
 
   /// SCR设备ID映射
   static const Map<int, String> scrDeviceIds = {

@@ -19,6 +19,7 @@ import '../widgets/realtime_dashboard/real_fan_cell.dart';
 import '../widgets/realtime_dashboard/real_water_pump_cell.dart';
 import '../widgets/realtime_dashboard/real_gas_pipe_cell.dart';
 import '../utils/app_logger.dart';
+import '../utils/roller_kiln_zone_mapper.dart';
 import '../utils/timer_manager.dart';
 import '../utils/ui_watchdog.dart';
 
@@ -50,7 +51,7 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
   // 1, 料仓数据 - 9台回转窑 (短窑4台 + 无料仓2台 + 长窑3台)
   Map<String, HopperData> _hopperData = {};
 
-  // 2, 辊道窑数据 - 1台辊道窑 (6个温区)
+  // 2, 辊道窑数据 - 1台辊道窑 (前端按7个显示温区映射)
   RollerKilnData? _rollerKilnData;
 
   // 3, SCR+风机数据 - 2台SCR + 2台风机
@@ -957,28 +958,32 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
               height: 95,
               child: Row(
                 children: List.generate(
-                  6,
+                  RollerKilnZoneMapper.displayCount,
                   (i) {
-                    final zoneIndex = i + 1;
-                    final zone =
-                        (zones != null && zones.length > i) ? zones[i] : null;
+                    final displayZone = RollerKilnZoneMapper.byDisplayIndex(i);
+                    final tempZone =
+                        RollerKilnZoneMapper.temperatureSourceZoneForDisplay(
+                            zones, i);
+                    final meterZone =
+                        RollerKilnZoneMapper.meterSourceZoneForDisplay(
+                            zones, i);
                     return Expanded(
                       child: Padding(
                         padding: EdgeInsets.only(left: i == 0 ? 0 : 4),
                         child: _buildRollerKilnDataCard(
-                          '${zoneIndex}号温区',
-                          zone != null
-                              ? '${zone.temperature.toStringAsFixed(0)}°C'
+                          displayZone.displayLabel,
+                          tempZone != null
+                              ? '${tempZone.temperature.toStringAsFixed(0)}°C'
                               : '0°C',
-                          zone != null
-                              ? '${zone.energy.toStringAsFixed(0)}kWh'
+                          meterZone != null
+                              ? '${meterZone.energy.toStringAsFixed(0)}kWh'
                               : '0kWh',
-                          zoneIndex: zoneIndex,
-                          temperatureValue: zone?.temperature,
-                          currentA: zone?.currentA,
-                          currentB: zone?.currentB,
-                          currentC: zone?.currentC,
-                          powerValue: zone?.power,
+                          displayIndex: i,
+                          temperatureValue: tempZone?.temperature,
+                          currentA: meterZone?.currentA,
+                          currentB: meterZone?.currentB,
+                          currentC: meterZone?.currentC,
+                          powerValue: meterZone?.power,
                         ),
                       ),
                     );
@@ -1101,22 +1106,22 @@ class RealtimeDashboardPageState extends State<RealtimeDashboardPage>
   }
 
   /// 辊道窑数据卡片
-  /// [zoneIndex] 温区索引 (1-6)
+  /// [displayIndex] 前端显示温区索引 (0-6)
   /// [temperatureValue] 温度数值，用于计算颜色
   /// [currentA], [currentB], [currentC] 三相电流值
   /// [powerValue] 功率数值 (kW)
   Widget _buildRollerKilnDataCard(
       String zone, String temperature, String energyString,
-      {int? zoneIndex,
+      {int? displayIndex,
       double? temperatureValue,
       double? currentA,
       double? currentB,
       double? currentC,
       double? powerValue}) {
     // 使用缓存的配置获取温度颜色
-    final tempColor = (zoneIndex != null && temperatureValue != null)
-        ? _configProvider.getRollerKilnTempColorByIndex(
-            zoneIndex, temperatureValue)
+    final tempColor = (displayIndex != null && temperatureValue != null)
+        ? _configProvider.getRollerKilnTempColorByDisplayIndex(
+            displayIndex, temperatureValue)
         : TechColors.glowRed;
 
     // 格式化功率

@@ -5,6 +5,7 @@ import '../services/sensor_status_service.dart';
 import '../services/websocket_service.dart';
 import '../widgets/data_display/data_tech_line_widgets.dart';
 import '../utils/app_logger.dart';
+import '../utils/roller_kiln_zone_mapper.dart';
 import '../utils/timer_manager.dart';
 import '../utils/ui_watchdog.dart';
 
@@ -319,7 +320,9 @@ class SensorStatusPageState extends State<SensorStatusPage>
       builder: (context, response, child) {
         // 3, 获取各DB的状态列表
         final db3List = response?.data?['db3'] ?? <ModuleStatus>[];
-        final db7List = response?.data?['db7'] ?? <ModuleStatus>[];
+        final db7List = _mapRollerStatusList(
+          response?.data?['db7'] ?? <ModuleStatus>[],
+        );
         final db11List = response?.data?['db11'] ?? <ModuleStatus>[];
 
         // 固定高度比例: 料仓(DB3) 1/2, 辊道窑(DB7) 1/4, SCR/风机(DB11) 1/4
@@ -382,6 +385,97 @@ class SensorStatusPageState extends State<SensorStatusPage>
         ],
       ),
     );
+  }
+
+  List<ModuleStatus> _mapRollerStatusList(List<ModuleStatus> source) {
+    if (source.isEmpty) return source;
+
+    final result = <ModuleStatus>[];
+    for (final displayZone in RollerKilnZoneMapper.displayZones) {
+      final statuses = _findRollerStatuses(source, displayZone);
+      for (final status in statuses) {
+        result
+            .add(_copyStatusWithDisplayName(status, displayZone.displayLabel));
+      }
+    }
+    return result.isEmpty ? source : result;
+  }
+
+  List<ModuleStatus> _findRollerStatuses(
+    List<ModuleStatus> source,
+    RollerKilnDisplayZone displayZone,
+  ) {
+    final matches = <ModuleStatus>[];
+
+    for (final status in source) {
+      final text = '${status.deviceId} ${status.deviceName} '
+          '${status.moduleTag} ${status.description}';
+      final expectedZoneId = _expectedRollerZoneId(status, displayZone);
+      if (text.contains(expectedZoneId)) {
+        matches.add(status);
+        continue;
+      }
+
+      final match = RegExp(r'zone([1-6])').firstMatch(text);
+      if (match != null && 'zone${match.group(1)}' == expectedZoneId) {
+        matches.add(status);
+      }
+    }
+
+    if (matches.isNotEmpty) return matches;
+
+    final fallbackIndex = displayZone.temperatureZoneNumber - 1;
+    if (fallbackIndex >= 0 && fallbackIndex < source.length) {
+      return [source[fallbackIndex]];
+    }
+    return const [];
+  }
+
+  String _expectedRollerZoneId(
+    ModuleStatus status,
+    RollerKilnDisplayZone displayZone,
+  ) {
+    final text = '${status.deviceId} ${status.deviceName} '
+        '${status.moduleTag} ${status.description}';
+    if (RollerKilnZoneMapper.looksLikeMeterText(text)) {
+      return displayZone.meterZoneId;
+    }
+    return displayZone.temperatureZoneId;
+  }
+
+  ModuleStatus _copyStatusWithDisplayName(
+    ModuleStatus status,
+    String displayName,
+  ) {
+    final suffix = _statusModuleSuffix(status);
+
+    return ModuleStatus(
+      deviceId: status.deviceId,
+      deviceName: suffix.isEmpty ? displayName : '$displayName $suffix',
+      deviceType: status.deviceType,
+      moduleTag: status.moduleTag,
+      description: status.description,
+      dbNumber: status.dbNumber,
+      offset: status.offset,
+      error: status.error,
+      statusCode: status.statusCode,
+      statusHex: status.statusHex,
+      isNormal: status.isNormal,
+      timestamp: status.timestamp,
+    );
+  }
+
+  String _statusModuleSuffix(ModuleStatus status) {
+    final text = status.description.isNotEmpty
+        ? status.description
+        : status.moduleTag.isNotEmpty
+            ? status.moduleTag
+            : status.deviceName;
+    final cleaned = text
+        .replaceAll(RegExp(r'zone[1-6]_?', caseSensitive: false), '')
+        .replaceAll(RegExp(r'[1-6]号?温区'), '')
+        .trim();
+    return cleaned == text && cleaned.contains('温区') ? '' : cleaned;
   }
 
   /// 区块标题栏
@@ -477,8 +571,8 @@ class SensorStatusPageState extends State<SensorStatusPage>
     return ValueListenableBuilder<AllStatusResponse?>(
       valueListenable: _responseNotifier,
       builder: (context, response, child) {
-        // 3, 从响应数据中获取统计摘要
-        final summary = response?.summary;
+        final summary =
+            response != null ? _buildDisplaySummary(response) : null;
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -559,6 +653,20 @@ class SensorStatusPageState extends State<SensorStatusPage>
           ),
         ],
       ),
+    );
+  }
+
+  StatusSummary _buildDisplaySummary(AllStatusResponse response) {
+    final statuses = <ModuleStatus>[
+      ...(response.data?['db3'] ?? const <ModuleStatus>[]),
+      ..._mapRollerStatusList(response.data?['db7'] ?? const <ModuleStatus>[]),
+      ...(response.data?['db11'] ?? const <ModuleStatus>[]),
+    ];
+    final normal = statuses.where((status) => status.isNormal).length;
+    return StatusSummary(
+      total: statuses.length,
+      normal: normal,
+      error: statuses.length - normal,
     );
   }
 
